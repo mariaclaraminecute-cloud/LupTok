@@ -1,27 +1,37 @@
 import 'package:flutter/material.dart';
+import 'cadastro_screen.dart';
+import 'onboarding_screen.dart';
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
+
 class _LoginScreenState extends State<LoginScreen>
     with TickerProviderStateMixin {
   late AnimationController _bgController;
   late AnimationController _contentController;
   late AnimationController _glowController;
+
   late Animation<double> _contentOpacity;
   late Animation<double> _contentSlide;
   late Animation<double> _glowAnim;
+
   final _emailController = TextEditingController();
   final _senhaController = TextEditingController();
   bool _senhaVisivel = false;
+
   @override
   void initState() {
     super.initState();
+
     _bgController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 22),
     )..repeat();
+
     _glowController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2200),
@@ -29,6 +39,7 @@ class _LoginScreenState extends State<LoginScreen>
     _glowAnim = Tween<double>(begin: 0.2, end: 0.7).animate(
       CurvedAnimation(parent: _glowController, curve: Curves.easeInOut),
     );
+
     _contentController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
@@ -39,8 +50,10 @@ class _LoginScreenState extends State<LoginScreen>
     _contentSlide = Tween<double>(begin: 30.0, end: 0.0).animate(
       CurvedAnimation(parent: _contentController, curve: Curves.easeOut),
     );
+
     _contentController.forward();
   }
+
   @override
   void dispose() {
     _bgController.dispose();
@@ -50,6 +63,19 @@ class _LoginScreenState extends State<LoginScreen>
     _senhaController.dispose();
     super.dispose();
   }
+
+  void _navegarParaOnboarding() {
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => const OnboardingScreen(),
+        transitionDuration: const Duration(milliseconds: 700),
+        transitionsBuilder: (_, animation, __, child) =>
+            FadeTransition(opacity: animation, child: child),
+      ),
+    );
+  }
+
   Widget _buildColumn(List<String> images, double speed) {
     final allImages = [...images, ...images, ...images];
     return LayoutBuilder(builder: (context, constraints) {
@@ -60,7 +86,8 @@ class _LoginScreenState extends State<LoginScreen>
           builder: (context, child) {
             const totalItemHeight = 228.0;
             final totalHeight = allImages.length * totalItemHeight;
-            final offset = (_bgController.value * height * speed) % totalItemHeight;
+            final offset =
+                (_bgController.value * height * speed) % totalItemHeight;
             return OverflowBox(
               minHeight: totalHeight + height,
               maxHeight: totalHeight + height,
@@ -74,8 +101,10 @@ class _LoginScreenState extends State<LoginScreen>
                       padding: const EdgeInsets.all(4),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(18),
-                        child: Image.asset(image, height: 220,
-                            width: double.infinity, fit: BoxFit.cover),
+                        child: Image.asset(image,
+                            height: 220,
+                            width: double.infinity,
+                            fit: BoxFit.cover),
                       ),
                     );
                   }).toList(),
@@ -87,6 +116,7 @@ class _LoginScreenState extends State<LoginScreen>
       );
     });
   }
+
   @override
   Widget build(BuildContext context) {
     final images = [
@@ -99,19 +129,19 @@ class _LoginScreenState extends State<LoginScreen>
       "assets/images/capa13.jpg", "assets/images/capa14.jpg",
       "assets/images/capa15.jpg",
     ];
+
     return Scaffold(
       backgroundColor: Colors.black,
       resizeToAvoidBottomInset: true,
       body: Stack(
         fit: StackFit.expand,
         children: [
-         
           Row(children: [
             Expanded(child: _buildColumn([images[0], images[3], images[6], images[9], images[12]], 1.0)),
             Expanded(child: _buildColumn([images[1], images[4], images[7], images[10], images[13]], 1.2)),
             Expanded(child: _buildColumn([images[2], images[5], images[8], images[11], images[14]], 0.8)),
           ]),
-      
+
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -125,7 +155,7 @@ class _LoginScreenState extends State<LoginScreen>
               ),
             ),
           ),
-   
+
           Positioned(
             bottom: 0, left: 0, right: 0,
             child: Container(
@@ -136,7 +166,7 @@ class _LoginScreenState extends State<LoginScreen>
                   end: Alignment.topCenter,
                   colors: [
                     Colors.black.withOpacity(0.97),
-                    Colors.black.withOpacity(0.88),
+                    Colors.black.withOpacity(0.90),
                     Colors.transparent,
                   ],
                   stops: const [0.0, 0.55, 1.0],
@@ -144,18 +174,21 @@ class _LoginScreenState extends State<LoginScreen>
               ),
             ),
           ),
-     
-          Positioned(top: 0, left: 0, right: 0,
-            child: Container(height: 160,
+
+          Positioned(
+            top: 0, left: 0, right: 0,
+            child: Container(
+              height: 160,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
                   colors: [Colors.black.withOpacity(0.92), Colors.transparent],
                 ),
               ),
             ),
           ),
-    
+
           AnimatedBuilder(
             animation: _glowAnim,
             builder: (_, __) => Positioned(
@@ -174,7 +207,7 @@ class _LoginScreenState extends State<LoginScreen>
               ),
             ),
           ),
-          // Conteúdo
+
           SafeArea(
             child: AnimatedBuilder(
               animation: _contentController,
@@ -188,7 +221,7 @@ class _LoginScreenState extends State<LoginScreen>
               child: Column(
                 children: [
                   const SizedBox(height: 40),
-               
+
                   AnimatedBuilder(
                     animation: _glowController,
                     builder: (_, __) => Container(
@@ -196,7 +229,8 @@ class _LoginScreenState extends State<LoginScreen>
                         borderRadius: BorderRadius.circular(24),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF6B0000).withOpacity(0.35 * _glowAnim.value),
+                            color: const Color(0xFF6B0000)
+                                .withOpacity(0.35 * _glowAnim.value),
                             blurRadius: 40,
                             spreadRadius: 1,
                           ),
@@ -205,21 +239,31 @@ class _LoginScreenState extends State<LoginScreen>
                       child: Image.asset('assets/images/logo.png', height: 90),
                     ),
                   ),
+
                   const Spacer(),
+
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 28),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text("Bem-vindo!",
-                          style: TextStyle(color: Colors.white, fontSize: 26,
-                              fontWeight: FontWeight.bold, letterSpacing: 0.3),
+                        const Text(
+                          "Bem-vindo de volta",
+                          style: TextStyle(
+                            color: Colors.white, fontSize: 26,
+                            fontWeight: FontWeight.bold, letterSpacing: 0.3,
+                          ),
                         ),
                         const SizedBox(height: 6),
-                        Text("Entre para desvendar!",
-                          style: TextStyle(color: Colors.white.withOpacity(0.45), fontSize: 14),
+                        Text(
+                          "Entre para continuar assistindo",
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.45), fontSize: 14,
+                          ),
                         ),
+
                         const SizedBox(height: 32),
+
                         _buildTextField(
                           controller: _emailController,
                           hint: "Email",
@@ -227,6 +271,7 @@ class _LoginScreenState extends State<LoginScreen>
                           obscure: false,
                         ),
                         const SizedBox(height: 14),
+
                         _buildTextField(
                           controller: _senhaController,
                           hint: "Senha",
@@ -234,44 +279,38 @@ class _LoginScreenState extends State<LoginScreen>
                           obscure: !_senhaVisivel,
                           suffix: IconButton(
                             icon: Icon(
-                              _senhaVisivel ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                              _senhaVisivel
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
                               color: Colors.white38, size: 20,
                             ),
-                            onPressed: () => setState(() => _senhaVisivel = !_senhaVisivel),
+                            onPressed: () =>
+                                setState(() => _senhaVisivel = !_senhaVisivel),
                           ),
                         ),
+
                         const SizedBox(height: 8),
+
+                        // "Esqueceu a senha?" — SEM navegação para onboarding
                         Align(
                           alignment: Alignment.centerRight,
                           child: TextButton(
                             onPressed: () {
-  final email = _emailController.text.trim();
-  final senha = _senhaController.text.trim();
-
-  if (email.isEmpty || senha.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Preencha e-mail e senha")),
-    );
-    return;
-  }
-
-  if (email == "teste@teste.com" && senha == "123456") {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Login realizado!")),
-    );
-  } else {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Email ou senha inválidos")),
-    );
-  }
-},
-                            child: Text("Esqueceu a senha?",
-                              style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 13),
+                              // TODO: implementar recuperação de senha
+                            },
+                            child: Text(
+                              "Esqueceu a senha?",
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.4),
+                                fontSize: 13,
+                              ),
                             ),
                           ),
                         ),
-                        const SizedBox(height: 16),
-                       
+
+                        const SizedBox(height: 12),
+
+                        // Botão ENTRAR — navega para onboarding
                         SizedBox(
                           width: double.infinity,
                           height: 56,
@@ -280,9 +319,10 @@ class _LoginScreenState extends State<LoginScreen>
                               backgroundColor: Colors.transparent,
                               shadowColor: Colors.transparent,
                               padding: EdgeInsets.zero,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16)),
                             ),
-                            onPressed: () {},
+                            onPressed: _navegarParaOnboarding,
                             child: Ink(
                               decoration: BoxDecoration(
                                 gradient: const LinearGradient(
@@ -294,46 +334,75 @@ class _LoginScreenState extends State<LoginScreen>
                                 boxShadow: [
                                   BoxShadow(
                                     color: const Color(0xFFE50914).withOpacity(0.35),
-                                    blurRadius: 20, offset: const Offset(0, 6),
+                                    blurRadius: 20,
+                                    offset: const Offset(0, 6),
                                   ),
                                 ],
                               ),
                               child: const Center(
-                                child: Text("Entrar",
-                                  style: TextStyle(fontSize: 17, color: Colors.white,
-                                      fontWeight: FontWeight.w600, letterSpacing: 0.5),
+                                child: Text(
+                                  "Entrar",
+                                  style: TextStyle(
+                                    fontSize: 17, color: Colors.white,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.5,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                         ),
+
                         const SizedBox(height: 24),
+
                         Row(children: [
-                          Expanded(child: Divider(color: Colors.white.withOpacity(0.12), thickness: 1)),
+                          Expanded(child: Divider(
+                              color: Colors.white.withOpacity(0.12), thickness: 1)),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 14),
-                            child: Text("ou", style: TextStyle(color: Colors.white.withOpacity(0.35), fontSize: 13)),
+                            child: Text("ou",
+                                style: TextStyle(
+                                    color: Colors.white.withOpacity(0.35),
+                                    fontSize: 13)),
                           ),
-                          Expanded(child: Divider(color: Colors.white.withOpacity(0.12), thickness: 1)),
+                          Expanded(child: Divider(
+                              color: Colors.white.withOpacity(0.12), thickness: 1)),
                         ]),
+
                         const SizedBox(height: 20),
+
                         Center(
                           child: GestureDetector(
-                            onTap: () {},
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                PageRouteBuilder(
+                                  pageBuilder: (_, __, ___) => const CadastroScreen(),
+                                  transitionDuration: const Duration(milliseconds: 700),
+                                  transitionsBuilder: (_, animation, __, child) =>
+                                      FadeTransition(opacity: animation, child: child),
+                                ),
+                              );
+                            },
                             child: RichText(
                               text: TextSpan(
                                 text: "Não tem conta? ",
-                                style: TextStyle(color: Colors.white.withOpacity(0.45), fontSize: 14),
+                                style: TextStyle(
+                                    color: Colors.white.withOpacity(0.45),
+                                    fontSize: 14),
                                 children: const [
                                   TextSpan(
                                     text: "Criar conta",
-                                    style: TextStyle(color: Color(0xFFE50914), fontWeight: FontWeight.w600),
+                                    style: TextStyle(
+                                        color: Color(0xFFE50914),
+                                        fontWeight: FontWeight.w600),
                                   ),
                                 ],
                               ),
                             ),
                           ),
                         ),
+
                         const SizedBox(height: 32),
                       ],
                     ),
@@ -346,6 +415,7 @@ class _LoginScreenState extends State<LoginScreen>
       ),
     );
   }
+
   Widget _buildTextField({
     required TextEditingController controller,
     required String hint,
@@ -365,11 +435,14 @@ class _LoginScreenState extends State<LoginScreen>
         style: const TextStyle(color: Colors.white, fontSize: 15),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: TextStyle(color: Colors.white.withOpacity(0.35), fontSize: 15),
-          prefixIcon: Icon(icon, color: Colors.white.withOpacity(0.35), size: 20),
+          hintStyle: TextStyle(
+              color: Colors.white.withOpacity(0.35), fontSize: 15),
+          prefixIcon: Icon(icon,
+              color: Colors.white.withOpacity(0.35), size: 20),
           suffixIcon: suffix,
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+          contentPadding:
+              const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
         ),
       ),
     );
