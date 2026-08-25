@@ -140,7 +140,18 @@ class _SplashScreenState extends State<SplashScreen>
       "assets/images/capa9.jpg", "assets/images/capa10.jpg",
       "assets/images/capa11.jpg", "assets/images/capa12.jpg",
       "assets/images/capa13.jpg", "assets/images/capa14.jpg",
-      "assets/images/capa15.jpg",
+      "assets/images/capa15.jpg", "assets/images/capa16.jpg",
+      "assets/images/capa20.jpg", "assets/images/capa21.jpg", 
+      "assets/images/capa22.jpg", "assets/images/capa23.jpg", 
+      "assets/images/capa24.jpg", "assets/images/capa25.jpg", 
+      "assets/images/capa26.jpg", "assets/images/capa27.jpg", 
+      "assets/images/capa28.jpg", "assets/images/capa29.jpg", 
+      "assets/images/capa30.jpg", "assets/images/capa31.jpg",
+      "assets/images/capa32.jpg", "assets/images/capa33.jpg",  
+      "assets/images/capa34.jpg", "assets/images/capa35.jpg",
+      "assets/images/capa36.jpg", "assets/images/capa37.jpg", 
+      "assets/images/capa38.jpg", "assets/images/capa39.jpg", 
+      "assets/images/capa40.jpg", 
     ];
     return Scaffold(
       backgroundColor: Colors.black,
@@ -152,7 +163,7 @@ class _SplashScreenState extends State<SplashScreen>
             Expanded(child: _buildColumn([images[1], images[4], images[7], images[10], images[13]], 1.2)),
             Expanded(child: _buildColumn([images[2], images[5], images[8], images[11], images[14]], 0.8)),
           ]),
-          // Overlay transparente — fotos aparecem
+         
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
