@@ -105,7 +105,7 @@ class _CadastroScreenState extends State<CadastroScreen>
       "assets/images/capa15.jpg",
     ];
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFF000000),
       resizeToAvoidBottomInset: true,
       body: Stack(
         fit: StackFit.expand,
@@ -123,9 +123,9 @@ class _CadastroScreenState extends State<CadastroScreen>
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.black.withOpacity(0.68),
-                  Colors.black.withOpacity(0.52),
-                  Colors.black.withOpacity(0.68),
+                  const Color(0xFF000000).withOpacity(0.68),
+                  const Color(0xFF000000).withOpacity(0.52),
+                  const Color(0xFF000000).withOpacity(0.68),
                 ],
               ),
             ),
@@ -140,8 +140,8 @@ class _CadastroScreenState extends State<CadastroScreen>
                   begin: Alignment.bottomCenter,
                   end: Alignment.topCenter,
                   colors: [
-                    Colors.black.withOpacity(0.97),
-                    Colors.black.withOpacity(0.90),
+                    const Color(0xFF000000).withOpacity(0.97),
+                    const Color(0xFF000000).withOpacity(0.90),
                     Colors.transparent,
                   ],
                   stops: const [0.0, 0.55, 1.0],
@@ -158,12 +158,12 @@ class _CadastroScreenState extends State<CadastroScreen>
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [Colors.black.withOpacity(0.92), Colors.transparent],
+                  colors: [const Color(0xFF000000).withOpacity(0.92), Colors.transparent],
                 ),
               ),
             ),
           ),
-          // Glow vinho suave
+          // Glow vermelho suave
           AnimatedBuilder(
             animation: _glowAnim,
             builder: (_, __) => Positioned(
@@ -174,7 +174,7 @@ class _CadastroScreenState extends State<CadastroScreen>
                 decoration: BoxDecoration(
                   gradient: RadialGradient(
                     colors: [
-                      const Color(0xFF6B0000).withOpacity(0.12 * _glowAnim.value),
+                      const Color(0xFFE50914).withOpacity(0.12 * _glowAnim.value),
                       Colors.transparent,
                     ],
                   ),
@@ -205,7 +205,7 @@ class _CadastroScreenState extends State<CadastroScreen>
                           borderRadius: BorderRadius.circular(24),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF6B0000)
+                              color: const Color(0xFFE50914)
                                   .withOpacity(0.35 * _glowAnim.value),
                               blurRadius: 40,
                               spreadRadius: 1,
@@ -224,7 +224,7 @@ class _CadastroScreenState extends State<CadastroScreen>
                           const Text(
                             "Criar conta",
                             style: TextStyle(
-                              color: Colors.white,
+                              color: Color(0xFFF5E6D3),
                               fontSize: 26,
                               fontWeight: FontWeight.bold,
                               letterSpacing: 0.3,
@@ -234,7 +234,7 @@ class _CadastroScreenState extends State<CadastroScreen>
                           Text(
                             "Comece a descobrir filmes, séries e livros",
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.45),
+                              color: const Color(0xFFF5E6D3).withOpacity(0.45),
                               fontSize: 14,
                             ),
                           ),
@@ -266,7 +266,7 @@ class _CadastroScreenState extends State<CadastroScreen>
                                 _senhaVisivel
                                     ? Icons.visibility_off_outlined
                                     : Icons.visibility_outlined,
-                                color: Colors.white38,
+                                color: const Color(0xFFF5E6D3).withOpacity(0.38),
                                 size: 20,
                               ),
                               onPressed: () => setState(
@@ -285,7 +285,7 @@ class _CadastroScreenState extends State<CadastroScreen>
                                 _confirmarSenhaVisivel
                                     ? Icons.visibility_off_outlined
                                     : Icons.visibility_outlined,
-                                color: Colors.white38,
+                                color: const Color(0xFFF5E6D3).withOpacity(0.38),
                                 size: 20,
                               ),
                               onPressed: () => setState(() =>
@@ -312,8 +312,9 @@ class _CadastroScreenState extends State<CadastroScreen>
       _senhaController.text.isEmpty ||
       _confirmarSenhaController.text.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Preencha todos os campos"),
+      SnackBar(
+        content: const Text("Preencha todos os campos"),
+        backgroundColor: const Color(0xFF111111),
       ),
     );
     return;
@@ -321,16 +322,18 @@ class _CadastroScreenState extends State<CadastroScreen>
 
   if (_senhaController.text != _confirmarSenhaController.text) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("As senhas não coincidem"),
+      SnackBar(
+        content: const Text("As senhas não coincidem"),
+        backgroundColor: const Color(0xFF111111),
       ),
     );
     return;
   }
 
   ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(
-      content: Text("Conta criada com sucesso!"),
+    SnackBar(
+      content: const Text("Conta criada com sucesso!"),
+      backgroundColor: const Color(0xFF111111),
     ),
   );
 
@@ -343,7 +346,7 @@ class _CadastroScreenState extends State<CadastroScreen>
                                   gradient: const LinearGradient(
                                     colors: [
                                       Color(0xFFE50914),
-                                      Color(0xFF8B0000)
+                                      Color(0xFF6B0000)
                                     ],
                                     begin: Alignment.centerLeft,
                                     end: Alignment.centerRight,
@@ -363,7 +366,7 @@ class _CadastroScreenState extends State<CadastroScreen>
                                     "Criar conta",
                                     style: TextStyle(
                                       fontSize: 17,
-                                      color: Colors.white,
+                                      color: Color(0xFFF5E6D3),
                                       fontWeight: FontWeight.w600,
                                       letterSpacing: 0.5,
                                     ),
@@ -379,7 +382,7 @@ class _CadastroScreenState extends State<CadastroScreen>
                               "Ao criar uma conta, você concorda com os\nTermos de Uso e Política de Privacidade",
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.30),
+                                color: const Color(0xFFF5E6D3).withOpacity(0.30),
                                 fontSize: 12,
                                 height: 1.5,
                               ),
@@ -388,18 +391,18 @@ class _CadastroScreenState extends State<CadastroScreen>
                           const SizedBox(height: 20),
                           Row(children: [
                             Expanded(child: Divider(
-                                color: Colors.white.withOpacity(0.12),
+                                color: const Color(0xFFF5E6D3).withOpacity(0.12),
                                 thickness: 1)),
                             Padding(
                               padding:
                                   const EdgeInsets.symmetric(horizontal: 14),
                               child: Text("ou",
                                   style: TextStyle(
-                                      color: Colors.white.withOpacity(0.35),
+                                      color: const Color(0xFFF5E6D3).withOpacity(0.35),
                                       fontSize: 13)),
                             ),
                             Expanded(child: Divider(
-                                color: Colors.white.withOpacity(0.12),
+                                color: const Color(0xFFF5E6D3).withOpacity(0.12),
                                 thickness: 1)),
                           ]),
                           const SizedBox(height: 20),
@@ -411,7 +414,7 @@ class _CadastroScreenState extends State<CadastroScreen>
                                 text: TextSpan(
                                   text: "Já tem uma conta? ",
                                   style: TextStyle(
-                                    color: Colors.white.withOpacity(0.45),
+                                    color: const Color(0xFFF5E6D3).withOpacity(0.45),
                                     fontSize: 14,
                                   ),
                                   children: const [
@@ -450,19 +453,19 @@ class _CadastroScreenState extends State<CadastroScreen>
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.10)),
-        color: Colors.white.withOpacity(0.07),
+        border: Border.all(color: const Color(0xFFF5E6D3).withOpacity(0.10)),
+        color: const Color(0xFFF5E6D3).withOpacity(0.07),
       ),
       child: TextField(
         controller: controller,
         obscureText: obscure,
-        style: const TextStyle(color: Colors.white, fontSize: 15),
+        style: const TextStyle(color: Color(0xFFF5E6D3), fontSize: 15),
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: TextStyle(
-              color: Colors.white.withOpacity(0.35), fontSize: 15),
+              color: const Color(0xFFF5E6D3).withOpacity(0.35), fontSize: 15),
           prefixIcon: Icon(icon,
-              color: Colors.white.withOpacity(0.35), size: 20),
+              color: const Color(0xFFF5E6D3).withOpacity(0.35), size: 20),
           suffixIcon: suffix,
           border: InputBorder.none,
           contentPadding:

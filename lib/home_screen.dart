@@ -124,7 +124,7 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFF000000),
       extendBody: true,
       body: Stack(
         children: [
@@ -168,7 +168,7 @@ class _HomeScreenState extends State<HomeScreen>
                   ),
                   child: const Center(
                     child: Text("L",
-                      style: TextStyle(color: Colors.white, fontSize: 22,
+                      style: TextStyle(color: Color(0xFFF5E6D3), fontSize: 22,
                           fontWeight: FontWeight.bold)),
                   ),
                 ),
@@ -208,7 +208,7 @@ class _HomeScreenState extends State<HomeScreen>
   // ── Tela de Bem-vindo ──────────────────────────────────────────────
   Widget _buildBemVindoOverlay() {
     return Container(
-      color: Colors.black,
+      color: const Color(0xFF000000),
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -282,14 +282,14 @@ class _HomeScreenState extends State<HomeScreen>
                   // "Bem-vindo!" com gradiente
                   ShaderMask(
                     shaderCallback: (bounds) => const LinearGradient(
-                      colors: [Colors.white, Color(0xFFFFCCCC)],
+                      colors: [Color(0xFFF5E6D3), Color(0xFFFFCCCC)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ).createShader(bounds),
                     child: const Text(
                       "Bem-vindo!",
                       style: TextStyle(
-                        color: Colors.white, fontSize: 44,
+                        color: Color(0xFFF5E6D3), fontSize: 44,
                         fontWeight: FontWeight.bold, letterSpacing: -0.5,
                       ),
                     ),
@@ -310,10 +310,10 @@ class _HomeScreenState extends State<HomeScreen>
                   const SizedBox(height: 18),
 
                   Text(
-                    "Seu universo de entretenimento\ne conhecimento começa aqui",
+                    "Seu universo de entretenimento começa aqui",
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.48),
+                      color: const Color(0xFFF5E6D3).withOpacity(0.48),
                       fontSize: 15, height: 1.55,
                     ),
                   ),
@@ -329,100 +329,166 @@ class _HomeScreenState extends State<HomeScreen>
   // ── Humor do dia ───────────────────────────────────────────────────
   Widget _buildHumorOverlay() {
     final humores = [
-      ("😊", "Feliz"), ("😢", "Triste"), ("😤", "Ansioso"),
-      ("😴", "Sonolento"), ("🔥", "Animado"), ("🤔", "Pensativo"),
-      ("💕", "Romântico"), ("😱", "Suspense"),
+      ("😊", "Feliz", const Color(0xFFFFD700)),
+      ("😢", "Triste", const Color(0xFF4A90D9)),
+      ("😤", "Ansioso", const Color(0xFFFF6B35)),
+      ("😴", "Sonolento", const Color(0xFF9B59B6)),
+      ("🔥", "Animado", const Color(0xFFE50914)),
+      ("🤔", "Pensativo", const Color(0xFF95A5A6)),
+      ("💕", "Romântico", const Color(0xFFFF6B9D)),
+      ("😱", "Suspense", const Color(0xFF2C3E50)),
     ];
 
     return GestureDetector(
       onTap: () => setState(() => _mostrarHumor = false),
       child: Container(
-        color: Colors.black.withOpacity(0.80),
+        color: const Color(0xFF000000).withOpacity(0.90),
         child: Center(
           child: GestureDetector(
             onTap: () {},
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 24),
-              padding: const EdgeInsets.all(28),
+              padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
-                color: const Color(0xFF111111),
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(color: Colors.white.withOpacity(0.08)),
+                color: const Color(0xFF0A0A0A),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: const Color(0xFFF5E6D3).withOpacity(0.08)),
                 boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.6), blurRadius: 40),
+                  BoxShadow(
+                    color: const Color(0xFFE50914).withOpacity(0.1),
+                    blurRadius: 30,
+                    spreadRadius: 5,
+                  ),
+                  BoxShadow(
+                    color: const Color(0xFF000000).withOpacity(0.8),
+                    blurRadius: 40,
+                  ),
                 ],
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  ShaderMask(
-                    shaderCallback: (bounds) => const LinearGradient(
-                      colors: [Color(0xFFE50914), Color(0xFFFF6B6B)],
-                    ).createShader(bounds),
-                    child: const Text(
-                      "Como você está se\nsentindo hoje?",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white, fontSize: 22,
-                          fontWeight: FontWeight.bold, height: 1.3),
+                  // Ícone decorativo
+                  Container(
+                    width: 60,
+                    height: 60,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFE50914), Color(0xFF6B0000)],
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFE50914).withOpacity(0.3),
+                          blurRadius: 20,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.mood_rounded,
+                      color: Color(0xFFF5E6D3),
+                      size: 30,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  
+                  const Text(
+                    "Como você está se sentindo?",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Color(0xFFF5E6D3),
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      height: 1.3,
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text("Vamos recomendar obras para o seu humor",
+                  Text(
+                    "Vamos personalizar suas recomendações",
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                        color: Colors.white.withOpacity(0.42), fontSize: 13)),
-                  const SizedBox(height: 24),
-                  Wrap(
-                    spacing: 10, runSpacing: 10,
-                    alignment: WrapAlignment.center,
-                    children: humores.map((h) {
-                      final (emoji, nome) = h;
+                      color: const Color(0xFFF5E6D3).withOpacity(0.45),
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  
+                  // Grid de humores
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      childAspectRatio: 2.5,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                    ),
+                    itemCount: humores.length,
+                    itemBuilder: (context, index) {
+                      final (emoji, nome, cor) = humores[index];
                       final sel = _humorSelecionado == nome;
                       return GestureDetector(
                         onTap: () => setState(() => _humorSelecionado = nome),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 10),
                           decoration: BoxDecoration(
-                            gradient: sel ? const LinearGradient(
-                              colors: [Color(0xFF1A0005), Color(0xFF0D0002)]) : null,
-                            color: sel ? null : Colors.white.withOpacity(0.06),
-                            borderRadius: BorderRadius.circular(50),
+                            gradient: sel
+                                ? LinearGradient(
+                                    colors: [cor.withOpacity(0.3), cor.withOpacity(0.1)],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  )
+                                : null,
+                            color: sel ? null : const Color(0xFFF5E6D3).withOpacity(0.04),
+                            borderRadius: BorderRadius.circular(16),
                             border: Border.all(
-                              color: sel
-                                  ? const Color(0xFFE50914).withOpacity(0.7)
-                                  : Colors.white12,
-                              width: sel ? 1.5 : 1,
+                              color: sel ? cor.withOpacity(0.6) : const Color(0xFFF5E6D3).withOpacity(0.1),
+                              width: sel ? 2 : 1,
                             ),
+                            boxShadow: sel
+                                ? [
+                                    BoxShadow(
+                                      color: cor.withOpacity(0.2),
+                                      blurRadius: 12,
+                                      spreadRadius: 1,
+                                    ),
+                                  ]
+                                : [],
                           ),
                           child: Row(
-                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Text(emoji, style: const TextStyle(fontSize: 16)),
-                              const SizedBox(width: 6),
-                              Text(nome,
+                              Text(emoji, style: const TextStyle(fontSize: 20)),
+                              const SizedBox(width: 8),
+                              Text(
+                                nome,
                                 style: TextStyle(
-                                  color: sel ? Colors.white : Colors.white60,
-                                  fontSize: 13,
-                                  fontWeight: sel ? FontWeight.w600 : FontWeight.normal,
-                                )),
+                                  color: sel ? const Color(0xFFF5E6D3) : const Color(0xFFF5E6D3).withOpacity(0.6),
+                                  fontSize: 14,
+                                  fontWeight: sel ? FontWeight.w600 : FontWeight.w500,
+                                ),
+                              ),
                             ],
                           ),
                         ),
                       );
-                    }).toList(),
+                    },
                   ),
-                  const SizedBox(height: 24),
+                  
+                  const SizedBox(height: 28),
+                  
+                  // Botão confirmar
                   SizedBox(
-                    width: double.infinity, height: 50,
+                    width: double.infinity,
+                    height: 52,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.transparent,
                         shadowColor: Colors.transparent,
                         padding: EdgeInsets.zero,
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14)),
+                            borderRadius: BorderRadius.circular(16)),
                       ),
                       onPressed: () => setState(() => _mostrarHumor = false),
                       child: Ink(
@@ -432,21 +498,26 @@ class _HomeScreenState extends State<HomeScreen>
                             begin: Alignment.centerLeft,
                             end: Alignment.centerRight,
                           ),
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(16),
                           boxShadow: [
                             BoxShadow(
-                                color: const Color(0xFFE50914).withOpacity(0.35),
-                                blurRadius: 20,
-                                offset: const Offset(0, 6)),
+                              color: const Color(0xFFE50914).withOpacity(0.35),
+                              blurRadius: 20,
+                              offset: const Offset(0, 6),
+                            ),
                           ],
                         ),
                         child: Center(
                           child: Text(
                             _humorSelecionado != null
-                                ? "Entrar com humor $_humorSelecionado"
+                                ? "Continuar  ✨"
                                 : "Pular por hoje",
-                            style: const TextStyle(color: Colors.white,
-                                fontSize: 15, fontWeight: FontWeight.w600),
+                            style: const TextStyle(
+                              color: Color(0xFFF5E6D3),
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.5,
+                            ),
                           ),
                         ),
                       ),
