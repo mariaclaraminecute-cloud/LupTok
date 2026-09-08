@@ -17,6 +17,10 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  fonts:
+    - family: IMFellFrenchCanon
+      fonts:
+        - asset: assets/fonts/IMFellFrenchCanon-Regular.ttf
   assets:
     - assets/images/
 

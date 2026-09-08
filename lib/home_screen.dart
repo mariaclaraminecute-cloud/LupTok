@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -123,8 +124,9 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: const Color(0xFF000000),
+      backgroundColor: isDark ? const Color(0xFF000000) : const Color(0xFFFFF4F4),
       extendBody: true,
       body: Stack(
         children: [
@@ -721,7 +723,7 @@ class _LoopTabState extends State<_LoopTab> {
             ),
             // Info inferior esquerdo
             Positioned(
-              left: 16, right: 72, bottom: 100,
+              left: 16, right: 72, bottom: 124,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -773,7 +775,7 @@ class _LoopTabState extends State<_LoopTab> {
             ),
             // Ações laterais
             Positioned(
-              right: 12, bottom: 100,
+              right: 12, bottom: 124,
               child: Column(children: [
                 _acao(
                   icon: starrado ? Icons.star_rounded : Icons.star_outline_rounded,

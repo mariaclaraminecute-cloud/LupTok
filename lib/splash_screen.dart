@@ -16,47 +16,10 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen> {
 
-  final List<String> _capas = [
-
-    'assets/images/capa1.jpg',
-
-    'assets/images/capa2.jpg',
-
-    'assets/images/capa3.jpg',
-
-    'assets/images/capa4.jpg',
-
-    'assets/images/capa5.jpg',
-
-    'assets/images/capa6.jpg',
-
-    'assets/images/capa7.jpg',
-
-    'assets/images/capa8.jpg',
-
-    'assets/images/capa9.jpg',
-
-    'assets/images/capa10.jpg',
-
-    'assets/images/capa11.jpg',
-
-    'assets/images/capa12.jpg',
-
-    'assets/images/capa13.jpg',
-
-    'assets/images/capa14.jpg',
-
-    'assets/images/capa15.jpg',
-
-    'assets/images/capa16.jpg',
-
-    'assets/images/capa17.jpg',
-
-    'assets/images/capa18.jpg',
-
-    'assets/images/capa19.jpg',
-
-  ];
+  final List<String> _capas = List.generate(
+    33,
+    (index) => 'assets/images/capa${index + 1}.jpg',
+  );
 
   late List<String> _shuffledCapas;
 
@@ -188,7 +151,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
         .animateTo(
 
-          maxScroll,
+          (maxScroll + controller.position.viewportDimension) / 3,
 
           duration: duration,
 
@@ -200,7 +163,9 @@ class _SplashScreenState extends State<SplashScreen> {
 
       if (!mounted || !controller.hasClients) return;
 
-      controller.jumpTo(0);
+      controller.jumpTo(
+        controller.offset - (maxScroll + controller.position.viewportDimension) / 3,
+      );
 
       final nextTimer = Timer(
 
@@ -322,11 +287,11 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Widget build(BuildContext context) {
 
-    final List<String> col1 = _shuffledCapas.sublist(0, 7);
+    final List<String> col1 = _shuffledCapas.sublist(0, 11);
 
-    final List<String> col2 = _shuffledCapas.sublist(7, 14);
+    final List<String> col2 = _shuffledCapas.sublist(11, 22);
 
-    final List<String> col3 = _shuffledCapas.sublist(14, 19);
+    final List<String> col3 = _shuffledCapas.sublist(22, 33);
 
     return Scaffold(
 
@@ -337,7 +302,6 @@ class _SplashScreenState extends State<SplashScreen> {
         fit: StackFit.expand,
 
         children: [
-
           Row(
 
             children: [
@@ -399,13 +363,9 @@ class _SplashScreenState extends State<SplashScreen> {
                 end: Alignment.bottomCenter,
 
                 colors: [
-
                   Colors.black.withValues(alpha: 0.8),
-
                   Colors.black.withValues(alpha: 0.5),
-
                   Colors.black.withValues(alpha: 0.8),
-
                 ],
 
               ),

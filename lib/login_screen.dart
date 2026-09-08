@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 
 import 'cadastro_screen.dart';
@@ -38,47 +36,10 @@ class _LoginScreenState extends State<LoginScreen>
 
   bool _senhaVisivel = false;
 
-  final List<String> _capas = [
-
-    'assets/images/capa1.jpg',
-
-    'assets/images/capa2.jpg',
-
-    'assets/images/capa3.jpg',
-
-    'assets/images/capa4.jpg',
-
-    'assets/images/capa5.jpg',
-
-    'assets/images/capa6.jpg',
-
-    'assets/images/capa7.jpg',
-
-    'assets/images/capa8.jpg',
-
-    'assets/images/capa9.jpg',
-
-    'assets/images/capa10.jpg',
-
-    'assets/images/capa11.jpg',
-
-    'assets/images/capa12.jpg',
-
-    'assets/images/capa13.jpg',
-
-    'assets/images/capa14.jpg',
-
-    'assets/images/capa15.jpg',
-
-    'assets/images/capa16.jpg',
-
-    'assets/images/capa17.jpg',
-
-    'assets/images/capa18.jpg',
-
-    'assets/images/capa19.jpg',
-
-  ];
+  final List<String> _capas = List.generate(
+    33,
+    (index) => 'assets/images/capa${index + 1}.jpg',
+  );
 
   late List<String> _shuffledCapas;
 
@@ -224,7 +185,7 @@ class _LoginScreenState extends State<LoginScreen>
 
   }
 
-  Widget _buildRollingColumn(List<String> images, double speed) {
+  Widget _buildRollingColumn(List<String> images) {
 
     const itemHeight = 180.0;
 
@@ -250,7 +211,7 @@ class _LoginScreenState extends State<LoginScreen>
 
             final offset =
 
-                (_bgController.value * maxOffset * speed) % maxOffset;
+                _bgController.value * maxOffset;
 
             return OverflowBox(
 
@@ -272,7 +233,10 @@ class _LoginScreenState extends State<LoginScreen>
 
                     return Padding(
 
-                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 4,
+                        horizontal: 3,
+                      ),
 
                       child: ClipRRect(
 
@@ -326,19 +290,28 @@ class _LoginScreenState extends State<LoginScreen>
 
   Widget build(BuildContext context) {
 
-    final col1 = _shuffledCapas.sublist(0, 7);
+    final pageColor = const Color(0xFF000000);
+    final softTextColor = const Color(0xFFD09A9F);
 
-    final col2 = _shuffledCapas.sublist(7, 14);
+    final col1 = _shuffledCapas.sublist(0, 11);
 
-    final col3 = _shuffledCapas.sublist(14, 19);
+    final col2 = _shuffledCapas.sublist(11, 22);
+
+    final col3 = _shuffledCapas.sublist(22, 33);
 
     return Scaffold(
 
-      backgroundColor: const Color(0xFF000000),
+      backgroundColor: pageColor,
 
       resizeToAvoidBottomInset: true,
 
-      body: Stack(
+      body: Theme(
+        data: Theme.of(context).copyWith(
+          textTheme: Theme.of(context).textTheme.apply(
+            fontFamily: 'IMFellFrenchCanon',
+          ),
+        ),
+        child: Stack(
 
         fit: StackFit.expand,
 
@@ -350,19 +323,19 @@ class _LoginScreenState extends State<LoginScreen>
 
               Expanded(
 
-                child: _buildRollingColumn(col1, 0.15),
+                child: _buildRollingColumn(col1),
 
               ),
 
               Expanded(
 
-                child: _buildRollingColumn(col2, 0.20),
+                child: _buildRollingColumn(col2),
 
               ),
 
               Expanded(
 
-                child: _buildRollingColumn(col3, 0.12),
+                child: _buildRollingColumn(col3),
 
               ),
 
@@ -375,21 +348,13 @@ class _LoginScreenState extends State<LoginScreen>
             decoration: BoxDecoration(
 
               gradient: LinearGradient(
-
                 begin: Alignment.topCenter,
-
                 end: Alignment.bottomCenter,
-
                 colors: [
-
                   const Color(0xFF000000).withValues(alpha: 0.85),
-
                   const Color(0xFF000000).withValues(alpha: 0.70),
-
                   const Color(0xFF000000).withValues(alpha: 0.90),
-
                 ],
-
               ),
 
             ),
@@ -397,77 +362,42 @@ class _LoginScreenState extends State<LoginScreen>
           ),
 
           AnimatedBuilder(
-
             animation: _glowAnim,
-
             builder: (context, child) {
-
               return Container(
-
                 decoration: BoxDecoration(
-
                   gradient: RadialGradient(
-
                     center: Alignment.topCenter,
-
                     radius: 0.5,
-
                     colors: [
-
                       const Color(0xFFE50914).withValues(
-
                         alpha: 0.1 * _glowAnim.value,
-
                       ),
-
                       Colors.transparent,
-
                     ],
-
                   ),
-
                 ),
-
               );
-
             },
-
           ),
 
           Positioned(
-
             top: 0,
-
             left: 0,
-
             right: 0,
-
             child: Container(
-
               height: 180,
-
               decoration: BoxDecoration(
-
                 gradient: LinearGradient(
-
                   begin: Alignment.topCenter,
-
                   end: Alignment.bottomCenter,
-
                   colors: [
-
                     const Color(0xFF000000).withValues(alpha: 0.95),
-
                     Colors.transparent,
-
                   ],
-
                 ),
-
               ),
-
             ),
-
           ),
 
           Positioned(
@@ -613,33 +543,15 @@ class _LoginScreenState extends State<LoginScreen>
 
                                   colors: [
 
-                                    Color(0xFFF5E6D3),
+                                    Color(0xFFD09A9F),
 
-                                    Color(0xFFE8D4B8),
+                                    Color(0xFFD09A9F),
 
                                   ],
 
                                 ).createShader(bounds);
 
                               },
-
-                              child: const Text(
-
-                                'LupTok',
-
-                                style: TextStyle(
-
-                                  color: Color(0xFFF5E6D3),
-
-                                  fontSize: 22,
-
-                                  fontWeight: FontWeight.bold,
-
-                                  letterSpacing: 2,
-
-                                ),
-
-                              ),
 
                             ),
 
@@ -663,19 +575,19 @@ class _LoginScreenState extends State<LoginScreen>
 
                         children: [
 
-                          const Text(
+                          Text(
 
-                            'Bem-vindo de volta',
+                            'Bem-vindo',
 
                             style: TextStyle(
 
-                              color: Color(0xFFF5E6D3),
+                              color: softTextColor,
 
-                              fontSize: 26,
+                              fontSize: 30,
 
-                              fontWeight: FontWeight.bold,
+                              fontWeight: FontWeight.w400,
 
-                              letterSpacing: 0.3,
+                              letterSpacing: 1.1,
 
                             ),
 
@@ -685,15 +597,14 @@ class _LoginScreenState extends State<LoginScreen>
 
                           Text(
 
-                            'Entre para continuar assistindo',
+                            'Entre e continue sua jornada',
 
                             style: TextStyle(
 
-                              color: const Color(0xFFF5E6D3)
+                                color: softTextColor.withValues(alpha: 0.62),
 
-                                  .withValues(alpha: 0.45),
-
-                              fontSize: 14,
+                              fontSize: 15,
+                              letterSpacing: 0.2,
 
                             ),
 
@@ -735,9 +646,7 @@ class _LoginScreenState extends State<LoginScreen>
 
                                     : Icons.visibility_outlined,
 
-                                color: const Color(0xFFF5E6D3)
-
-                                    .withValues(alpha: 0.5),
+                                color: softTextColor.withValues(alpha: 0.65),
 
                                 size: 20,
 
@@ -799,7 +708,11 @@ class _LoginScreenState extends State<LoginScreen>
 
                               style: ElevatedButton.styleFrom(
 
-                                backgroundColor: Colors.transparent,
+                                backgroundColor: const Color(0xFF8F0C14),
+
+                                foregroundColor: const Color(0xFFD9AEB2),
+
+                                elevation: 0,
 
                                 shadowColor: Colors.transparent,
 
@@ -815,68 +728,22 @@ class _LoginScreenState extends State<LoginScreen>
 
                               onPressed: _navegarParaOnboarding,
 
-                              child: Ink(
-
+                              child: Container(
                                 decoration: BoxDecoration(
-
-                                  gradient: const LinearGradient(
-
-                                    colors: [
-
-                                      Color(0xFFE50914),
-
-                                      Color(0xFF6B0000),
-
-                                    ],
-
-                                    begin: Alignment.centerLeft,
-
-                                    end: Alignment.centerRight,
-
-                                  ),
-
+                                  color: const Color(0xFF8F0C14),
                                   borderRadius: BorderRadius.circular(16),
-
-                                  boxShadow: [
-
-                                    BoxShadow(
-
-                                      color: const Color(0xFFE50914)
-
-                                          .withValues(alpha: 0.35),
-
-                                      blurRadius: 20,
-
-                                      offset: const Offset(0, 6),
-
-                                    ),
-
-                                  ],
-
                                 ),
-
                                 child: const Center(
-
                                   child: Text(
-
                                     'Entrar',
-
                                     style: TextStyle(
-
                                       fontSize: 17,
-
-                                      color: Color(0xFFF5E6D3),
-
+                                      color: Color(0xFFD9AEB2),
                                       fontWeight: FontWeight.w600,
-
                                       letterSpacing: 0.5,
-
                                     ),
-
                                   ),
-
                                 ),
-
                               ),
 
                             ),
@@ -893,7 +760,7 @@ class _LoginScreenState extends State<LoginScreen>
 
                                 child: Divider(
 
-                                  color: const Color(0xFFF5E6D3)
+                                  color: const Color(0xFFD09A9F)
 
                                       .withValues(alpha: 0.12),
 
@@ -917,7 +784,7 @@ class _LoginScreenState extends State<LoginScreen>
 
                                   style: TextStyle(
 
-                                    color: const Color(0xFFF5E6D3)
+                                    color: const Color(0xFFD09A9F)
 
                                         .withValues(alpha: 0.35),
 
@@ -933,7 +800,7 @@ class _LoginScreenState extends State<LoginScreen>
 
                                 child: Divider(
 
-                                  color: const Color(0xFFF5E6D3)
+                                  color: const Color(0xFFD09A9F)
 
                                       .withValues(alpha: 0.12),
 
@@ -999,7 +866,7 @@ class _LoginScreenState extends State<LoginScreen>
 
                                   style: TextStyle(
 
-                                    color: const Color(0xFFF5E6D3)
+                                    color: const Color(0xFFD09A9F)
 
                                         .withValues(alpha: 0.45),
 
@@ -1053,6 +920,8 @@ class _LoginScreenState extends State<LoginScreen>
 
         ],
 
+        ),
+
       ),
 
     );
@@ -1072,6 +941,10 @@ class _LoginScreenState extends State<LoginScreen>
     Widget? suffix,
 
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fieldTextColor = isDark
+        ? const Color(0xFFD09A9F)
+        : const Color(0xFF6B252D);
 
     return Container(
 
@@ -1081,11 +954,12 @@ class _LoginScreenState extends State<LoginScreen>
 
         border: Border.all(
 
-          color: const Color(0xFFF5E6D3).withValues(alpha: 0.10),
+          color: fieldTextColor.withValues(alpha: isDark ? 0.35 : 0.18),
 
         ),
 
-        color: const Color(0xFFF5E6D3).withValues(alpha: 0.07),
+        color: isDark ? const Color(0xFF25080C).withValues(alpha: 0.75) :
+          const Color(0xFFFFE4E4),
 
       ),
 
@@ -1095,9 +969,9 @@ class _LoginScreenState extends State<LoginScreen>
 
         obscureText: obscure,
 
-        style: const TextStyle(
+        style: TextStyle(
 
-          color: Color(0xFFF5E6D3),
+          color: fieldTextColor,
 
           fontSize: 15,
 
@@ -1109,7 +983,7 @@ class _LoginScreenState extends State<LoginScreen>
 
           hintStyle: TextStyle(
 
-            color: const Color(0xFFF5E6D3).withValues(alpha: 0.35),
+            color: fieldTextColor.withValues(alpha: 0.50),
 
             fontSize: 15,
 
@@ -1119,7 +993,7 @@ class _LoginScreenState extends State<LoginScreen>
 
             icon,
 
-            color: const Color(0xFFF5E6D3).withValues(alpha: 0.35),
+            color: fieldTextColor.withValues(alpha: 0.50),
 
             size: 20,
 
