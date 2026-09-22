@@ -311,23 +311,7 @@ class _LoginScreenState extends State<LoginScreen>
 
         children: [
 
-          Container(
-
-            decoration: BoxDecoration(
-
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  const Color(0xFFFFE9E9).withValues(alpha: 0.85),
-                  const Color(0xFFFFE9E9).withValues(alpha: 0.70),
-                  const Color(0xFFFFE9E9).withValues(alpha: 0.90),
-                ],
-              ),
-
-            ),
-
-          ),
+          Container(color: pageColor),
 
           AnimatedBuilder(
             animation: _glowAnim,
@@ -347,61 +331,6 @@ class _LoginScreenState extends State<LoginScreen>
                 ),
               );
             },
-          ),
-
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              height: 180,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    const Color(0xFFFFE9E9).withValues(alpha: 0.95),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          Positioned(
-
-            bottom: 0,
-
-            left: 0,
-
-            right: 0,
-
-            child: Container(
-
-              height: 200,
-
-              decoration: BoxDecoration(
-
-                gradient: LinearGradient(
-
-                  begin: Alignment.bottomCenter,
-
-                  end: Alignment.topCenter,
-
-                  colors: [
-
-                    const Color(0xFFFFE9E9).withValues(alpha: 0.95),
-
-                    Colors.transparent,
-
-                  ],
-
-                ),
-
-              ),
-
-            ),
-
           ),
 
           SafeArea(

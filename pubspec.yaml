@@ -23,4 +23,5 @@ flutter:
         - asset: assets/fonts/IMFellFrenchCanon-Regular.ttf
   assets:
     - assets/images/
+    - assets/images/logobranca.png
 
