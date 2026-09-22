@@ -92,7 +92,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   void _voltar() async {
-    if (_etapa == 0) return;
+    if (_etapa == 0) {
+      Navigator.pop(context);
+      return;
+    }
     await _slideController.reverse();
     setState(() => _etapa--);
     _slideController.forward();
@@ -103,7 +106,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     final totalEtapas = _fluxo.length;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF000000),
+      backgroundColor: const Color(0xFFFFE9E9),
       body: Stack(
         fit: StackFit.expand,
         children: [
@@ -117,11 +120,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   radius: 1.2,
                   colors: [
                     Color.lerp(
-                      const Color(0xFF1A0005),
-                      const Color(0xFF0D0002),
+                      const Color(0xFFFFD6D8),
+                      const Color(0xFFFFE9E9),
                       _pulseAnim.value,
                     )!,
-                    const Color(0xFF000000),
+                    const Color(0xFFFFE9E9),
                   ],
                 ),
               ),
@@ -139,7 +142,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: [
-                      const Color(0xFFE50914).withOpacity(0.08 + _pulseAnim.value * 0.06),
+                      const Color(0xFFBB7575).withOpacity(0.08 + _pulseAnim.value * 0.06),
                       Colors.transparent,
                     ],
                   ),
@@ -159,7 +162,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: [
-                      const Color(0xFF6B0000).withOpacity(0.07 + _pulseAnim.value * 0.05),
+                      const Color(0xFFB8787C).withOpacity(0.07 + _pulseAnim.value * 0.05),
                       Colors.transparent,
                     ],
                   ),
@@ -179,20 +182,20 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     children: [
                       // Botão voltar
                       GestureDetector(
-                        onTap: _etapa > 0 ? _voltar : null,
+                        onTap: _voltar,
                         child: AnimatedOpacity(
-                          opacity: _etapa > 0 ? 1.0 : 0.0,
+                          opacity: 1.0,
                           duration: const Duration(milliseconds: 200),
                           child: Container(
                             width: 40, height: 40,
                             decoration: BoxDecoration(
-                              color: const Color(0xFFF5E6D3).withOpacity(0.07),
+                              color: const Color(0xFFB8787C).withOpacity(0.18),
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: const Color(0xFFF5E6D3).withOpacity(0.08)),
+                              border: Border.all(color: const Color(0xFFBB7575).withOpacity(0.18)),
                             ),
                             child: const Icon(
                               Icons.arrow_back_ios_new,
-                              color: Color(0xFFF5E6D3), size: 16,
+                              color: Color(0xFFBB7575), size: 16,
                             ),
                           ),
                         ),
@@ -212,9 +215,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                                 value: totalEtapas > 0
                                     ? (_etapa + 1) / totalEtapas
                                     : 0,
-                                backgroundColor: const Color(0xFFF5E6D3).withOpacity(0.12),
+                                backgroundColor: const Color(0xFFB8787C).withOpacity(0.28),
                                 valueColor: const AlwaysStoppedAnimation<Color>(
-                                    Color(0xFFE50914)),
+                                    Color(0xFFBB7575)),
                               ),
                             ),
                           ),
@@ -222,7 +225,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           Text(
                             "${_etapa + 1} de $totalEtapas",
                             style: TextStyle(
-                              color: const Color(0xFFF5E6D3).withOpacity(0.35),
+                              color: const Color.fromARGB(255, 200, 122, 127).withOpacity(0.55),
                               fontSize: 11,
                             ),
                           ),
@@ -273,7 +276,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                         child: Ink(
                           decoration: BoxDecoration(
                             gradient: const LinearGradient(
-                              colors: [Color(0xFFE50914), Color(0xFF6B0000)],
+                              colors: [Color.fromARGB(255, 200, 145, 149), Color.fromARGB(255, 200, 145, 149)],
                               begin: Alignment.centerLeft,
                               end: Alignment.centerRight,
                             ),
@@ -281,7 +284,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                             boxShadow: _podeProsseguir
                                 ? [
                                     BoxShadow(
-                                      color: const Color(0xFFE50914).withOpacity(0.4),
+                                      color: const Color(0xFFB8787C).withOpacity(0.4),
                                       blurRadius: 24,
                                       offset: const Offset(0, 8),
                                     ),
@@ -293,7 +296,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                               _ehUltimaEtapa ? "Começar  🚀" : "Próximo",
                               style: const TextStyle(
                                 fontSize: 17,
-                                color: Color(0xFFF5E6D3),
+                                color: Color(0xFFFFE9E9),
                                 fontWeight: FontWeight.w600,
                                 letterSpacing: 0.5,
                               ),
@@ -338,7 +341,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         children: [
           _buildTitulo("Bem-vindo! 🍿", "O que você mais\ngosta de consumir?"),
           Text("Pode selecionar mais de um.",
-            style: TextStyle(color: const Color(0xFFF5E6D3).withOpacity(0.45), fontSize: 14)),
+            style: TextStyle(color: const Color(0xFFB8787C).withOpacity(0.70), fontSize: 14)),
 
           const SizedBox(height: 36),
 
@@ -358,17 +361,17 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   decoration: BoxDecoration(
                     gradient: sel
                         ? const LinearGradient(
-                            colors: [Color(0xFF1A0005), Color(0xFF0D0002)],
+                            colors: [Color(0xFFBB7575), Color(0xFFBB7575)],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           )
                         : null,
-                    color: sel ? null : const Color(0xFFF5E6D3).withOpacity(0.04),
+                    color: sel ? null : const Color(0xFFB8787C).withOpacity(0.20),
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(
                       color: sel
-                          ? const Color(0xFFE50914).withOpacity(0.6)
-                          : const Color(0xFFF5E6D3).withOpacity(0.12),
+                          ? const Color(0xFFB8787C).withOpacity(0.75)
+                          : const Color(0xFFB8787C).withOpacity(0.25),
                       width: sel ? 1.5 : 1,
                     ),
                   ),
@@ -378,7 +381,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                       const SizedBox(width: 16),
                       Text(nome,
                         style: TextStyle(
-                          color: sel ? const Color(0xFFF5E6D3) : const Color(0xFFF5E6D3).withOpacity(0.60),
+                          color: sel ? const Color(0xFFFFE9E9) : const Color(0xFFBB7575),
                           fontSize: 17,
                           fontWeight: sel ? FontWeight.w700 : FontWeight.w400,
                         ),
@@ -389,14 +392,14 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                         width: 24, height: 24,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: sel ? const Color(0xFFE50914) : Colors.transparent,
+                          color: sel ? const Color(0xFFB8787C) : Colors.transparent,
                           border: Border.all(
-                            color: sel ? const Color(0xFFE50914) : const Color(0xFFF5E6D3).withOpacity(0.24),
+                            color: sel ? const Color(0xFFBB7575) : const Color(0xFFBB7575).withOpacity(0.30),
                             width: 2,
                           ),
                         ),
                         child: sel
-                            ? const Icon(Icons.check, size: 14, color: Color(0xFFF5E6D3))
+                            ? const Icon(Icons.check, size: 14, color: Color(0xFFFFE9E9))
                             : null,
                       ),
                     ],
@@ -427,7 +430,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         children: [
           _buildTitulo("Última etapa! 🎉", "Quais gêneros\nvocê curte?"),
           Text("Selecione quantos quiser.",
-            style: TextStyle(color: const Color(0xFFF5E6D3).withOpacity(0.45), fontSize: 14)),
+            style: TextStyle(color: const Color(0xFFB8787C).withOpacity(0.70), fontSize: 14)),
           const SizedBox(height: 28),
           _buildChips(
             itens: generos,
@@ -443,8 +446,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   Widget _buildChips({
     required List<(String, String)> itens,
     required Set<String> selecionados,
-    Color cor = const Color(0xFFE50914),
-    List<Color> gradiente = const [Color(0xFF1A0005), Color(0xFF0D0002)],
+    Color cor = const Color(0xFFBB7575),
+    List<Color> gradiente = const [Color(0xFFBB7575), Color(0xFFBB7575)],
   }) {
     return Wrap(
       spacing: 10, runSpacing: 10,
@@ -463,10 +466,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   ? LinearGradient(colors: gradiente,
                       begin: Alignment.topLeft, end: Alignment.bottomRight)
                   : null,
-              color: sel ? null : const Color(0xFFF5E6D3).withOpacity(0.05),
+              color: sel ? null : const Color(0xFFB8787C).withOpacity(0.20),
               borderRadius: BorderRadius.circular(50),
               border: Border.all(
-                color: sel ? cor.withOpacity(0.7) : const Color(0xFFF5E6D3).withOpacity(0.10),
+                color: sel ? cor.withOpacity(0.7) : const Color(0xFFBB7575).withOpacity(0.25),
                 width: sel ? 1.5 : 1,
               ),
             ),
@@ -477,7 +480,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 const SizedBox(width: 8),
                 Text(nome,
                   style: TextStyle(
-                    color: sel ? const Color(0xFFF5E6D3) : const Color(0xFFF5E6D3).withOpacity(0.54),
+                    color: sel ? const Color(0xFFFFE9E9) : const Color(0xFFBB7575),
                     fontSize: 14,
                     fontWeight: sel ? FontWeight.w600 : FontWeight.normal,
                   ),
@@ -497,15 +500,15 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       children: [
         ShaderMask(
           shaderCallback: (bounds) => const LinearGradient(
-            colors: [Color(0xFFE50914), Color(0xFFFF6B6B)],
+            colors: [Color(0xFFB8787C), Color(0xFFB8787C)],
           ).createShader(bounds),
           child: Text(subtitulo,
-            style: const TextStyle(color: Color(0xFFF5E6D3), fontSize: 16, fontWeight: FontWeight.w500)),
+            style: const TextStyle(color: Color(0xFFB8787C), fontSize: 16, fontWeight: FontWeight.w500)),
         ),
         const SizedBox(height: 8),
         Text(titulo,
           style: const TextStyle(
-            color: Color(0xFFF5E6D3), fontSize: 32,
+            color: Color(0xFFB8787C), fontSize: 32,
             fontWeight: FontWeight.bold, height: 1.2,
           ),
         ),

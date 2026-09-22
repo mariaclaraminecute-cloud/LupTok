@@ -126,7 +126,7 @@ class _HomeScreenState extends State<HomeScreen>
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF000000) : const Color(0xFFFFF4F4),
+      backgroundColor: const Color(0xFFFFE9E9),
       extendBody: true,
       body: Stack(
         children: [
@@ -155,13 +155,13 @@ class _HomeScreenState extends State<HomeScreen>
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       gradient: const LinearGradient(
-                        colors: [Color(0xFFE50914), Color(0xFF6B0000)],
+                        colors: [Color(0xFFB8787C), Color.fromARGB(255, 255, 221, 223)],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFFE50914).withOpacity(0.5 * _glowAnim.value),
+                          color: const Color(0xFFB8787C).withOpacity(0.5 * _glowAnim.value),
                           blurRadius: 20, spreadRadius: 1,
                         ),
                       ],
@@ -170,7 +170,7 @@ class _HomeScreenState extends State<HomeScreen>
                   ),
                   child: const Center(
                     child: Text("L",
-                      style: TextStyle(color: Color(0xFFF5E6D3), fontSize: 22,
+                      style: TextStyle(color: Color.fromRGBO(255, 212, 215, 1), fontSize: 22,
                           fontWeight: FontWeight.bold)),
                   ),
                 ),
@@ -222,7 +222,7 @@ class _HomeScreenState extends State<HomeScreen>
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: RadialGradient(colors: [
-                  const Color(0xFFE50914).withOpacity(0.10),
+                  const Color(0xFFB8787C).withOpacity(0.10),
                   Colors.transparent,
                 ]),
               ),
@@ -236,7 +236,7 @@ class _HomeScreenState extends State<HomeScreen>
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: RadialGradient(colors: [
-                  const Color(0xFF6B0000).withOpacity(0.12),
+                  const Color.fromARGB(255, 255, 215, 218).withOpacity(0.12),
                   Colors.transparent,
                 ]),
               ),
@@ -269,7 +269,7 @@ class _HomeScreenState extends State<HomeScreen>
                         borderRadius: BorderRadius.circular(24),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF6B0000).withOpacity(v),
+                            color: const Color(0xFFBB7575).withOpacity(v),
                             blurRadius: 60, spreadRadius: 4,
                           ),
                         ],
@@ -281,19 +281,13 @@ class _HomeScreenState extends State<HomeScreen>
 
                   const SizedBox(height: 36),
 
-                  // "Bem-vindo!" com gradiente
-                  ShaderMask(
-                    shaderCallback: (bounds) => const LinearGradient(
-                      colors: [Color(0xFFF5E6D3), Color(0xFFFFCCCC)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ).createShader(bounds),
-                    child: const Text(
-                      "Bem-vindo!",
-                      style: TextStyle(
-                        color: Color(0xFFF5E6D3), fontSize: 44,
-                        fontWeight: FontWeight.bold, letterSpacing: -0.5,
-                      ),
+                  const Text(
+                    "Bem-vindo!",
+                    style: TextStyle(
+                      color: Color(0xFFBB7575),
+                      fontSize: 44,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: -0.5,
                     ),
                   ),
 
@@ -304,7 +298,7 @@ class _HomeScreenState extends State<HomeScreen>
                     width: 56, height: 3,
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
-                        colors: [Color(0xFFE50914), Color(0xFF6B0000)]),
+                        colors: [Color(0xFFBB7575), Color(0xFFBB7575)]),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -315,7 +309,7 @@ class _HomeScreenState extends State<HomeScreen>
                     "Seu universo de entretenimento começa aqui",
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: const Color(0xFFF5E6D3).withOpacity(0.48),
+                      color: const Color.fromARGB(255, 255, 218, 220).withOpacity(0.60),
                       fontSize: 15, height: 1.55,
                     ),
                   ),
@@ -335,16 +329,16 @@ class _HomeScreenState extends State<HomeScreen>
       ("😢", "Triste", const Color(0xFF4A90D9)),
       ("😤", "Ansioso", const Color(0xFFFF6B35)),
       ("😴", "Sonolento", const Color(0xFF9B59B6)),
-      ("🔥", "Animado", const Color(0xFFE50914)),
+      ("🔥", "Animado", const Color(0xFFB8787C)),
       ("🤔", "Pensativo", const Color(0xFF95A5A6)),
-      ("💕", "Romântico", const Color(0xFFFF6B9D)),
+      ("💕", "Romântico", const Color(0xFFBB7575)),
       ("😱", "Suspense", const Color(0xFF2C3E50)),
     ];
 
     return GestureDetector(
       onTap: () => setState(() => _mostrarHumor = false),
       child: Container(
-        color: const Color(0xFF000000).withOpacity(0.90),
+        color: const Color(0xFFFFE9E9).withOpacity(0.92),
         child: Center(
           child: GestureDetector(
             onTap: () {},
@@ -352,17 +346,17 @@ class _HomeScreenState extends State<HomeScreen>
               margin: const EdgeInsets.symmetric(horizontal: 24),
               padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
-                color: const Color(0xFF0A0A0A),
+                color: const Color(0xFFFFE9E9),
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: const Color(0xFFF5E6D3).withOpacity(0.08)),
+                border: Border.all(color: const Color.fromARGB(255, 221, 155, 159).withOpacity(0.18)),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFFE50914).withOpacity(0.1),
+                    color: const Color(0xFFB8787C).withOpacity(0.1),
                     blurRadius: 30,
                     spreadRadius: 5,
                   ),
                   BoxShadow(
-                    color: const Color(0xFF000000).withOpacity(0.8),
+                    color: const Color(0xFFBB7575).withOpacity(0.18),
                     blurRadius: 40,
                   ),
                 ],
@@ -377,11 +371,11 @@ class _HomeScreenState extends State<HomeScreen>
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       gradient: const LinearGradient(
-                        colors: [Color(0xFFE50914), Color(0xFF6B0000)],
+                        colors: [Color(0xFFBB7575), Color(0xFFD59EA1)],
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFFE50914).withOpacity(0.3),
+                          color: const Color(0xFFBB7575).withOpacity(0.3),
                           blurRadius: 20,
                           spreadRadius: 2,
                         ),
@@ -389,7 +383,7 @@ class _HomeScreenState extends State<HomeScreen>
                     ),
                     child: const Icon(
                       Icons.mood_rounded,
-                      color: Color(0xFFF5E6D3),
+                      color: Color(0xFFFFE9E9),
                       size: 30,
                     ),
                   ),
@@ -399,7 +393,7 @@ class _HomeScreenState extends State<HomeScreen>
                     "Como você está se sentindo?",
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: Color(0xFFF5E6D3),
+                      color: Color(0xFFBB7575),
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
                       height: 1.3,
@@ -410,13 +404,11 @@ class _HomeScreenState extends State<HomeScreen>
                     "Vamos personalizar suas recomendações",
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: const Color(0xFFF5E6D3).withOpacity(0.45),
+                      color: const Color(0xFFBB7575).withOpacity(0.65),
                       fontSize: 14,
                     ),
                   ),
                   const SizedBox(height: 28),
-                  
-                  // Grid de humores
                   GridView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
@@ -442,10 +434,10 @@ class _HomeScreenState extends State<HomeScreen>
                                     end: Alignment.bottomRight,
                                   )
                                 : null,
-                            color: sel ? null : const Color(0xFFF5E6D3).withOpacity(0.04),
+                            color: sel ? null : const Color(0xFFB8787C).withOpacity(0.18),
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(
-                              color: sel ? cor.withOpacity(0.6) : const Color(0xFFF5E6D3).withOpacity(0.1),
+                              color: sel ? cor.withOpacity(0.6) : const Color(0xFFBB7575).withOpacity(0.20),
                               width: sel ? 2 : 1,
                             ),
                             boxShadow: sel
@@ -466,7 +458,7 @@ class _HomeScreenState extends State<HomeScreen>
                               Text(
                                 nome,
                                 style: TextStyle(
-                                  color: sel ? const Color(0xFFF5E6D3) : const Color(0xFFF5E6D3).withOpacity(0.6),
+                                  color: sel ? const Color(0xFFFFE9E9) : const Color(0xFFBB7575),
                                   fontSize: 14,
                                   fontWeight: sel ? FontWeight.w600 : FontWeight.w500,
                                 ),
@@ -496,14 +488,14 @@ class _HomeScreenState extends State<HomeScreen>
                       child: Ink(
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
-                            colors: [Color(0xFFE50914), Color(0xFF6B0000)],
+                            colors: [Color(0xFFB8787C), Color(0xFFBB7575)],
                             begin: Alignment.centerLeft,
                             end: Alignment.centerRight,
                           ),
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFFE50914).withOpacity(0.35),
+                              color: const Color(0xFFB8787C).withOpacity(0.35),
                               blurRadius: 20,
                               offset: const Offset(0, 6),
                             ),
@@ -515,7 +507,7 @@ class _HomeScreenState extends State<HomeScreen>
                                 ? "Continuar  ✨"
                                 : "Pular por hoje",
                             style: const TextStyle(
-                              color: Color(0xFFF5E6D3),
+                              color: Color(0xFFFFE9E9),
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
                               letterSpacing: 0.5,
@@ -546,14 +538,9 @@ class _HomeScreenState extends State<HomeScreen>
 
     return Container(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [
-            Colors.black,
-            Colors.black.withOpacity(0.92),
-            Colors.transparent,
-          ],
+        color: const Color(0xFFBB7575).withOpacity(0.12),
+        border: Border(
+          top: BorderSide(color: const Color(0xFFBB7575).withOpacity(0.22)),
         ),
       ),
       child: SafeArea(
@@ -577,13 +564,13 @@ class _HomeScreenState extends State<HomeScreen>
                             horizontal: 12, vertical: 7),
                         decoration: BoxDecoration(
                           color: ativo
-                              ? const Color(0xFFE50914).withOpacity(0.15)
-                              : Colors.transparent,
+                              ? const Color(0xFFBB7575).withOpacity(0.15)
+                              : const Color.fromARGB(0, 253, 195, 195),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(
                           ativo ? iconOn : iconOff,
-                          color: ativo ? const Color(0xFFE50914) : Colors.white38,
+                          color: ativo ? const Color(0xFFBB7575) : const Color(0xFFD59EA1).withOpacity(0.38),
                           size: 24,
                         ),
                       ),
@@ -592,8 +579,8 @@ class _HomeScreenState extends State<HomeScreen>
                         duration: const Duration(milliseconds: 250),
                         style: TextStyle(
                           color: ativo
-                              ? const Color(0xFFE50914)
-                              : Colors.white38,
+                              ? const Color(0xFFBB7575)
+                              : const Color(0xFFBB7575).withOpacity(0.38),
                           fontSize: 10,
                           fontWeight: ativo ? FontWeight.w600 : FontWeight.normal,
                         ),
@@ -655,7 +642,7 @@ class _LoopTabState extends State<_LoopTab> {
   Color _spoilerColor(String s) {
     switch (s) {
       case 'leve': return const Color(0xFFFFA726);
-      case 'muito': return const Color(0xFFE50914);
+      case 'muito': return const Color(0xFFBB7575);
       default: return const Color(0xFF4CAF50);
     }
   }
@@ -693,32 +680,13 @@ class _LoopTabState extends State<_LoopTab> {
           children: [
             // Fundo
             Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft, end: Alignment.bottomRight,
-                  colors: [v.cor, Colors.black, v.cor.withOpacity(0.3)],
-                  stops: const [0.0, 0.5, 1.0],
-                ),
-              ),
+              color: v.cor,
             ),
             Center(
               child: Opacity(
                 opacity: 0.06,
                 child: Text(_tipoEmoji(v.tipo),
                     style: const TextStyle(fontSize: 220)),
-              ),
-            ),
-            // Gradiente inferior
-            Positioned(
-              bottom: 0, left: 0, right: 0,
-              child: Container(
-                height: MediaQuery.of(context).size.height * 0.55,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter, end: Alignment.topCenter,
-                    colors: [Colors.black.withOpacity(0.95), Colors.transparent],
-                  ),
-                ),
               ),
             ),
             // Info inferior esquerdo
@@ -729,7 +697,7 @@ class _LoopTabState extends State<_LoopTab> {
                 children: [
                   Row(children: [
                     _badge(_tipoEmoji(v.tipo) + " " + v.tipo,
-                        Colors.white.withOpacity(0.12), Colors.white),
+                        const Color.fromARGB(255, 198, 125, 125).withOpacity(0.12), const Color(0xFFBB7575)),
                     const SizedBox(width: 8),
                     _badge(_spoilerLabel(v.spoiler),
                         _spoilerColor(v.spoiler).withOpacity(0.15),
@@ -737,36 +705,36 @@ class _LoopTabState extends State<_LoopTab> {
                   ]),
                   const SizedBox(height: 10),
                   Text(v.titulo,
-                    style: const TextStyle(color: Colors.white, fontSize: 22,
+                    style: const TextStyle(color: Color(0xFFBB7575), fontSize: 22,
                         fontWeight: FontWeight.bold,
                         shadows: [Shadow(color: Colors.black54, blurRadius: 8)])),
                   const SizedBox(height: 4),
                   Text(v.genero,
                     style: TextStyle(
-                        color: Colors.white.withOpacity(0.6), fontSize: 14)),
+                        color: const Color.fromARGB(255, 179, 127, 127).withOpacity(0.6), fontSize: 14)),
                   const SizedBox(height: 10),
                   Row(children: [
                     const CircleAvatar(
                       radius: 16,
-                      backgroundColor: Color(0x4DE50914),
+                      backgroundColor: Color.fromARGB(77, 158, 92, 92),
                       child: Text("A",
-                          style: TextStyle(color: Colors.white,
+                          style: TextStyle(color: Color(0xFFBB7575),
                               fontSize: 13, fontWeight: FontWeight.bold)),
                     ),
                     const SizedBox(width: 8),
                     Text("@anna.beatriz",
                       style: TextStyle(
-                          color: Colors.white.withOpacity(0.8), fontSize: 13)),
+                          color: const Color(0xFFBB7575).withOpacity(0.8), fontSize: 13)),
                     const SizedBox(width: 10),
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 4),
                       decoration: BoxDecoration(
-                        border: Border.all(color: Colors.white54),
+                        border: Border.all(color: const Color(0xFFBB7575).withOpacity(0.54)),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: const Text("Seguir",
-                        style: TextStyle(color: Colors.white,
+                        style: TextStyle(color: Color(0xFFBB7575),
                             fontSize: 12, fontWeight: FontWeight.w600)),
                     ),
                   ]),
@@ -780,7 +748,7 @@ class _LoopTabState extends State<_LoopTab> {
                 _acao(
                   icon: starrado ? Icons.star_rounded : Icons.star_outline_rounded,
                   label: _fmt(v.stars + (starrado ? 1 : 0)),
-                  cor: starrado ? const Color(0xFFFFD700) : Colors.white,
+                  cor: Colors.white,
                   onTap: () => setState(
                       () => starrado ? _starred.remove(i) : _starred.add(i)),
                 ),
@@ -797,42 +765,36 @@ class _LoopTabState extends State<_LoopTab> {
             ),
             // Top bar
             Positioned(
-              top: 0, left: 0, right: 0,
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(16, 56, 16, 16),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                    colors: [Colors.black.withOpacity(0.6), Colors.transparent],
-                  ),
-                ),
-                child: Row(children: [
-                  const Text("Loop",
-                    style: TextStyle(color: Colors.white, fontSize: 20,
-                        fontWeight: FontWeight.bold)),
-                  const Spacer(),
-                  Icon(Icons.search_rounded,
-                      color: Colors.white.withOpacity(0.8), size: 26),
-                  const SizedBox(width: 14),
-                  // Botão Lupez no topo
-                  GestureDetector(
-                    onTap: widget.onAbrirLupez,
-                    child: Container(
-                      width: 36, height: 36,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: LinearGradient(
-                          colors: [Color(0xFFE50914), Color(0xFF6B0000)]),
-                      ),
-                      child: const Center(
-                        child: Text("L",
-                          style: TextStyle(color: Colors.white,
-                              fontSize: 16, fontWeight: FontWeight.bold)),
+                top: 0, left: 0, right: 0,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(16, 56, 16, 16),
+                  child: Row(children: [
+                    const Text("Loop",
+                      style: TextStyle(color: Colors.white, fontSize: 20,
+                          fontWeight: FontWeight.bold)),
+                    const Spacer(),
+                    Icon(Icons.search_rounded,
+                        color: Colors.white.withOpacity(0.8), size: 26),
+                    const SizedBox(width: 14),
+                    // Botão Lupez no topo
+                    GestureDetector(
+                      onTap: widget.onAbrirLupez,
+                      child: Container(
+                        width: 36, height: 36,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(
+                            colors: [Color(0xFFBB7575), Color.fromARGB(255, 200, 140, 144)]),
+                        ),
+                        child: const Center(
+                          child: Text("L",
+                            style: TextStyle(color: Color.fromARGB(255, 184, 129, 129),
+                                fontSize: 16, fontWeight: FontWeight.bold)),
+                        ),
                       ),
                     ),
-                  ),
-                ]),
-              ),
+                  ]),
+                ),
             ),
           ],
         );
@@ -1011,10 +973,11 @@ class _LupezOverlayState extends State<_LupezOverlay>
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           gradient: const LinearGradient(
-                            colors: [Color(0xFFE50914), Color(0xFF6B0000)]),
+                            colors: [Color(0xFFBB7575), Color(0xFFD59EA1)]
+                          ),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFFE50914)
+                              color: const Color(0xFFBB7575)
                                   .withOpacity(0.4 * widget.glowAnim.value),
                               blurRadius: 14,
                             ),
@@ -1034,10 +997,10 @@ class _LupezOverlayState extends State<_LupezOverlay>
                       children: [
                         ShaderMask(
                           shaderCallback: (b) => const LinearGradient(
-                            colors: [Color(0xFFE50914), Color(0xFFFF6B6B)],
+                            colors: [Color(0xFFBB7575), Color(0xFF7D171D)],
                           ).createShader(b),
                           child: const Text("Lupez",
-                            style: TextStyle(color: Colors.white,
+                            style: TextStyle(color: Color.fromARGB(255, 207, 143, 143),
                                 fontSize: 16, fontWeight: FontWeight.bold)),
                         ),
                         Row(children: [
@@ -1049,7 +1012,7 @@ class _LupezOverlayState extends State<_LupezOverlay>
                           const SizedBox(width: 5),
                           Text("IA de entretenimento",
                             style: TextStyle(
-                                color: Colors.white.withOpacity(0.38),
+                                color: const Color.fromARGB(255, 211, 146, 146).withOpacity(0.38),
                                 fontSize: 11)),
                         ]),
                       ],
@@ -1105,7 +1068,7 @@ class _LupezOverlayState extends State<_LupezOverlay>
                             color: Colors.white.withOpacity(0.05),
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
-                                color: const Color(0xFFE50914).withOpacity(0.3)),
+                                color: const Color(0xFFBB7575).withOpacity(0.3)),
                           ),
                           child: Text(_sugestoes[i],
                             style: const TextStyle(
@@ -1159,10 +1122,10 @@ class _LupezOverlayState extends State<_LupezOverlay>
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             gradient: const LinearGradient(
-                              colors: [Color(0xFFE50914), Color(0xFF6B0000)]),
+                              colors: [Color(0xFFBB7575), Color(0xFF7D171D)]),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFFE50914).withOpacity(
+                                color: const Color(0xFFBB7575).withOpacity(
                                     0.35 * widget.glowAnim.value),
                                 blurRadius: 14,
                               ),
@@ -1199,7 +1162,7 @@ class _LupezOverlayState extends State<_LupezOverlay>
               decoration: const BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
-                    colors: [Color(0xFFE50914), Color(0xFF6B0000)]),
+                    colors: [Color(0xFFBB7575), Color(0xFF7D171D)]),
               ),
               child: const Center(
                 child: Text("L",
@@ -1213,7 +1176,7 @@ class _LupezOverlayState extends State<_LupezOverlay>
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
               decoration: BoxDecoration(
                 gradient: msg.deLupez ? null : const LinearGradient(
-                  colors: [Color(0xFFE50914), Color(0xFF8B0000)],
+                  colors: [Color(0xFFBB7575), Color(0xFF7D171D)],
                 ),
                 color: msg.deLupez ? const Color(0xFF1A1A1A) : null,
                 borderRadius: BorderRadius.only(
@@ -1262,7 +1225,7 @@ class _LupezOverlayState extends State<_LupezOverlay>
             decoration: const BoxDecoration(
               shape: BoxShape.circle,
               gradient: LinearGradient(
-                  colors: [Color(0xFFE50914), Color(0xFF6B0000)]),
+                  colors: [Color(0xFFBB7575), Color(0xFF7D171D)]),
             ),
             child: const Center(
               child: Text("L",
@@ -1298,7 +1261,7 @@ class _LupezOverlayState extends State<_LupezOverlay>
                         width: 6, height: 6,
                         decoration: const BoxDecoration(
                           shape: BoxShape.circle,
-                          color: Color(0xFFE50914),
+                          color: Color(0xFFBB7575),
                         ),
                       ),
                     ),
@@ -1329,7 +1292,7 @@ class _BibliotecaTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
+      backgroundColor: const Color(0xFFFFE9E9),
       body: SafeArea(
         child: Column(children: [
           Padding(
@@ -1352,9 +1315,9 @@ class _BibliotecaTab extends StatelessWidget {
             child: Expanded(
               child: Column(children: [
                 const TabBar(
-                  labelColor: Color(0xFFE50914),
-                  unselectedLabelColor: Colors.white38,
-                  indicatorColor: Color(0xFFE50914),
+                  labelColor: Color(0xFF7D171D),
+                  unselectedLabelColor: Color(0xFFB8787C),
+                  indicatorColor: Color(0xFFB8787C),
                   indicatorSize: TabBarIndicatorSize.label,
                   tabs: [
                     Tab(text: "Quero ver"),
@@ -1419,7 +1382,7 @@ class _AvaliacoesTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
+      backgroundColor: const Color(0xFFFFE9E9),
       body: SafeArea(
         child: Column(children: [
           const Padding(
@@ -1427,7 +1390,7 @@ class _AvaliacoesTab extends StatelessWidget {
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text("Avaliações",
-                style: TextStyle(color: Colors.white, fontSize: 22,
+                style: TextStyle(color: Color(0xFF7D171D), fontSize: 22,
                     fontWeight: FontWeight.bold)),
             ),
           ),
@@ -1436,14 +1399,14 @@ class _AvaliacoesTab extends StatelessWidget {
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 ShaderMask(
                   shaderCallback: (b) => const LinearGradient(
-                    colors: [Color(0xFFE50914), Color(0xFFFFD700)],
+                      colors: [Color(0xFFB8787C), Color(0xFF7D171D)],
                   ).createShader(b),
                   child: const Text("⭐",
                       style: TextStyle(fontSize: 64, color: Colors.white)),
                 ),
                 const SizedBox(height: 16),
-                const Text("Suas stars aparecem aqui",
-                  style: TextStyle(color: Colors.white, fontSize: 17,
+                  const Text("Suas stars aparecem aqui",
+                  style: TextStyle(color: Color(0xFF7D171D), fontSize: 17,
                       fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
                 Text("Avalie obras e acompanhe\nsuas reviews",
@@ -1477,7 +1440,7 @@ class _ExplorarTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
+      backgroundColor: const Color(0xFFFFE9E9),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
@@ -1485,35 +1448,35 @@ class _ExplorarTab extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text("Explorar",
-                style: TextStyle(color: Colors.white, fontSize: 22,
+                style: TextStyle(color: Color(0xFFBB7575), fontSize: 22,
                     fontWeight: FontWeight.bold)),
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.symmetric(
                     horizontal: 16, vertical: 14),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.07),
+                  color: const Color(0xFFBB7575).withOpacity(0.10),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                      color: Colors.white.withOpacity(0.10)),
+                      color: const Color(0xFFBB7575).withOpacity(0.25)),
                 ),
                 child: Row(children: [
-                  Icon(Icons.search_rounded,
-                      color: Colors.white.withOpacity(0.35), size: 20),
+                    Icon(Icons.search_rounded,
+                      color: const Color(0xFFBB7575).withOpacity(0.65), size: 20),
                   const SizedBox(width: 10),
                   Text("Buscar obras, usuários...",
                     style: TextStyle(
-                        color: Colors.white.withOpacity(0.35),
+                        color: const Color(0xFFBB7575).withOpacity(0.70),
                         fontSize: 15)),
                 ]),
               ),
               const SizedBox(height: 28),
               ShaderMask(
                 shaderCallback: (b) => const LinearGradient(
-                  colors: [Color(0xFFE50914), Color(0xFFFF6B6B)],
+                            colors: [Color(0xFFBB7575), Color(0xFF7D171D)],
                 ).createShader(b),
                 child: const Text("🔥  Em alta agora",
-                  style: TextStyle(color: Colors.white, fontSize: 16,
+                  style: TextStyle(color: Color(0xFFBB7575), fontSize: 16,
                       fontWeight: FontWeight.bold)),
               ),
               const SizedBox(height: 14),
@@ -1524,17 +1487,17 @@ class _ExplorarTab extends StatelessWidget {
                   margin: const EdgeInsets.only(bottom: 10),
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.04),
+                        color: const Color(0xFFBB7575).withOpacity(0.10),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                        color: Colors.white.withOpacity(0.07)),
+                        color: const Color(0xFFBB7575).withOpacity(0.20)),
                   ),
                   child: Row(children: [
                     Text("$i",
                       style: TextStyle(
                         color: i <= 3
-                            ? const Color(0xFFE50914)
-                            : Colors.white38,
+                            ? const Color(0xFFBB7575)
+                            : const Color(0xFFBB7575).withOpacity(0.55),
                         fontSize: 18, fontWeight: FontWeight.bold,
                       )),
                     const SizedBox(width: 14),
@@ -1543,13 +1506,13 @@ class _ExplorarTab extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(titulo,
-                            style: const TextStyle(color: Colors.white,
+                            style: const TextStyle(color: Color(0xFFBB7575),
                                 fontSize: 15,
                                 fontWeight: FontWeight.w600)),
                           const SizedBox(height: 3),
                           Text(stats,
                             style: TextStyle(
-                                color: Colors.white.withOpacity(0.35),
+                                color: const Color(0xFFBB7575).withOpacity(0.65),
                                 fontSize: 12)),
                         ],
                       ),
@@ -1562,10 +1525,10 @@ class _ExplorarTab extends StatelessWidget {
               const SizedBox(height: 24),
               ShaderMask(
                 shaderCallback: (b) => const LinearGradient(
-                  colors: [Color(0xFFE50914), Color(0xFFFF6B6B)],
+                  colors: [Color(0xFFBB7575), Color(0xFF7D171D)],
                 ).createShader(b),
                 child: const Text("🎭  Por categoria",
-                  style: TextStyle(color: Colors.white, fontSize: 16,
+                  style: TextStyle(color: Color(0xFFBB7575), fontSize: 16,
                       fontWeight: FontWeight.bold)),
               ),
               const SizedBox(height: 14),
@@ -1582,17 +1545,17 @@ class _ExplorarTab extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
+                      color: const Color(0xFFBB7575).withOpacity(0.10),
                       borderRadius: BorderRadius.circular(50),
                       border: Border.all(
-                          color: Colors.white.withOpacity(0.10)),
+                          color: const Color(0xFFBB7575).withOpacity(0.25)),
                     ),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
                       Text(emoji, style: const TextStyle(fontSize: 15)),
                       const SizedBox(width: 7),
                       Text(nome,
                         style: const TextStyle(
-                            color: Colors.white60, fontSize: 13)),
+                            color: const Color(0xFFBB7575), fontSize: 13)),
                     ]),
                   );
                 }).toList(),
@@ -1623,8 +1586,8 @@ class _PerfilTabState extends State<_PerfilTab>
   bool _mostrarFrase = true;
 
   final _selos = const [
-    ("🎬", "Cinéfilo", Color(0xFFE50914)),
-    ("🇰🇷", "Dorameiro", Color(0xFFFF6B9D)),
+    ("🎬", "Cinéfilo", Color(0xFFBB7575)),
+    ("🇰🇷", "Dorameiro", Color(0xFFBB7575)),
     ("🗺️", "Aventureiro", Color(0xFFFFA726)),
     ("📖", "Leitor", Color(0xFF4CAF50)),
     ("🎌", "Otaku", Color(0xFF9C27B0)),
@@ -1645,19 +1608,19 @@ class _PerfilTabState extends State<_PerfilTab>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF080808),
+      backgroundColor: const Color(0xFFFFE9E9),
       body: NestedScrollView(
         headerSliverBuilder: (_, __) => [
           SliverToBoxAdapter(child: _buildHeader()),
         ],
         body: Column(children: [
           Container(
-            color: const Color(0xFF0D0D0D),
+            color: const Color(0xFFFFD6D8),
             child: TabBar(
               controller: _tabCtrl,
-              labelColor: const Color(0xFFE50914),
-              unselectedLabelColor: Colors.white38,
-              indicatorColor: const Color(0xFFE50914),
+              labelColor: const Color(0xFFBB7575),
+              unselectedLabelColor: const Color(0xFFB8787C),
+              indicatorColor: const Color(0xFFB8787C),
               indicatorSize: TabBarIndicatorSize.label,
               isScrollable: true,
               tabAlignment: TabAlignment.start,
@@ -1698,7 +1661,7 @@ class _PerfilTabState extends State<_PerfilTab>
               height: 150,
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Color(0xFF1A0005), Color(0xFF6B0000), Color(0xFF0D0D0D)],
+                  colors: [Color(0xFFBB7575), Color(0xFFBB7575), Color(0xFFFFD6D8)],
                   begin: Alignment.topLeft, end: Alignment.bottomRight,
                 ),
               ),
@@ -1717,19 +1680,19 @@ class _PerfilTabState extends State<_PerfilTab>
                 width: 84, height: 84,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFF080808), width: 4),
+                  border: Border.all(color: const Color(0xFFFFE9E9), width: 4),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFFE50914).withOpacity(0.3),
+                      color: const Color(0xFFB8787C).withOpacity(0.3),
                       blurRadius: 18,
                     ),
                   ],
                 ),
                 child: const CircleAvatar(
                   radius: 40,
-                  backgroundColor: Color(0xFF1A0005),
+                  backgroundColor: Color(0xFFB8787C),
                   child: Text("A",
-                    style: TextStyle(color: Colors.white, fontSize: 30,
+                    style: TextStyle(color: Color(0xFFFFE9E9), fontSize: 30,
                         fontWeight: FontWeight.bold)),
                 ),
               ),
@@ -1740,10 +1703,10 @@ class _PerfilTabState extends State<_PerfilTab>
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF111111),
+                  color: const Color(0xFFFFE9E9),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                      color: const Color(0xFFE50914).withOpacity(0.45)),
+                      color: const Color(0xFFBB7575).withOpacity(0.45)),
                 ),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
                   Container(
@@ -1753,7 +1716,7 @@ class _PerfilTabState extends State<_PerfilTab>
                   ),
                   const SizedBox(width: 6),
                   const Text("Assistindo: Dark",
-                    style: TextStyle(color: Colors.white70,
+                    style: TextStyle(color: Color(0xFFBB7575),
                         fontSize: 11, fontWeight: FontWeight.w500)),
                 ]),
               ),
@@ -1764,12 +1727,12 @@ class _PerfilTabState extends State<_PerfilTab>
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.45),
+                  color: const Color(0xFFBB7575),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white24),
+                  border: Border.all(color: const Color(0xFFBB7575).withOpacity(0.24)),
                 ),
                 child: const Text("Editar perfil",
-                  style: TextStyle(color: Colors.white70, fontSize: 12,
+                  style: TextStyle(color: Color(0xFFFFE9E9), fontSize: 12,
                       fontWeight: FontWeight.w500)),
               ),
             ),
@@ -1788,11 +1751,11 @@ class _PerfilTabState extends State<_PerfilTab>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text("Anna Beatriz",
-                      style: TextStyle(color: Colors.white, fontSize: 20,
+                      style: TextStyle(color: Color(0xFF7D171D), fontSize: 20,
                           fontWeight: FontWeight.bold)),
                     SizedBox(height: 2),
                     Text("@anna.beatriz",
-                      style: TextStyle(color: Colors.white38, fontSize: 13)),
+                      style: TextStyle(color: Color(0xFF7D171D), fontSize: 13)),
                   ],
                 ),
                 const Spacer(),
@@ -1802,16 +1765,16 @@ class _PerfilTabState extends State<_PerfilTab>
                       horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
-                      colors: [Color(0xFF1A0005), Color(0xFF0D0002)]),
+                      colors: [Color(0xFFBB7575), Color(0xFFBB7575)]),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                        color: const Color(0xFFE50914).withOpacity(0.45)),
+                        color: const Color(0xFFBB7575).withOpacity(0.45)),
                   ),
                   child: const Row(mainAxisSize: MainAxisSize.min, children: [
                     Text("💞", style: TextStyle(fontSize: 13)),
                     SizedBox(width: 5),
                     Text("87% compatível",
-                      style: TextStyle(color: Color(0xFFFF6B6B),
+                      style: TextStyle(color: Color(0xFFFFE9E9),
                           fontSize: 12, fontWeight: FontWeight.w600)),
                   ]),
                 ),
@@ -1819,7 +1782,7 @@ class _PerfilTabState extends State<_PerfilTab>
               const SizedBox(height: 10),
               Text(
                 "Cinéfila de plantão 🎬 | Amante de doramas e sci-fi | Leio tudo que posso ✨",
-                style: TextStyle(color: Colors.white.withOpacity(0.58),
+                    style: TextStyle(color: const Color(0xFFBB7575).withOpacity(0.70),
                     fontSize: 13, height: 1.5),
               ),
               const SizedBox(height: 14),
@@ -1840,7 +1803,7 @@ class _PerfilTabState extends State<_PerfilTab>
                     color: const Color(0xFF0D1B2A),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                        color: const Color(0xFFE50914).withOpacity(0.3)),
+                              color: const Color(0xFFBB7575).withOpacity(0.3)),
                   ),
                   child: const Center(
                     child: Text("🚀", style: TextStyle(fontSize: 22))),
@@ -1848,22 +1811,22 @@ class _PerfilTabState extends State<_PerfilTab>
                 const SizedBox(width: 12),
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text("Obra favorita",
-                    style: TextStyle(color: Colors.white.withOpacity(0.35),
+                    style: TextStyle(color: const Color(0xFF7D171D).withOpacity(0.65),
                         fontSize: 11)),
                   const SizedBox(height: 4),
                   const Text("Interstellar",
-                    style: TextStyle(color: Colors.white, fontSize: 15,
+                    style: TextStyle(color: Color(0xFF7D171D), fontSize: 15,
                         fontWeight: FontWeight.w600)),
                   const SizedBox(height: 2),
                   Text("Filme • Ficção Científica",
                     style: TextStyle(
-                        color: Colors.white.withOpacity(0.42), fontSize: 12)),
+                        color: const Color(0xFF7D171D).withOpacity(0.60), fontSize: 12)),
                 ]),
               ]),
               const SizedBox(height: 16),
               // Selos
               Text("Selos conquistados",
-                style: TextStyle(color: Colors.white.withOpacity(0.32),
+                style: TextStyle(color: const Color(0xFF7D171D).withOpacity(0.65),
                     fontSize: 12)),
               const SizedBox(height: 10),
               SingleChildScrollView(
@@ -1915,20 +1878,20 @@ class _PerfilTabState extends State<_PerfilTab>
                   child: Ink(
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
-                        colors: [Color(0xFFE50914), Color(0xFF6B0000)],
+                        colors: [Color(0xFFBB7575), Color(0xFFBB7575)],
                         begin: Alignment.centerLeft,
                         end: Alignment.centerRight,
                       ),
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFFE50914).withOpacity(0.28),
+                          color: const Color.fromARGB(255, 207, 132, 136).withOpacity(0.28),
                           blurRadius: 14, offset: const Offset(0, 4)),
                       ],
                     ),
                     child: const Center(
                       child: Text("Seguir",
-                        style: TextStyle(color: Colors.white,
+                        style: TextStyle(color: Color(0xFFFFE9E9),
                             fontSize: 15, fontWeight: FontWeight.w600)),
                     ),
                   ),
@@ -1954,23 +1917,23 @@ class _PerfilTabState extends State<_PerfilTab>
         Row(children: [
           ShaderMask(
             shaderCallback: (b) => const LinearGradient(
-              colors: [Color(0xFFE50914), Color(0xFFFF6B6B)],
+              colors: [Color.fromARGB(255, 199, 138, 141), Color.fromARGB(255, 208, 146, 146)],
             ).createShader(b),
             child: const Text("📌 Frase fixada",
-              style: TextStyle(color: Colors.white, fontSize: 12,
+              style: TextStyle(color: Color.fromARGB(255, 209, 144, 144), fontSize: 12,
                   fontWeight: FontWeight.w600)),
           ),
           const Spacer(),
           GestureDetector(
             onTap: () => setState(() => _mostrarFrase = false),
-            child: Icon(Icons.close, color: Colors.white38, size: 15),
+            child: Icon(Icons.close, color: const Color.fromARGB(97, 203, 141, 141), size: 15),
           ),
         ]),
         const SizedBox(height: 8),
         Text(
           '"Não importa o que o tempo faça conosco, o que importa é o que fazemos com ele."\n— Interstellar',
           style: TextStyle(
-            color: Colors.white.withOpacity(0.70),
+            color: const Color(0xFFBB7575).withOpacity(0.78),
             fontSize: 13, fontStyle: FontStyle.italic, height: 1.5,
           ),
         ),
@@ -2034,10 +1997,10 @@ class _PerfilTabState extends State<_PerfilTab>
   Widget _contador(String valor, String label) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(valor,
-        style: const TextStyle(color: Colors.white, fontSize: 17,
+        style: const TextStyle(color: Color(0xFF7D171D), fontSize: 17,
             fontWeight: FontWeight.bold)),
       Text(label,
-        style: TextStyle(color: Colors.white.withOpacity(0.38), fontSize: 12)),
+        style: TextStyle(color: const Color(0xFF7D171D).withOpacity(0.58), fontSize: 12)),
     ]);
   }
 
@@ -2048,7 +2011,7 @@ class _PerfilTabState extends State<_PerfilTab>
         const SizedBox(height: 12),
         Text(msg,
           textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.white.withOpacity(0.35),
+          style: TextStyle(color: const Color(0xFF7D171D).withOpacity(0.62),
               fontSize: 14, height: 1.5)),
       ]),
     );

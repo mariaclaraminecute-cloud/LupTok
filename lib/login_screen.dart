@@ -153,7 +153,7 @@ class _LoginScreenState extends State<LoginScreen>
 
   void _navegarParaOnboarding() {
 
-    Navigator.of(context).pushReplacement(
+    Navigator.of(context).push(
 
       PageRouteBuilder(
 
@@ -290,14 +290,8 @@ class _LoginScreenState extends State<LoginScreen>
 
   Widget build(BuildContext context) {
 
-    final pageColor = const Color(0xFF000000);
-    final softTextColor = const Color(0xFFD09A9F);
-
-    final col1 = _shuffledCapas.sublist(0, 11);
-
-    final col2 = _shuffledCapas.sublist(11, 22);
-
-    final col3 = _shuffledCapas.sublist(22, 33);
+    final pageColor = const Color(0xFFFFE9E9);
+    final softTextColor = const Color(0xFFB8787C);
 
     return Scaffold(
 
@@ -317,32 +311,6 @@ class _LoginScreenState extends State<LoginScreen>
 
         children: [
 
-          Row(
-
-            children: [
-
-              Expanded(
-
-                child: _buildRollingColumn(col1),
-
-              ),
-
-              Expanded(
-
-                child: _buildRollingColumn(col2),
-
-              ),
-
-              Expanded(
-
-                child: _buildRollingColumn(col3),
-
-              ),
-
-            ],
-
-          ),
-
           Container(
 
             decoration: BoxDecoration(
@@ -351,9 +319,9 @@ class _LoginScreenState extends State<LoginScreen>
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  const Color(0xFF000000).withValues(alpha: 0.85),
-                  const Color(0xFF000000).withValues(alpha: 0.70),
-                  const Color(0xFF000000).withValues(alpha: 0.90),
+                  const Color(0xFFFFE9E9).withValues(alpha: 0.85),
+                  const Color(0xFFFFE9E9).withValues(alpha: 0.70),
+                  const Color(0xFFFFE9E9).withValues(alpha: 0.90),
                 ],
               ),
 
@@ -370,7 +338,7 @@ class _LoginScreenState extends State<LoginScreen>
                     center: Alignment.topCenter,
                     radius: 0.5,
                     colors: [
-                      const Color(0xFFE50914).withValues(
+                      const Color(0xFFB8787C).withValues(
                         alpha: 0.1 * _glowAnim.value,
                       ),
                       Colors.transparent,
@@ -392,7 +360,7 @@ class _LoginScreenState extends State<LoginScreen>
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    const Color(0xFF000000).withValues(alpha: 0.95),
+                    const Color(0xFFFFE9E9).withValues(alpha: 0.95),
                     Colors.transparent,
                   ],
                 ),
@@ -422,7 +390,7 @@ class _LoginScreenState extends State<LoginScreen>
 
                   colors: [
 
-                    const Color(0xFF000000).withValues(alpha: 0.95),
+                    const Color(0xFFFFE9E9).withValues(alpha: 0.95),
 
                     Colors.transparent,
 
@@ -492,7 +460,7 @@ class _LoginScreenState extends State<LoginScreen>
   
                                     BoxShadow(
   
-                                      color: const Color(0xFFE50914)
+                                      color: const Color(0xFF7D171D)
   
                                           .withValues(
   
@@ -682,7 +650,7 @@ class _LoginScreenState extends State<LoginScreen>
 
                                 style: TextStyle(
 
-                                  color: const Color(0xFFE50914)
+                                  color: const Color(0xFF7D171D)
 
                                       .withValues(alpha: 0.8),
 
@@ -708,7 +676,7 @@ class _LoginScreenState extends State<LoginScreen>
 
                               style: ElevatedButton.styleFrom(
 
-                                backgroundColor: const Color(0xFF8F0C14),
+                                backgroundColor: const Color(0xFFB8787C),
 
                                 foregroundColor: const Color(0xFFD9AEB2),
 
@@ -730,7 +698,7 @@ class _LoginScreenState extends State<LoginScreen>
 
                               child: Container(
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF8F0C14),
+                                  color: const Color(0xFFB8787C),
                                   borderRadius: BorderRadius.circular(16),
                                 ),
                                 child: const Center(
@@ -738,7 +706,7 @@ class _LoginScreenState extends State<LoginScreen>
                                     'Entrar',
                                     style: TextStyle(
                                       fontSize: 17,
-                                      color: Color(0xFFD9AEB2),
+                                      color: Color(0xFFFFE9E9),
                                       fontWeight: FontWeight.w600,
                                       letterSpacing: 0.5,
                                     ),
@@ -866,9 +834,9 @@ class _LoginScreenState extends State<LoginScreen>
 
                                   style: TextStyle(
 
-                                    color: const Color(0xFFD09A9F)
+                                    color: const Color(0xFF8F555A)
 
-                                        .withValues(alpha: 0.45),
+                                      .withValues(alpha: 0.78),
 
                                     fontSize: 14,
 
@@ -882,7 +850,7 @@ class _LoginScreenState extends State<LoginScreen>
 
                                       style: TextStyle(
 
-                                        color: Color(0xFFE50914),
+                                        color: Color(0xFF7D171D),
 
                                         fontWeight: FontWeight.w600,
 

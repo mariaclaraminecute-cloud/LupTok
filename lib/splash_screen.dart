@@ -295,7 +295,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
     return Scaffold(
 
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFFFFE9E9),
 
       body: Stack(
 
@@ -363,9 +363,9 @@ class _SplashScreenState extends State<SplashScreen> {
                 end: Alignment.bottomCenter,
 
                 colors: [
-                  Colors.black.withValues(alpha: 0.8),
-                  Colors.black.withValues(alpha: 0.5),
-                  Colors.black.withValues(alpha: 0.8),
+                  const Color(0xFFFFE9E9).withValues(alpha: 0.8),
+                  const Color(0xFFFFE9E9).withValues(alpha: 0.5),
+                  const Color(0xFFFFE9E9).withValues(alpha: 0.8),
                 ],
 
               ),
@@ -386,7 +386,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
                 colors: [
 
-                  const Color(0xFFE50914).withValues(alpha: 0.12),
+                  const Color.fromARGB(255, 255, 230, 235).withValues(alpha: 0.12),
 
                   Colors.transparent,
 
@@ -420,7 +420,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
                   colors: [
 
-                    Colors.black.withValues(alpha: 0.95),
+                    const Color(0xFFFFE9E9).withValues(alpha: 0.95),
 
                     Colors.transparent,
 
@@ -483,7 +483,7 @@ class _SplashScreenState extends State<SplashScreen> {
                         borderRadius: BorderRadius.circular(24),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFFE50914).withValues(alpha: 0.4),
+                            color: const Color.fromARGB(255, 255, 219, 228).withValues(alpha: 0.4),
                             blurRadius: 40,
                             spreadRadius: 2,
                           ),
@@ -519,7 +519,7 @@ class _SplashScreenState extends State<SplashScreen> {
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
                             valueColor: AlwaysStoppedAnimation<Color>(
-                              const Color(0xFFE50914).withValues(alpha: 0.8),
+                              const Color(0xFFBB7575).withValues(alpha: 0.8),
                             ),
                           ),
                         ),
@@ -527,7 +527,7 @@ class _SplashScreenState extends State<SplashScreen> {
                         Text(
                           'Carregando...',
                           style: TextStyle(
-                            color: const Color(0xFFF5E6D3).withValues(alpha: 0.4),
+                            color: const Color(0xFF7D171D).withValues(alpha: 0.65),
                             fontSize: 11,
                           ),
                         ),

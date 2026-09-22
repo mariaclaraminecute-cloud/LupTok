@@ -14,7 +14,12 @@ class LupTokApp extends StatelessWidget {
       title: 'LupTok',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        scaffoldBackgroundColor: const Color(0xFF000000),
+        scaffoldBackgroundColor: const Color(0xFFFFE9E9),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF7D171D),
+          brightness: Brightness.light,
+          surface: const Color(0xFFFFE9E9),
+        ),
         fontFamily: 'IMFellFrenchCanon',
       ),
       home: const SplashScreen(),

@@ -105,7 +105,7 @@ class _CadastroScreenState extends State<CadastroScreen>
       "assets/images/capa15.jpg",
     ];
     return Scaffold(
-      backgroundColor: const Color(0xFF000000),
+      backgroundColor: const Color(0xFFFFE9E9),
       resizeToAvoidBottomInset: true,
       body: Stack(
         fit: StackFit.expand,
@@ -123,9 +123,9 @@ class _CadastroScreenState extends State<CadastroScreen>
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  const Color(0xFF000000).withOpacity(0.68),
-                  const Color(0xFF000000).withOpacity(0.52),
-                  const Color(0xFF000000).withOpacity(0.68),
+                  const Color(0xFFFFE9E9).withOpacity(0.68),
+                  const Color(0xFFFFE9E9).withOpacity(0.52),
+                  const Color(0xFFFFE9E9).withOpacity(0.68),
                 ],
               ),
             ),
@@ -140,8 +140,8 @@ class _CadastroScreenState extends State<CadastroScreen>
                   begin: Alignment.bottomCenter,
                   end: Alignment.topCenter,
                   colors: [
-                    const Color(0xFF000000).withOpacity(0.97),
-                    const Color(0xFF000000).withOpacity(0.90),
+                    const Color(0xFFFFE9E9).withOpacity(0.97),
+                    const Color(0xFFFFE9E9).withOpacity(0.90),
                     Colors.transparent,
                   ],
                   stops: const [0.0, 0.55, 1.0],
@@ -158,7 +158,7 @@ class _CadastroScreenState extends State<CadastroScreen>
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [const Color(0xFF000000).withOpacity(0.92), Colors.transparent],
+                  colors: [const Color(0xFFFFE9E9).withOpacity(0.92), Colors.transparent],
                 ),
               ),
             ),
@@ -174,7 +174,7 @@ class _CadastroScreenState extends State<CadastroScreen>
                 decoration: BoxDecoration(
                   gradient: RadialGradient(
                     colors: [
-                      const Color(0xFFE50914).withOpacity(0.12 * _glowAnim.value),
+                      const Color(0xFF7D171D).withOpacity(0.12 * _glowAnim.value),
                       Colors.transparent,
                     ],
                   ),
@@ -196,6 +196,15 @@ class _CadastroScreenState extends State<CadastroScreen>
               child: SingleChildScrollView(
                 child: Column(
                   children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.arrow_back_ios_new),
+                        color: const Color(0xFF7D171D),
+                        tooltip: 'Voltar',
+                      ),
+                    ),
                     const SizedBox(height: 30),
                     // Logo com glow
                     AnimatedBuilder(
@@ -205,7 +214,7 @@ class _CadastroScreenState extends State<CadastroScreen>
                           borderRadius: BorderRadius.circular(24),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFFE50914)
+                              color: const Color(0xFF7D171D)
                                   .withOpacity(0.35 * _glowAnim.value),
                               blurRadius: 40,
                               spreadRadius: 1,
@@ -224,7 +233,7 @@ class _CadastroScreenState extends State<CadastroScreen>
                           const Text(
                             "Criar conta",
                             style: TextStyle(
-                              color: Color(0xFFF5E6D3),
+                              color: Color(0xFF7D171D),
                               fontSize: 26,
                               fontWeight: FontWeight.bold,
                               letterSpacing: 0.3,
@@ -234,7 +243,7 @@ class _CadastroScreenState extends State<CadastroScreen>
                           Text(
                             "Comece a descobrir filmes, séries e livros",
                             style: TextStyle(
-                              color: const Color(0xFFF5E6D3).withOpacity(0.45),
+                              color: const Color(0xFF7D171D).withOpacity(0.65),
                               fontSize: 14,
                             ),
                           ),
@@ -266,7 +275,7 @@ class _CadastroScreenState extends State<CadastroScreen>
                                 _senhaVisivel
                                     ? Icons.visibility_off_outlined
                                     : Icons.visibility_outlined,
-                                color: const Color(0xFFF5E6D3).withOpacity(0.38),
+                                color: const Color(0xFF7D171D).withOpacity(0.55),
                                 size: 20,
                               ),
                               onPressed: () => setState(
@@ -285,7 +294,7 @@ class _CadastroScreenState extends State<CadastroScreen>
                                 _confirmarSenhaVisivel
                                     ? Icons.visibility_off_outlined
                                     : Icons.visibility_outlined,
-                                color: const Color(0xFFF5E6D3).withOpacity(0.38),
+                                color: const Color(0xFF7D171D).withOpacity(0.55),
                                 size: 20,
                               ),
                               onPressed: () => setState(() =>
@@ -345,8 +354,8 @@ class _CadastroScreenState extends State<CadastroScreen>
                                 decoration: BoxDecoration(
                                   gradient: const LinearGradient(
                                     colors: [
-                                      Color(0xFFE50914),
-                                      Color(0xFF6B0000)
+                                      Color(0xFFB8787C),
+                                      Color(0xFF7D171D)
                                     ],
                                     begin: Alignment.centerLeft,
                                     end: Alignment.centerRight,
@@ -354,7 +363,7 @@ class _CadastroScreenState extends State<CadastroScreen>
                                   borderRadius: BorderRadius.circular(16),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: const Color(0xFFE50914)
+                                      color: const Color(0xFFB8787C)
                                           .withOpacity(0.35),
                                       blurRadius: 20,
                                       offset: const Offset(0, 6),
@@ -366,7 +375,7 @@ class _CadastroScreenState extends State<CadastroScreen>
                                     "Criar conta",
                                     style: TextStyle(
                                       fontSize: 17,
-                                      color: Color(0xFFF5E6D3),
+                                      color: Color(0xFFFFE9E9),
                                       fontWeight: FontWeight.w600,
                                       letterSpacing: 0.5,
                                     ),
@@ -421,7 +430,7 @@ class _CadastroScreenState extends State<CadastroScreen>
                                     TextSpan(
                                       text: "Entrar",
                                       style: TextStyle(
-                                        color: Color(0xFFE50914),
+                                        color: Color(0xFF7D171D),
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
