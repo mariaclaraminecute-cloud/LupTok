@@ -339,7 +339,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildTitulo("Bem-vindo! 🍿", "O que você mais\ngosta de consumir?"),
+          _buildTitulo("O que você mais\ngosta de consumir?"),
           Text("Pode selecionar mais de um.",
             style: TextStyle(color: const Color(0xFFB8787C).withOpacity(0.70), fontSize: 14)),
 
@@ -381,7 +381,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                       const SizedBox(width: 16),
                       Text(nome,
                         style: TextStyle(
-                          color: sel ? const Color(0xFFFFE9E9) : const Color(0xFFBB7575),
+                          color: const Color(0xFFB8787C),
                           fontSize: 17,
                           fontWeight: sel ? FontWeight.w700 : FontWeight.w400,
                         ),
@@ -428,7 +428,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildTitulo("Última etapa! 🎉", "Quais gêneros\nvocê curte?"),
+          _buildTitulo("Quais gêneros\nvocê curte?"),
           Text("Selecione quantos quiser.",
             style: TextStyle(color: const Color(0xFFB8787C).withOpacity(0.70), fontSize: 14)),
           const SizedBox(height: 28),
@@ -480,7 +480,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 const SizedBox(width: 8),
                 Text(nome,
                   style: TextStyle(
-                    color: sel ? const Color(0xFFFFE9E9) : const Color(0xFFBB7575),
+                    color: sel ? const Color(0xFFFFE9E9) : const Color(0xFFB8787C),
                     fontSize: 14,
                     fontWeight: sel ? FontWeight.w600 : FontWeight.normal,
                   ),
@@ -493,27 +493,20 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
   }
 
-  // ── Helper: título da etapa ────────────────────────────────────────
-  Widget _buildTitulo(String subtitulo, String titulo) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ShaderMask(
-          shaderCallback: (bounds) => const LinearGradient(
-            colors: [Color(0xFFB8787C), Color(0xFFB8787C)],
-          ).createShader(bounds),
-          child: Text(subtitulo,
-            style: const TextStyle(color: Color(0xFFB8787C), fontSize: 16, fontWeight: FontWeight.w500)),
+Widget _buildTitulo(String titulo) {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        titulo,
+        style: const TextStyle(
+          color: Color(0xFFB8787C),
+          fontSize: 32,
+          fontWeight: FontWeight.bold,
+          height: 1.2,
         ),
-        const SizedBox(height: 8),
-        Text(titulo,
-          style: const TextStyle(
-            color: Color(0xFFB8787C), fontSize: 32,
-            fontWeight: FontWeight.bold, height: 1.2,
-          ),
-        ),
-        const SizedBox(height: 10),
-      ],
-    );
-  }
-}
+      ),
+      const SizedBox(height: 10),
+    ], 
+  );
+} }

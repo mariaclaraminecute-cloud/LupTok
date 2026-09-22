@@ -15,7 +15,7 @@ class _HomeScreenState extends State<HomeScreen>
     with TickerProviderStateMixin {
   int _tabAtual = 0;
 
-  // Fluxo: bem-vindo → humor → home
+  
   bool _mostrarBemVindo = true;
   bool _mostrarHumor = false;
   bool _mostrarLupez = false;
@@ -50,19 +50,19 @@ class _HomeScreenState extends State<HomeScreen>
     super.initState();
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
 
-    // Controlador do glow da Lupez
+
     _glowCtrl = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 2000))..repeat(reverse: true);
     _glowAnim = Tween<double>(begin: 0.3, end: 0.9)
         .animate(CurvedAnimation(parent: _glowCtrl, curve: Curves.easeInOut));
 
-    // Controlador da entrada da Lupez
+  
     _lupezEntradaCtrl = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 350));
     _lupezEntradaAnim = CurvedAnimation(
       parent: _lupezEntradaCtrl, curve: Curves.easeOutCubic);
 
-    // ── Animação de bem-vindo ──────────────────────────────────────
+  
     _bemVindoCtrl = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 3400));
 
@@ -93,7 +93,7 @@ class _HomeScreenState extends State<HomeScreen>
         weight: 26),
     ]).animate(_bemVindoCtrl);
 
-    // Inicia bem-vindo → depois humor
+
     _bemVindoCtrl.forward().then((_) {
       if (!mounted) return;
       setState(() {
@@ -130,7 +130,7 @@ class _HomeScreenState extends State<HomeScreen>
       extendBody: true,
       body: Stack(
         children: [
-          // ── Conteúdo das abas ──────────────────────────────────────
+         
           IndexedStack(
             index: _tabAtual,
             children: [
@@ -142,7 +142,7 @@ class _HomeScreenState extends State<HomeScreen>
             ],
           ),
 
-          // ── Botão flutuante Lupez (só no Loop) ────────────────────
+        
           if (!_mostrarBemVindo && !_mostrarHumor && !_mostrarLupez && _tabAtual == 0)
             Positioned(
               bottom: 90, right: 16,

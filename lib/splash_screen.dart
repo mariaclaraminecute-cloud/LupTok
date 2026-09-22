@@ -210,7 +210,7 @@ class _SplashScreenState extends State<SplashScreen>
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) {
                       return Container(
-                        color: const Color(0xFFFFE9E9),
+                        color: const Color(0xFFF9F4F2),
                       );
                     },
                   ),
@@ -274,7 +274,7 @@ class _SplashScreenState extends State<SplashScreen>
     final List<String> col3 = _shuffledCapas.sublist(22, 33);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFFE9E9),
+      backgroundColor: const Color(0xFFF9F4F2),
       body: Stack(
         fit: StackFit.expand,
         clipBehavior: Clip.hardEdge,
@@ -308,17 +308,7 @@ class _SplashScreenState extends State<SplashScreen>
           Positioned.fill(
             child: IgnorePointer(
               child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      const Color(0xFFFFE9E9).withValues(alpha: 0.84),
-                      const Color(0xFFFFE9E9).withValues(alpha: 0.69),
-                      const Color(0xFFFFE9E9).withValues(alpha: 0.86),
-                    ],
-                  ),
-                ),
+                color: const Color(0xFFF9F4F2).withValues(alpha: 0.58),
               ),
             ),
           ),
@@ -328,52 +318,10 @@ class _SplashScreenState extends State<SplashScreen>
               child: Container(
                 decoration: BoxDecoration(
                   gradient: RadialGradient(
-                    center: Alignment.topCenter,
-                    radius: 0.6,
+                    center: Alignment.center,
+                    radius: 0.7,
                     colors: [
-                      const Color(0xFFFFE6EB).withValues(alpha: 0.12),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: IgnorePointer(
-              child: Container(
-                height: 220,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      const Color(0xFFFFE9E9).withValues(alpha: 0.93),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: IgnorePointer(
-              child: Container(
-                height: 280,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [
-                      const Color(0xFFFFE9E9).withValues(alpha: 0.93),
+                      const Color(0xFFFFE8EC).withValues(alpha: 0.08),
                       Colors.transparent,
                     ],
                   ),
