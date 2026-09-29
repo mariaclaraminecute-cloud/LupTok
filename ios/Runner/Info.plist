@@ -24,6 +24,14 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>NSCameraUsageDescription</key>
+	<string>O Luptok usa a câmera para gravar vídeos.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>O Luptok usa o microfone para gravar o áudio dos vídeos.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>O Luptok salva os vídeos gravados no álbum do app.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>O Luptok salva os vídeos gravados no álbum do app.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

@@ -34,18 +34,19 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       vsync: this,
       duration: const Duration(milliseconds: 450),
     );
-    _slideIn = Tween<Offset>(
-      begin: const Offset(0.08, 0),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _slideController, curve: Curves.easeOutCubic));
+    _slideIn = Tween<Offset>(begin: const Offset(0.08, 0), end: Offset.zero)
+        .animate(
+          CurvedAnimation(parent: _slideController, curve: Curves.easeOutCubic),
+        );
 
     _bgPulse = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 4),
     )..repeat(reverse: true);
-    _pulseAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _bgPulse, curve: Curves.easeInOut),
-    );
+    _pulseAnim = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _bgPulse, curve: Curves.easeInOut));
 
     _slideController.forward();
   }
@@ -133,16 +134,20 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
           // Ornamento circular decorativo
           Positioned(
-            top: -80, right: -80,
+            top: -80,
+            right: -80,
             child: AnimatedBuilder(
               animation: _pulseAnim,
               builder: (_, __) => Container(
-                width: 260, height: 260,
+                width: 260,
+                height: 260,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: [
-                      const Color(0xFFBB7575).withOpacity(0.08 + _pulseAnim.value * 0.06),
+                      const Color(
+                        0xFFBB7575,
+                      ).withOpacity(0.08 + _pulseAnim.value * 0.06),
                       Colors.transparent,
                     ],
                   ),
@@ -153,16 +158,20 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
           // Ornamento circular inferior
           Positioned(
-            bottom: -60, left: -60,
+            bottom: -60,
+            left: -60,
             child: AnimatedBuilder(
               animation: _pulseAnim,
               builder: (_, __) => Container(
-                width: 200, height: 200,
+                width: 200,
+                height: 200,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: [
-                      const Color(0xFFB8787C).withOpacity(0.07 + _pulseAnim.value * 0.05),
+                      const Color(
+                        0xFFB8787C,
+                      ).withOpacity(0.07 + _pulseAnim.value * 0.05),
                       Colors.transparent,
                     ],
                   ),
@@ -187,15 +196,21 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           opacity: 1.0,
                           duration: const Duration(milliseconds: 200),
                           child: Container(
-                            width: 40, height: 40,
+                            width: 40,
+                            height: 40,
                             decoration: BoxDecoration(
                               color: const Color(0xFFB8787C).withOpacity(0.18),
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: const Color(0xFFBB7575).withOpacity(0.18)),
+                              border: Border.all(
+                                color: const Color(
+                                  0xFFBB7575,
+                                ).withOpacity(0.18),
+                              ),
                             ),
                             child: const Icon(
                               Icons.arrow_back_ios_new,
-                              color: Color(0xFFBB7575), size: 16,
+                              color: Color(0xFFBB7575),
+                              size: 16,
                             ),
                           ),
                         ),
@@ -210,14 +225,18 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           ClipRRect(
                             borderRadius: BorderRadius.circular(4),
                             child: SizedBox(
-                              width: 140, height: 5,
+                              width: 140,
+                              height: 5,
                               child: LinearProgressIndicator(
                                 value: totalEtapas > 0
                                     ? (_etapa + 1) / totalEtapas
                                     : 0,
-                                backgroundColor: const Color(0xFFB8787C).withOpacity(0.28),
+                                backgroundColor: const Color(
+                                  0xFFB8787C,
+                                ).withOpacity(0.28),
                                 valueColor: const AlwaysStoppedAnimation<Color>(
-                                    Color(0xFFBB7575)),
+                                  Color(0xFFBB7575),
+                                ),
                               ),
                             ),
                           ),
@@ -225,7 +244,12 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           Text(
                             "${_etapa + 1} de $totalEtapas",
                             style: TextStyle(
-                              color: const Color.fromARGB(255, 200, 122, 127).withOpacity(0.55),
+                              color: const Color.fromARGB(
+                                255,
+                                200,
+                                122,
+                                127,
+                              ).withOpacity(0.55),
                               fontSize: 11,
                             ),
                           ),
@@ -270,13 +294,17 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           shadowColor: Colors.transparent,
                           padding: EdgeInsets.zero,
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16)),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
                         ),
                         onPressed: _podeProsseguir ? _avancar : null,
                         child: Ink(
                           decoration: BoxDecoration(
                             gradient: const LinearGradient(
-                              colors: [Color.fromARGB(255, 200, 145, 149), Color.fromARGB(255, 200, 145, 149)],
+                              colors: [
+                                Color.fromARGB(255, 200, 145, 149),
+                                Color.fromARGB(255, 200, 145, 149),
+                              ],
                               begin: Alignment.centerLeft,
                               end: Alignment.centerRight,
                             ),
@@ -284,7 +312,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                             boxShadow: _podeProsseguir
                                 ? [
                                     BoxShadow(
-                                      color: const Color(0xFFB8787C).withOpacity(0.4),
+                                      color: const Color(
+                                        0xFFB8787C,
+                                      ).withOpacity(0.4),
                                       blurRadius: 24,
                                       offset: const Offset(0, 8),
                                     ),
@@ -329,35 +359,41 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   // ── Etapa: Tipos de mídia ──────────────────────────────────────────
   Widget _buildTipos() {
     final tipos = [
-      ("🎬", "Filmes", "filmes"),
-      ("📺", "Séries", "series"),
-      ("📖", "Livros", "livros"),
+      ("assets/images/filme.png", "Filmes", "filmes"),
+      ("assets/images/serie.png", "Séries", "series"),
+      ("assets/images/livro.png", "Livros", "livros"),
     ];
 
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildTitulo("O que você mais\ngosta de consumir?"),
-          Text("Pode selecionar mais de um.",
-            style: TextStyle(color: const Color(0xFFB8787C).withOpacity(0.70), fontSize: 14)),
-
-          const SizedBox(height: 36),
+          Text(
+            "Pode selecionar mais de um.",
+            style: TextStyle(
+              color: const Color(0xFFB8787C).withOpacity(0.70),
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 22),
 
           ...tipos.map((t) {
-            final (emoji, nome, valor) = t;
+            final (imagem, nome, valor) = t;
             final sel = _tiposSelecionados.contains(valor);
             return Padding(
-              padding: const EdgeInsets.only(bottom: 14),
+              padding: const EdgeInsets.only(bottom: 12),
               child: GestureDetector(
                 onTap: () => setState(() {
-                  sel ? _tiposSelecionados.remove(valor)
+                  sel
+                      ? _tiposSelecionados.remove(valor)
                       : _tiposSelecionados.add(valor);
                 }),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 220),
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                  height: 118,
+                  padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     gradient: sel
                         ? const LinearGradient(
@@ -366,7 +402,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                             end: Alignment.bottomRight,
                           )
                         : null,
-                    color: sel ? null : const Color(0xFFB8787C).withOpacity(0.20),
+                    color: sel
+                        ? null
+                        : const Color(0xFFB8787C).withOpacity(0.20),
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(
                       color: sel
@@ -377,30 +415,37 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   ),
                   child: Row(
                     children: [
-                      Text(emoji, style: const TextStyle(fontSize: 26)),
-                      const SizedBox(width: 16),
-                      Text(nome,
-                        style: TextStyle(
-                          color: const Color(0xFFB8787C),
-                          fontSize: 17,
-                          fontWeight: sel ? FontWeight.w700 : FontWeight.w400,
-                        ),
-                      ),
-                      const Spacer(),
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 220),
-                        width: 24, height: 24,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: sel ? const Color(0xFFB8787C) : Colors.transparent,
-                          border: Border.all(
-                            color: sel ? const Color(0xFFBB7575) : const Color(0xFFBB7575).withOpacity(0.30),
-                            width: 2,
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.asset(
+                          imagem,
+                          width: 68,
+                          height: 72,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            width: 68,
+                            height: 72,
+                            color: const Color(0xFF7D171D),
+                            alignment: Alignment.center,
+                            child: const Icon(
+                              Icons.image_not_supported_outlined,
+                              color: Color(0xFFFFE9E9),
+                            ),
                           ),
                         ),
-                        child: sel
-                            ? const Icon(Icons.check, size: 14, color: Color(0xFFFFE9E9))
-                            : null,
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Text(
+                          nome,
+                          style: TextStyle(
+                            color: sel
+                                ? const Color(0xFFFFE9E9)
+                                : const Color(0xFFB8787C),
+                            fontSize: 17,
+                            fontWeight: sel ? FontWeight.w700 : FontWeight.w400,
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -416,26 +461,112 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   // ── Etapa: Gêneros de entretenimento ──────────────────────────────
   Widget _buildGeneros() {
     final generos = [
-      ("❤️", "Romance"), ("🧙", "Fantasia"), ("🚀", "Ficção Científica"),
-      ("👻", "Terror"), ("🔍", "Suspense"), ("🕵️", "Mistério"),
-      ("🎭", "Drama"), ("😂", "Comédia"), ("💥", "Ação"),
-      ("🗺️", "Aventura"), ("🔫", "Crime"), ("⚔️", "Histórico"),
-      ("🎌", "Anime"), ("🇰🇷", "K-Drama"),
+      ("assets/images/romance.png", "Romance"),
+      ("assets/images/fantasia.png", "Fantasia"),
+      ("assets/images/ficcao.png", "Ficção"),
+      ("assets/images/terror.png", "Terror"),
+      ("assets/images/suspense.png", "Suspense"),
+      ("assets/images/misterio.png", "Mistério"),
+      ("assets/images/drama.png", "Drama"),
+      ("assets/images/comedia.png", "Comédia"),
+      ("assets/images/acao.png", "Ação"),
+      ("assets/images/aventura.png", "Aventura"),
+      ("assets/images/crime.png", "Crime"),
+      ("assets/images/historico.png", "Histórico"),
+      ("assets/images/anime.png", "Anime"),
+      ("assets/images/dorama.png", "Dorama"),
+      ("assets/images/esporte.png", "Esporte"),
     ];
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildTitulo("Quais gêneros\nvocê curte?"),
-          Text("Selecione quantos quiser.",
-            style: TextStyle(color: const Color(0xFFB8787C).withOpacity(0.70), fontSize: 14)),
-          const SizedBox(height: 28),
-          _buildChips(
-            itens: generos,
-            selecionados: _generosEntretenimento,
+
+          Text(
+            "Selecione quantos quiser.",
+            style: TextStyle(
+              color: const Color(0xFFB8787C).withOpacity(0.70),
+              fontSize: 14,
+            ),
           ),
+
+          const SizedBox(height: 28),
+
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: generos.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 11,
+              mainAxisSpacing: 11,
+              childAspectRatio: 1.28,
+            ),
+            itemBuilder: (context, index) {
+              final (imagem, nome) = generos[index];
+              final sel = _generosEntretenimento.contains(nome);
+
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    sel
+                        ? _generosEntretenimento.remove(nome)
+                        : _generosEntretenimento.add(nome);
+                  });
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  decoration: BoxDecoration(
+                    color: sel
+                        ? const Color(0xFFBB7575)
+                        : const Color(0xFFDEB2B4),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: sel
+                          ? const Color(0xFF9E5555)
+                          : const Color(0xFFD7A5A7),
+                      width: sel ? 2 : 1,
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Image.asset(
+                        imagem,
+                        width: 42,
+                        height: 42,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => const Icon(
+                          Icons.image_not_supported_outlined,
+                          size: 34,
+                          color: Color(0xFF7D171D),
+                        ),
+                      ),
+
+                      const SizedBox(height: 5),
+
+                      Text(
+                        nome,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: sel
+                              ? const Color(0xFFFFE9E9)
+                              : const Color(0xFF7D1717),
+                          fontSize: 14,
+                          fontFamily: 'Quicksand',
+                          fontWeight: sel ? FontWeight.w600 : FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+
           const SizedBox(height: 16),
         ],
       ),
@@ -443,70 +574,22 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   // ── Helper: chips de seleção múltipla ─────────────────────────────
-  Widget _buildChips({
-    required List<(String, String)> itens,
-    required Set<String> selecionados,
-    Color cor = const Color(0xFFBB7575),
-    List<Color> gradiente = const [Color(0xFFBB7575), Color(0xFFBB7575)],
-  }) {
-    return Wrap(
-      spacing: 10, runSpacing: 10,
-      children: itens.map((item) {
-        final (emoji, nome) = item;
-        final sel = selecionados.contains(nome);
-        return GestureDetector(
-          onTap: () => setState(() {
-            sel ? selecionados.remove(nome) : selecionados.add(nome);
-          }),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-            decoration: BoxDecoration(
-              gradient: sel
-                  ? LinearGradient(colors: gradiente,
-                      begin: Alignment.topLeft, end: Alignment.bottomRight)
-                  : null,
-              color: sel ? null : const Color(0xFFB8787C).withOpacity(0.20),
-              borderRadius: BorderRadius.circular(50),
-              border: Border.all(
-                color: sel ? cor.withOpacity(0.7) : const Color(0xFFBB7575).withOpacity(0.25),
-                width: sel ? 1.5 : 1,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(emoji, style: const TextStyle(fontSize: 16)),
-                const SizedBox(width: 8),
-                Text(nome,
-                  style: TextStyle(
-                    color: sel ? const Color(0xFFFFE9E9) : const Color(0xFFB8787C),
-                    fontSize: 14,
-                    fontWeight: sel ? FontWeight.w600 : FontWeight.normal,
-                  ),
-                ),
-              ],
-            ),
+
+  Widget _buildTitulo(String titulo) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          titulo,
+          style: const TextStyle(
+            color: Color(0xFFB8787C),
+            fontSize: 32,
+            fontWeight: FontWeight.bold,
+            height: 1.2,
           ),
-        );
-      }).toList(),
+        ),
+        const SizedBox(height: 10),
+      ],
     );
   }
-
-Widget _buildTitulo(String titulo) {
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        titulo,
-        style: const TextStyle(
-          color: Color(0xFFB8787C),
-          fontSize: 32,
-          fontWeight: FontWeight.bold,
-          height: 1.2,
-        ),
-      ),
-      const SizedBox(height: 10),
-    ], 
-  );
-} }
+}

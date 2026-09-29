@@ -46,30 +46,21 @@ class _SplashScreenState extends State<SplashScreen>
       duration: const Duration(milliseconds: 2400),
     )..repeat(reverse: true);
 
-    _logoFloatAnimation = Tween<double>(
-      begin: -5,
-      end: 5,
-    ).animate(
+    _logoFloatAnimation = Tween<double>(begin: -5, end: 5).animate(
       CurvedAnimation(
         parent: _logoAnimationController,
         curve: Curves.easeInOut,
       ),
     );
 
-    _logoScaleAnimation = Tween<double>(
-      begin: 0.97,
-      end: 1.03,
-    ).animate(
+    _logoScaleAnimation = Tween<double>(begin: 0.97, end: 1.03).animate(
       CurvedAnimation(
         parent: _logoAnimationController,
         curve: Curves.easeInOut,
       ),
     );
 
-    _logoGlowAnimation = Tween<double>(
-      begin: 0.18,
-      end: 0.38,
-    ).animate(
+    _logoGlowAnimation = Tween<double>(begin: 0.18, end: 0.38).animate(
       CurvedAnimation(
         parent: _logoAnimationController,
         curve: Curves.easeInOut,
@@ -81,28 +72,21 @@ class _SplashScreenState extends State<SplashScreen>
       _startScrolls();
     });
 
-    _loginTimer = Timer(
-      const Duration(seconds: 4),
-      () {
-        if (!mounted) return;
+    _loginTimer = Timer(const Duration(seconds: 4), () {
+      if (!mounted) return;
 
-        Navigator.of(context).pushReplacement(
-          PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) {
-              return const LoginScreen();
-            },
-            transitionDuration: const Duration(milliseconds: 800),
-            transitionsBuilder:
-                (context, animation, secondaryAnimation, child) {
-              return FadeTransition(
-                opacity: animation,
-                child: child,
-              );
-            },
-          ),
-        );
-      },
-    );
+      Navigator.of(context).pushReplacement(
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) {
+            return const LoginScreen();
+          },
+          transitionDuration: const Duration(milliseconds: 800),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+        ),
+      );
+    });
   }
 
   void _startScrolls() {
@@ -146,28 +130,21 @@ class _SplashScreenState extends State<SplashScreen>
           curve: Curves.linear,
         )
         .then((_) {
-      if (!mounted || !controller.hasClients) return;
+          if (!mounted || !controller.hasClients) return;
 
-      controller.jumpTo(
-        controller.offset -
-            (maxScroll + controller.position.viewportDimension) / 3,
-      );
+          controller.jumpTo(
+            controller.offset -
+                (maxScroll + controller.position.viewportDimension) / 3,
+          );
 
-      final nextTimer = Timer(
-        const Duration(milliseconds: 100),
-        () {
-          if (mounted) {
-            _scrollColumn(
-              controller,
-              duration,
-              saveTimer,
-            );
-          }
-        },
-      );
+          final nextTimer = Timer(const Duration(milliseconds: 100), () {
+            if (mounted) {
+              _scrollColumn(controller, duration, saveTimer);
+            }
+          });
 
-      saveTimer(nextTimer);
-    });
+          saveTimer(nextTimer);
+        });
   }
 
   @override
@@ -188,38 +165,30 @@ class _SplashScreenState extends State<SplashScreen>
 
   Widget _buildImageColumn(List<String> images) {
     return Column(
-      children: List.generate(
-        images.length * 3,
-        (index) {
-          final imageIndex = index % images.length;
+      children: List.generate(images.length * 3, (index) {
+        final imageIndex = index % images.length;
 
-          return Padding(
-            padding: const EdgeInsets.symmetric(
-              vertical: 4,
-              horizontal: 3,
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: SizedBox(
-                height: 180,
-                width: double.infinity,
-                child: Opacity(
-                  opacity: 0.12,
-                  child: Image.asset(
-                    images[imageIndex],
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        color: const Color(0xFFF9F4F2),
-                      );
-                    },
-                  ),
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 3),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: SizedBox(
+              height: 180,
+              width: double.infinity,
+              child: Opacity(
+                opacity: 0.16,
+                child: Image.asset(
+                  images[imageIndex],
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(color: const Color(0xFFF9F4F2));
+                  },
                 ),
               ),
             ),
-          );
-        },
-      ),
+          ),
+        );
+      }),
     );
   }
 
@@ -235,9 +204,9 @@ class _SplashScreenState extends State<SplashScreen>
               decoration: BoxDecoration(
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFFFFA8BA).withValues(
-                      alpha: _logoGlowAnimation.value,
-                    ),
+                    color: const Color(
+                      0xFFFFA8BA,
+                    ).withValues(alpha: _logoGlowAnimation.value),
                     blurRadius: 38,
                     spreadRadius: 2,
                   ),
@@ -257,10 +226,7 @@ class _SplashScreenState extends State<SplashScreen>
           height: 170,
           fit: BoxFit.contain,
           errorBuilder: (context, error, stackTrace) {
-            return const SizedBox(
-              width: 170,
-              height: 170,
-            );
+            return const SizedBox(width: 170, height: 170);
           },
         ),
       ),
@@ -308,7 +274,7 @@ class _SplashScreenState extends State<SplashScreen>
           Positioned.fill(
             child: IgnorePointer(
               child: Container(
-                color: const Color(0xFFF9F4F2).withValues(alpha: 0.58),
+                color: const Color(0xFFF9F4F2).withValues(alpha: 0.52),
               ),
             ),
           ),
@@ -353,9 +319,9 @@ class _SplashScreenState extends State<SplashScreen>
                       Text(
                         'filmes  /  séries  /  livros',
                         style: TextStyle(
-                          color: const Color(0xFF7D171D).withValues(
-                            alpha: 0.82,
-                          ),
+                          color: const Color(
+                            0xFF7D171D,
+                          ).withValues(alpha: 0.82),
                           fontSize: 12,
                           letterSpacing: 1.1,
                         ),
@@ -392,9 +358,9 @@ class _SplashScreenState extends State<SplashScreen>
                       Text(
                         'SEU UNIVERSO',
                         style: TextStyle(
-                          color: const Color(0xFF9F555B).withValues(
-                            alpha: 0.78,
-                          ),
+                          color: const Color(
+                            0xFF9F555B,
+                          ).withValues(alpha: 0.78),
                           fontSize: 9,
                           letterSpacing: 1.2,
                         ),
@@ -406,12 +372,7 @@ class _SplashScreenState extends State<SplashScreen>
                 Align(
                   alignment: Alignment.bottomCenter,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      28,
-                      0,
-                      28,
-                      28,
-                    ),
+                    padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -423,8 +384,9 @@ class _SplashScreenState extends State<SplashScreen>
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  color: const Color(0xFF7D171D)
-                                      .withValues(alpha: 0.78),
+                                  color: const Color(
+                                    0xFF7D171D,
+                                  ).withValues(alpha: 0.78),
                                   fontSize: 9,
                                   fontWeight: FontWeight.w600,
                                   letterSpacing: 1.0,
@@ -450,9 +412,7 @@ class _SplashScreenState extends State<SplashScreen>
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
                             valueColor: AlwaysStoppedAnimation<Color>(
-                              const Color(0xFFBB7575).withValues(
-                                alpha: 0.82,
-                              ),
+                              const Color(0xFFBB7575).withValues(alpha: 0.82),
                             ),
                           ),
                         ),
@@ -460,9 +420,9 @@ class _SplashScreenState extends State<SplashScreen>
                         Text(
                           'Carregando...',
                           style: TextStyle(
-                            color: const Color(0xFF7D171D).withValues(
-                              alpha: 0.72,
-                            ),
+                            color: const Color(
+                              0xFF7D171D,
+                            ).withValues(alpha: 0.72),
                             fontSize: 10,
                             letterSpacing: 0.3,
                           ),
