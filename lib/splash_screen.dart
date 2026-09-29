@@ -310,6 +310,7 @@ class _SplashScreenState extends State<SplashScreen>
                         'LupTok',
                         style: TextStyle(
                           color: Color(0xFFA85D63),
+                          fontFamily: 'IMFellFrenchCanon',
                           fontSize: 38,
                           fontWeight: FontWeight.bold,
                           letterSpacing: 1.1,

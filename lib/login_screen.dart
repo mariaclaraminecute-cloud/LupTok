@@ -195,11 +195,7 @@ class _LoginScreenState extends State<LoginScreen>
       resizeToAvoidBottomInset: true,
 
       body: Theme(
-        data: Theme.of(context).copyWith(
-          textTheme: Theme.of(
-            context,
-          ).textTheme.apply(fontFamily: 'IMFellFrenchCanon'),
-        ),
+        data: Theme.of(context),
         child: Stack(
           fit: StackFit.expand,
 
@@ -322,6 +318,7 @@ class _LoginScreenState extends State<LoginScreen>
 
                               style: TextStyle(
                                 color: softTextColor,
+                                fontFamily: 'IMFellFrenchCanon',
 
                                 fontSize: 30,
 

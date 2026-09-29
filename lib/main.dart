@@ -21,6 +21,13 @@ Future<void> main() async {
     'Grande' => 1.15,
     _ => 1.0,
   };
+  followedUsernames.value =
+      (preferences.getStringList('following_users') ?? const []).toSet();
+  savedVideoIndices.value =
+      (preferences.getStringList('saved_videos') ?? const [])
+          .map(int.tryParse)
+          .whereType<int>()
+          .toSet();
   runApp(const LupTokApp());
 }
 
@@ -44,7 +51,6 @@ class LupTokApp extends StatelessWidget {
               brightness: Brightness.light,
               surface: const Color(0xFFFFE9E9),
             ),
-            fontFamily: 'IMFellFrenchCanon',
           ),
           darkTheme: ThemeData(
             brightness: Brightness.dark,
@@ -52,7 +58,6 @@ class LupTokApp extends StatelessWidget {
               seedColor: const Color(0xFFBB7575),
               brightness: Brightness.dark,
             ),
-            fontFamily: 'IMFellFrenchCanon',
           ),
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(

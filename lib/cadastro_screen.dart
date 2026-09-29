@@ -255,6 +255,7 @@ class _CadastroScreenState extends State<CadastroScreen>
                             "Criar conta",
                             style: TextStyle(
                               color: Color(0xFF7D171D),
+                              fontFamily: 'IMFellFrenchCanon',
                               fontSize: 26,
                               fontWeight: FontWeight.bold,
                               letterSpacing: 0.3,

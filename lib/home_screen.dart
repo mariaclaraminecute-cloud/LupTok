@@ -1,9 +1,11 @@
-// home_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'app_preferences.dart';
+import 'groups_screen.dart';
+import 'interest_utils.dart';
+import 'profile_screen.dart';
 import 'settings_screen.dart';
 import 'video_recorder_screen.dart';
 
@@ -19,8 +21,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   bool _mostrarBemVindo = true;
   bool _mostrarHumor = false;
-  bool _mostrarLupez = false;
   bool _ocultarSpoilers = false;
+  List<String> _gostosPerfil = [];
   String? _humorSelecionado;
 
   late AnimationController _bemVindoCtrl;
@@ -31,12 +33,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   late AnimationController _glowCtrl;
   late Animation<double> _glowAnim;
 
-  late AnimationController _lupezEntradaCtrl;
-  late Animation<double> _lupezEntradaAnim;
-
   final List<_VideoCard> _videos = [
     _VideoCard(
       titulo: "Interstellar",
+      autor: '@gui.scifi',
       tipo: "Filme",
       genero: "Ficção Científica",
       spoiler: "nenhum",
@@ -46,6 +46,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     ),
     _VideoCard(
       titulo: "Attack on Titan",
+      autor: '@marina.anime',
       tipo: "Anime",
       genero: "Ação",
       spoiler: "leve",
@@ -55,6 +56,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     ),
     _VideoCard(
       titulo: "O Hobbit",
+      autor: '@bia.leitora',
       tipo: "Livro",
       genero: "Fantasia",
       spoiler: "nenhum",
@@ -64,6 +66,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     ),
     _VideoCard(
       titulo: "Dark",
+      autor: '@gui.scifi',
       tipo: "Série",
       genero: "Suspense",
       spoiler: "muito",
@@ -73,6 +76,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     ),
     _VideoCard(
       titulo: "Crash Landing on You",
+      autor: '@julia.dorama',
       tipo: "K-Drama",
       genero: "Romance",
       spoiler: "nenhum",
@@ -96,15 +100,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       begin: 0.3,
       end: 0.9,
     ).animate(CurvedAnimation(parent: _glowCtrl, curve: Curves.easeInOut));
-
-    _lupezEntradaCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 350),
-    );
-    _lupezEntradaAnim = CurvedAnimation(
-      parent: _lupezEntradaCtrl,
-      curve: Curves.easeOutCubic,
-    );
 
     _bemVindoCtrl = AnimationController(
       vsync: this,
@@ -171,19 +166,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   void dispose() {
     _bemVindoCtrl.dispose();
     _glowCtrl.dispose();
-    _lupezEntradaCtrl.dispose();
     super.dispose();
-  }
-
-  void _abrirLupez() {
-    setState(() => _mostrarLupez = true);
-    _lupezEntradaCtrl.forward(from: 0);
-  }
-
-  void _fecharLupez() {
-    _lupezEntradaCtrl.reverse().then((_) {
-      if (mounted) setState(() => _mostrarLupez = false);
-    });
   }
 
   Future<void> _carregarPreferencias() async {
@@ -192,6 +175,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     setState(() {
       _ocultarSpoilers =
           preferencias.getBool('settings_hide_spoilers') ?? false;
+      _gostosPerfil = [
+        ...?preferencias.getStringList('perfil_tipos'),
+        ...?preferencias.getStringList('perfil_generos'),
+      ];
     });
   }
 
@@ -204,11 +191,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       backgroundColor: const Color(0xFFFFE9E9),
       extendBody: false,
       body: Stack(
+        fit: StackFit.expand,
         children: [
           IndexedStack(
             index: _tabAtual,
@@ -216,83 +203,24 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               _LoopTab(
                 videos: _videos,
                 ocultarSpoilers: _ocultarSpoilers,
-                onAbrirLupez: _abrirLupez,
-                onAbrirGravador: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const VideoRecorderScreen(),
-                  ),
-                ),
+                profileInterests: _gostosPerfil,
               ),
-              const _BibliotecaTab(),
-              const _AvaliacoesTab(),
-              _ExplorarTab(videos: _videos),
-              _PerfilTab(onAbrirConfiguracoes: _abrirConfiguracoes),
+              GroupsScreen(interests: _gostosPerfil),
+              ProfileScreen(
+                onOpenSettings: _abrirConfiguracoes,
+                availableVideos: _videos.map((video) => video.titulo).toList(),
+              ),
+              _LupezOverlay(
+                glowAnim: _glowAnim,
+                onFechar: () => setState(() => _tabAtual = 0),
+                fullScreen: true,
+                videos: _videos,
+                interests: _gostosPerfil,
+              ),
             ],
           ),
-
-          if (!_mostrarBemVindo &&
-              !_mostrarHumor &&
-              !_mostrarLupez &&
-              _tabAtual == 0)
-            Positioned(
-              bottom: 90,
-              right: 16,
-              child: GestureDetector(
-                onTap: _abrirLupez,
-                child: AnimatedBuilder(
-                  animation: _glowAnim,
-                  builder: (_, child) => Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: const LinearGradient(
-                        colors: [
-                          Color(0xFFB8787C),
-                          Color.fromARGB(255, 255, 221, 223),
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(
-                            0xFFB8787C,
-                          ).withOpacity(0.5 * _glowAnim.value),
-                          blurRadius: 20,
-                          spreadRadius: 1,
-                        ),
-                      ],
-                    ),
-                    child: child,
-                  ),
-                  child: const Center(
-                    child: Text(
-                      "L",
-                      style: TextStyle(
-                        color: Color.fromRGBO(255, 212, 215, 1),
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-          // ── Overlay Lupez ──────────────────────────────────────────
-          if (_mostrarLupez)
-            AnimatedBuilder(
-              animation: _lupezEntradaAnim,
-              builder: (_, child) => Opacity(
-                opacity: _lupezEntradaAnim.value,
-                child: Transform.translate(
-                  offset: Offset(0, 40 * (1 - _lupezEntradaAnim.value)),
-                  child: child,
-                ),
-              ),
-              child: _LupezOverlay(glowAnim: _glowAnim, onFechar: _fecharLupez),
-            ),
+          if (!_mostrarBemVindo && !_mostrarHumor)
+            Positioned(left: 0, right: 0, bottom: 0, child: _buildBottomNav()),
 
           // ── Bem-vindo (aparece primeiro) ───────────────────────────
           if (_mostrarBemVindo) _buildBemVindoOverlay(),
@@ -301,9 +229,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           if (_mostrarHumor) _buildHumorOverlay(),
         ],
       ),
-      bottomNavigationBar: _mostrarBemVindo || _mostrarHumor
-          ? null
-          : _buildBottomNav(),
     );
   }
 
@@ -665,18 +590,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   // ── Bottom Navigation ──────────────────────────────────────────────
   Widget _buildBottomNav() {
-    final items = [
-      (
-        Icons.play_circle_fill_rounded,
-        Icons.play_circle_outline_rounded,
-        "Loop",
-      ),
-      (Icons.local_library_rounded, Icons.local_library_outlined, "Biblioteca"),
-      (Icons.star_rounded, Icons.star_outline_rounded, "Avaliações"),
-      (Icons.explore_rounded, Icons.explore_outlined, "Explorar"),
-      (Icons.person_rounded, Icons.person_outline_rounded, "Perfil"),
-    ];
-
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFFFFE9E9),
@@ -686,58 +599,151 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ),
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           child: Row(
-            children: items.asMap().entries.map((e) {
-              final i = e.key;
-              final (iconOn, iconOff, label) = e.value;
-              final ativo = _tabAtual == i;
-              return Expanded(
-                child: GestureDetector(
-                  onTap: () => setState(() => _tabAtual = i),
-                  behavior: HitTestBehavior.opaque,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 250),
+            children: [
+              _navAssetItem(
+                image: 'assets/images/loop.png',
+                label: 'Loop',
+                active: _tabAtual == 0,
+                onTap: () => setState(() => _tabAtual = 0),
+              ),
+              _navAssetItem(
+                image: 'assets/images/grupos.png',
+                label: 'Grupos',
+                active: _tabAtual == 1,
+                onTap: () => setState(() => _tabAtual = 1),
+                fallback: Icons.groups_rounded,
+              ),
+              Expanded(
+                child: Center(
+                  child: Material(
+                    color: const Color(0xFFBB7575),
+                    borderRadius: BorderRadius.circular(14),
+                    child: InkWell(
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const VideoRecorderScreen(),
+                        ),
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                      child: Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
-                          vertical: 7,
+                          vertical: 8,
                         ),
-                        decoration: BoxDecoration(
-                          color: ativo
-                              ? const Color(0xFFBB7575).withOpacity(0.15)
-                              : const Color.fromARGB(0, 253, 195, 195),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          ativo ? iconOn : iconOff,
-                          color: ativo
-                              ? const Color(0xFFBB7575)
-                              : const Color(0xFFD59EA1).withOpacity(0.38),
-                          size: 24,
+                        child: Image.asset(
+                          'assets/images/gravar.png',
+                          width: 34,
+                          height: 34,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => const Icon(
+                            Icons.add_rounded,
+                            color: Colors.white,
+                            size: 30,
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 2),
-                      AnimatedDefaultTextStyle(
-                        duration: const Duration(milliseconds: 250),
-                        style: TextStyle(
-                          color: ativo
-                              ? const Color(0xFFBB7575)
-                              : const Color(0xFFBB7575).withOpacity(0.38),
-                          fontSize: 10,
-                          fontWeight: ativo
-                              ? FontWeight.w600
-                              : FontWeight.normal,
-                        ),
-                        child: Text(label),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
-              );
-            }).toList(),
+              ),
+              _navAssetItem(
+                image: 'assets/images/lupez.png',
+                label: 'Lupez',
+                active: _tabAtual == 3,
+                onTap: () => setState(() => _tabAtual = 3),
+              ),
+              _navProfileItem(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _navAssetItem({
+    required String image,
+    required String label,
+    required bool active,
+    required VoidCallback onTap,
+    IconData? fallback,
+  }) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 28,
+                height: 28,
+                child: Image.asset(
+                  image,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => Icon(
+                    fallback ?? Icons.circle_outlined,
+                    color: active
+                        ? const Color(0xFF7D171D)
+                        : const Color(0xFFBB7575),
+                    size: 24,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: TextStyle(
+                  color: active
+                      ? const Color(0xFF7D171D)
+                      : const Color(0xFFBB7575),
+                  fontSize: 10,
+                  fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _navProfileItem() {
+    final active = _tabAtual == 2;
+    return Expanded(
+      child: InkWell(
+        onTap: () => setState(() => _tabAtual = 2),
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircleAvatar(
+                radius: 14,
+                backgroundColor: active
+                    ? const Color(0xFF7D171D)
+                    : const Color(0xFFBB7575),
+                child: const Text(
+                  'A',
+                  style: TextStyle(color: Colors.white, fontSize: 13),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'Perfil',
+                style: TextStyle(
+                  color: active
+                      ? const Color(0xFF7D171D)
+                      : const Color(0xFFBB7575),
+                  fontSize: 10,
+                  fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -825,11 +831,12 @@ class _LoopSearchDelegate extends SearchDelegate<int?> {
 // ══════════════════════════════════════════════════════════════════
 
 class _VideoCard {
-  final String titulo, tipo, genero, spoiler;
+  final String titulo, tipo, genero, spoiler, autor;
   final int stars, comentarios;
   final Color cor;
   const _VideoCard({
     required this.titulo,
+    required this.autor,
     required this.tipo,
     required this.genero,
     required this.spoiler,
@@ -846,13 +853,11 @@ class _VideoCard {
 class _LoopTab extends StatefulWidget {
   final List<_VideoCard> videos;
   final bool ocultarSpoilers;
-  final VoidCallback onAbrirLupez;
-  final VoidCallback onAbrirGravador;
+  final List<String> profileInterests;
   const _LoopTab({
     required this.videos,
     required this.ocultarSpoilers,
-    required this.onAbrirLupez,
-    required this.onAbrirGravador,
+    required this.profileInterests,
   });
 
   @override
@@ -862,7 +867,76 @@ class _LoopTab extends StatefulWidget {
 class _LoopTabState extends State<_LoopTab> {
   final PageController _pageCtrl = PageController();
   final Set<int> _starred = {};
+  final Set<int> _saved = {};
+  final Set<String> _following = {};
   final Map<int, List<String>> _comentarios = {};
+  bool _mostrandoSeguindo = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _following.addAll(followedUsernames.value);
+    _saved.addAll(savedVideoIndices.value);
+    followedUsernames.addListener(_syncFollowedUsers);
+    savedVideoIndices.addListener(_syncSavedVideos);
+    _carregarInteracoes();
+  }
+
+  void _syncFollowedUsers() {
+    if (!mounted) return;
+    setState(() {
+      _following
+        ..clear()
+        ..addAll(followedUsernames.value);
+    });
+  }
+
+  void _syncSavedVideos() {
+    if (!mounted) return;
+    setState(() {
+      _saved
+        ..clear()
+        ..addAll(savedVideoIndices.value);
+    });
+  }
+
+  Future<void> _carregarInteracoes() async {
+    final preferences = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _following.addAll(
+        preferences.getStringList('following_users') ?? const [],
+      );
+      _saved.addAll(
+        (preferences.getStringList('saved_videos') ?? const [])
+            .map(int.tryParse)
+            .whereType<int>(),
+      );
+    });
+    followedUsernames.value = Set<String>.from(_following);
+    savedVideoIndices.value = Set<int>.from(_saved);
+  }
+
+  Future<void> _toggleFollow(String user) async {
+    setState(() {
+      if (!_following.add(user)) _following.remove(user);
+    });
+    followedUsernames.value = Set<String>.from(_following);
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setStringList('following_users', _following.toList());
+  }
+
+  Future<void> _toggleSaved(int videoIndex) async {
+    setState(() {
+      if (!_saved.add(videoIndex)) _saved.remove(videoIndex);
+    });
+    savedVideoIndices.value = Set<int>.from(_saved);
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setStringList(
+      'saved_videos',
+      _saved.map((index) => '$index').toList(),
+    );
+  }
 
   Future<void> _abrirComentarios(int index) async {
     final comentarios = _comentarios.putIfAbsent(index, () => []);
@@ -893,6 +967,7 @@ class _LoopTabState extends State<_LoopTab> {
   }
 
   Future<void> _pesquisar() async {
+    setState(() => _mostrandoSeguindo = false);
     final indice = await showSearch<int?>(
       context: context,
       delegate: _LoopSearchDelegate(widget.videos),
@@ -952,19 +1027,79 @@ class _LoopTabState extends State<_LoopTab> {
 
   @override
   void dispose() {
+    followedUsernames.removeListener(_syncFollowedUsers);
+    savedVideoIndices.removeListener(_syncSavedVideos);
     _pageCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final feed = _mostrandoSeguindo
+        ? widget.videos
+              .where((video) => _following.contains(video.autor))
+              .toList()
+        : widget.videos;
+    if (feed.isEmpty) {
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          const ColoredBox(color: Color(0xFF191416)),
+          _buildTopBar(),
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(36),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.people_outline_rounded,
+                    color: Colors.white70,
+                    size: 42,
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Seu feed Seguindo começa aqui',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Siga criadores no Loop para ver as publicações deles nesta aba.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                  const SizedBox(height: 16),
+                  TextButton.icon(
+                    onPressed: () => setState(() => _mostrandoSeguindo = false),
+                    icon: const Icon(Icons.explore_outlined),
+                    label: const Text('Ver Looping'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
     return PageView.builder(
       controller: _pageCtrl,
       scrollDirection: Axis.vertical,
-      itemCount: widget.videos.length,
+      itemCount: feed.length,
       itemBuilder: (context, i) {
-        final v = widget.videos[i];
-        final starrado = _starred.contains(i);
+        final v = feed[i];
+        final videoIndex = widget.videos.indexOf(v);
+        final starrado = _starred.contains(videoIndex);
+        final salvo = _saved.contains(videoIndex);
+        final corAnel = switch (v.spoiler) {
+          'muito' => const Color(0xFFD9273E),
+          'leve' => const Color(0xFFFFC247),
+          _ => const Color(0xFF4CAF68),
+        };
         return Stack(
           fit: StackFit.expand,
           children: [
@@ -1030,51 +1165,77 @@ class _LoopTabState extends State<_LoopTab> {
                       fontSize: 14,
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      const CircleAvatar(
-                        radius: 16,
-                        backgroundColor: Color.fromARGB(77, 158, 92, 92),
-                        child: Text(
-                          "A",
-                          style: TextStyle(
-                            color: Color(0xFFBB7575),
+                ],
+              ),
+            ),
+            Positioned(
+              top: 112,
+              left: 14,
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => ProfileScreen(
+                          isOwner: false,
+                          publicUsername: v.autor,
+                          publicInterests: [v.tipo, v.genero],
+                          availableVideos: widget.videos
+                              .map((video) => video.titulo)
+                              .toList(),
+                        ),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(2.5),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: corAnel, width: 2.5),
+                          ),
+                          child: CircleAvatar(
+                            radius: 18,
+                            backgroundColor: const Color(0xFFBB7575),
+                            child: Text(
+                              v.autor
+                                  .replaceFirst('@', '')
+                                  .substring(0, 1)
+                                  .toUpperCase(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          v.autor,
+                          style: const TextStyle(
+                            color: Colors.white,
                             fontSize: 13,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w700,
+                            shadows: [
+                              Shadow(color: Colors.black87, blurRadius: 6),
+                            ],
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        "@anna.beatriz",
-                        style: TextStyle(
-                          color: const Color(0xFFBB7575).withOpacity(0.8),
-                          fontSize: 13,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color: const Color(0xFFBB7575).withOpacity(0.54),
-                          ),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Text(
-                          "Seguir",
-                          style: TextStyle(
-                            color: Color(0xFFBB7575),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  TextButton(
+                    onPressed: () => _toggleFollow(v.autor),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      backgroundColor: Colors.black38,
+                      minimumSize: const Size(0, 32),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                    ),
+                    child: Text(
+                      _following.contains(v.autor) ? 'Seguindo' : 'Seguir',
+                    ),
                   ),
                 ],
               ),
@@ -1092,101 +1253,130 @@ class _LoopTabState extends State<_LoopTab> {
                     label: _fmt(v.stars + (starrado ? 1 : 0)),
                     cor: Colors.white,
                     onTap: () => setState(
-                      () => starrado ? _starred.remove(i) : _starred.add(i),
+                      () => starrado
+                          ? _starred.remove(videoIndex)
+                          : _starred.add(videoIndex),
                     ),
                   ),
                   const SizedBox(height: 20),
                   _acao(
                     icon: Icons.chat_bubble_outline_rounded,
-                    label: _fmt(v.comentarios + (_comentarios[i]?.length ?? 0)),
+                    label: _fmt(
+                      v.comentarios + (_comentarios[videoIndex]?.length ?? 0),
+                    ),
                     cor: Colors.white,
-                    onTap: () => _abrirComentarios(i),
-                  ),
-                  const SizedBox(height: 20),
-                  _acao(
-                    icon: Icons.bookmark_border_rounded,
-                    label: "Salvar",
-                    cor: Colors.white,
-                    onTap: () {},
+                    onTap: () => _abrirComentarios(videoIndex),
                   ),
                   const SizedBox(height: 20),
                   _acao(
                     icon: Icons.share_outlined,
-                    label: "Enviar",
+                    label: null,
                     cor: Colors.white,
                     onTap: () => _compartilhar(v),
+                  ),
+                  const SizedBox(height: 20),
+                  _acao(
+                    icon: salvo
+                        ? Icons.bookmark_rounded
+                        : Icons.bookmark_border_rounded,
+                    label: null,
+                    cor: Colors.white,
+                    onTap: () => _toggleSaved(videoIndex),
                   ),
                 ],
               ),
             ),
-            // Top bar
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(16, 56, 16, 16),
-                child: Row(
-                  children: [
-                    const Text(
-                      "Loop",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      tooltip: 'Gravar vídeo',
-                      onPressed: widget.onAbrirGravador,
-                      icon: const Icon(
-                        Icons.videocam_outlined,
-                        color: Colors.white,
-                        size: 26,
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Pesquisar',
-                      onPressed: _pesquisar,
-                      icon: const Icon(Icons.search_rounded),
-                      color: Colors.white,
-                    ),
-                    const SizedBox(width: 14),
-                    // Botão Lupez no topo
-                    GestureDetector(
-                      onTap: widget.onAbrirLupez,
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(
-                            colors: [
-                              Color(0xFFBB7575),
-                              Color.fromARGB(255, 200, 140, 144),
-                            ],
-                          ),
-                        ),
-                        child: const Center(
-                          child: Text(
-                            "L",
-                            style: TextStyle(
-                              color: Color.fromARGB(255, 184, 129, 129),
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+            _buildTopBar(),
           ],
         );
       },
+    );
+  }
+
+  Widget _buildTopBar() {
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        color: const Color(0xFFFFD6D8),
+        padding: const EdgeInsets.fromLTRB(12, 4, 10, 8),
+        child: SafeArea(
+          bottom: false,
+          child: Row(
+            children: [
+              Image.asset(
+                'assets/images/logo.png',
+                width: 38,
+                height: 38,
+                fit: BoxFit.contain,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Container(
+                  height: 38,
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFBB7575).withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      _feedTab(
+                        'Looping',
+                        active: !_mostrandoSeguindo,
+                        onTap: () => setState(() => _mostrandoSeguindo = false),
+                      ),
+                      _feedTab(
+                        'Seguindo',
+                        active: _mostrandoSeguindo,
+                        onTap: () => setState(() => _mostrandoSeguindo = true),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Pesquisar',
+                onPressed: _pesquisar,
+                icon: const Icon(
+                  Icons.search_rounded,
+                  color: Color(0xFF7D171D),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _feedTab(
+    String label, {
+    required bool active,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: active ? const Color(0xFFBB7575) : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: active ? Colors.white : const Color(0xFF7D171D),
+              fontSize: 13,
+              fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -1211,7 +1401,7 @@ class _LoopTabState extends State<_LoopTab> {
 
   Widget _acao({
     required IconData icon,
-    required String label,
+    required String? label,
     required Color cor,
     required VoidCallback onTap,
   }) {
@@ -1225,16 +1415,18 @@ class _LoopTabState extends State<_LoopTab> {
             size: 32,
             shadows: const [Shadow(color: Colors.black54, blurRadius: 6)],
           ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: cor,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              shadows: const [Shadow(color: Colors.black54, blurRadius: 4)],
+          if (label != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: cor,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                shadows: const [Shadow(color: Colors.black54, blurRadius: 4)],
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -1376,7 +1568,16 @@ class _CommentsSheetState extends State<_CommentsSheet> {
 class _LupezOverlay extends StatefulWidget {
   final Animation<double> glowAnim;
   final VoidCallback onFechar;
-  const _LupezOverlay({required this.glowAnim, required this.onFechar});
+  final bool fullScreen;
+  final List<_VideoCard> videos;
+  final List<String> interests;
+  const _LupezOverlay({
+    required this.glowAnim,
+    required this.onFechar,
+    required this.videos,
+    required this.interests,
+    this.fullScreen = false,
+  });
 
   @override
   State<_LupezOverlay> createState() => _LupezOverlayState();
@@ -1398,21 +1599,6 @@ class _LupezOverlayState extends State<_LupezOverlay>
     "K-drama curto ❤️",
     "Ficção científica épica 🚀",
   ];
-
-  final _respostas = {
-    "suspense":
-        "Para suspense, você vai amar **Dark** (Netflix) — muito complexo, mas genial! Ou o filme **Knives Out** pra começar. 🔍",
-    "chor":
-        "Dia de choro? 😢 **Your Lie in April** (anime) ou **A Culpa é das Estrelas** são certeiros. Tenha lenços!",
-    "anime":
-        "Para iniciantes, comece com **Fullmetal Alchemist: Brotherhood** — épico e dublado! Ou **My Hero Academia** pra ação leve. 🎌",
-    "kdrama":
-        "Curto e romântico? **Business Proposal** (16 eps, Netflix) é perfeito! Também adoro **It's Okay to Not Be Okay**. 🇰🇷❤️",
-    "ficção":
-        "**Interstellar** é obrigatório! E a série **Dark** mistura ficção científica com suspense de um jeito único. 🚀",
-    "padrão":
-        "Que escolha incrível! Com base no seu humor e histórico, vou preparar uma lista personalizada. Quer filtrar por tempo de duração ou plataforma? 🎬",
-  };
 
   @override
   void initState() {
@@ -1456,29 +1642,103 @@ class _LupezOverlayState extends State<_LupezOverlay>
 
     Future.delayed(const Duration(milliseconds: 1500), () {
       if (!mounted) return;
-      final lower = msg.toLowerCase();
-      String r = _respostas["padrão"]!;
-      if (lower.contains("suspense") || lower.contains("thriller"))
-        r = _respostas["suspense"]!;
-      else if (lower.contains("chor") || lower.contains("triste"))
-        r = _respostas["chor"]!;
-      else if (lower.contains("anime"))
-        r = _respostas["anime"]!;
-      else if (lower.contains("kdrama") ||
-          lower.contains("k-drama") ||
-          lower.contains("coreano"))
-        r = _respostas["kdrama"]!;
-      else if (lower.contains("ficção") ||
-          lower.contains("sci-fi") ||
-          lower.contains("épic"))
-        r = _respostas["ficção"]!;
+      final resposta = _gerarResposta(msg);
 
       setState(() {
         _digitando = false;
-        _msgs.add(_Mensagem(texto: r, deLupez: true));
+        _msgs.add(_Mensagem(texto: resposta, deLupez: true));
       });
       _rolar();
     });
+  }
+
+  String _gerarResposta(String prompt) {
+    final pergunta = normalizeInterest(prompt);
+    final termos = <String>[];
+    if (pergunta.contains('suspense') || pergunta.contains('thriller')) {
+      termos.add('suspense');
+    }
+    if (pergunta.contains('anime')) termos.add('anime');
+    if (pergunta.contains('livro') || pergunta.contains('leitura')) {
+      termos.add('livro');
+    }
+    if (pergunta.contains('dorama') ||
+        pergunta.contains('k-drama') ||
+        pergunta.contains('coreano')) {
+      termos.add('dorama');
+    }
+    if (pergunta.contains('romance') || pergunta.contains('romântico')) {
+      termos.add('romance');
+    }
+    if (pergunta.contains('ficcao') || pergunta.contains('sci-fi')) {
+      termos.add('ficcao');
+    }
+    if (pergunta.contains('terror')) termos.add('terror');
+    if (pergunta.contains('fantasia')) termos.add('fantasia');
+    if (pergunta.contains('triste') || pergunta.contains('chorar')) {
+      termos.add('drama');
+    }
+
+    final tituloMencionado = widget.videos.where(
+      (video) => pergunta.contains(video.titulo.toLowerCase()),
+    );
+    List<_VideoCard> resultados;
+    if (tituloMencionado.isNotEmpty) {
+      resultados = tituloMencionado.toList();
+    } else if (termos.isNotEmpty) {
+      resultados = widget.videos.where((video) {
+        final dados = [
+          video.titulo,
+          video.genero,
+          video.tipo,
+        ].map(normalizeInterest).toList();
+        return termos
+            .map(normalizeInterest)
+            .any((termo) => dados.any((campo) => campo.contains(termo)));
+      }).toList();
+    } else {
+      final preferidos = widget.interests.map(normalizeInterest).toList();
+      resultados = widget.videos.where((video) {
+        final dados = [
+          video.titulo,
+          video.genero,
+          video.tipo,
+        ].map(normalizeInterest).toList();
+        return preferidos.any(
+          (interest) =>
+              interest.isNotEmpty &&
+              dados.any((campo) => campo.contains(interest)),
+        );
+      }).toList();
+      if (resultados.isEmpty) resultados = widget.videos;
+    }
+
+    if (resultados.isEmpty) {
+      return 'Não encontrei uma obra desse tipo no catálogo deste aparelho. Tente buscar por filme, série, livro ou por um gênero que aparece no Loop.';
+    }
+
+    final recomendacoes = resultados
+        .take(2)
+        .map((video) {
+          final interesseEmComum = widget.interests.firstWhere(
+            (interest) => [video.genero, video.tipo]
+                .map(normalizeInterest)
+                .any((campo) => campo.contains(normalizeInterest(interest))),
+            orElse: () => '',
+          );
+          final contexto = interesseEmComum.isEmpty
+              ? '${video.tipo} de ${video.genero}'
+              : 'combina com seu gosto por $interesseEmComum';
+          final aviso = video.spoiler == 'muito'
+              ? ' Tem aviso de muito spoiler.'
+              : video.spoiler == 'leve'
+              ? ' Tem aviso de spoiler parcial.'
+              : '';
+          return '**${video.titulo}** ($contexto).$aviso';
+        })
+        .join('\n');
+
+    return 'Separei do catálogo do LupTok:\n$recomendacoes\n\nQuer filtrar por outro gênero ou tipo?';
   }
 
   void _rolar() {
@@ -1496,28 +1756,35 @@ class _LupezOverlayState extends State<_LupezOverlay>
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: Colors.black.withOpacity(0.65),
+      color: widget.fullScreen
+          ? const Color(0xFF111111)
+          : Colors.black.withOpacity(0.65),
       child: SafeArea(
         child: Align(
           alignment: Alignment.bottomCenter,
           child: Container(
-            height: MediaQuery.of(context).size.height * 0.75,
-            decoration: const BoxDecoration(
-              color: Color(0xFF0D0D0D),
-              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            height: widget.fullScreen
+                ? MediaQuery.sizeOf(context).height
+                : MediaQuery.of(context).size.height * 0.75,
+            decoration: BoxDecoration(
+              color: const Color(0xFF0D0D0D),
+              borderRadius: widget.fullScreen
+                  ? BorderRadius.zero
+                  : const BorderRadius.vertical(top: Radius.circular(28)),
             ),
             child: Column(
               children: [
                 // Handle
-                Container(
-                  margin: const EdgeInsets.only(top: 12, bottom: 4),
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.white12,
-                    borderRadius: BorderRadius.circular(2),
+                if (!widget.fullScreen)
+                  Container(
+                    margin: const EdgeInsets.only(top: 12, bottom: 4),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white12,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
-                ),
 
                 // Header
                 Padding(

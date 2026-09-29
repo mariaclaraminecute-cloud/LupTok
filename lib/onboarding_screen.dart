@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'home_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -75,6 +76,15 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     if (!_podeProsseguir) return;
 
     if (_ehUltimaEtapa) {
+      final preferencias = await SharedPreferences.getInstance();
+      await preferencias.setStringList(
+        'perfil_tipos',
+        _tiposSelecionados.toList(),
+      );
+      await preferencias.setStringList(
+        'perfil_generos',
+        _generosEntretenimento.toList(),
+      );
       Navigator.pushReplacement(
         context,
         PageRouteBuilder(
@@ -323,7 +333,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           ),
                           child: Center(
                             child: Text(
-                              _ehUltimaEtapa ? "Começar  🚀" : "Próximo",
+                              _ehUltimaEtapa ? "Começar" : "Próximo",
                               style: const TextStyle(
                                 fontSize: 17,
                                 color: Color(0xFFFFE9E9),
@@ -556,7 +566,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                               ? const Color(0xFFFFE9E9)
                               : const Color(0xFF7D1717),
                           fontSize: 14,
-                          fontFamily: 'Quicksand',
                           fontWeight: sel ? FontWeight.w600 : FontWeight.w500,
                         ),
                       ),
@@ -583,6 +592,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           titulo,
           style: const TextStyle(
             color: Color(0xFFB8787C),
+            fontFamily: 'IMFellFrenchCanon',
             fontSize: 32,
             fontWeight: FontWeight.bold,
             height: 1.2,
