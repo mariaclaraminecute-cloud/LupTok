@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'app_preferences.dart';
 import 'login_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -204,8 +205,8 @@ class _SplashScreenState extends State<SplashScreen>
               decoration: BoxDecoration(
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(
-                      0xFFFFA8BA,
+                    color: AppPalette.accent(
+                      context,
                     ).withValues(alpha: _logoGlowAnimation.value),
                     blurRadius: 38,
                     spreadRadius: 2,
@@ -221,7 +222,7 @@ class _SplashScreenState extends State<SplashScreen>
         tag: 'logo_luptok',
         transitionOnUserGestures: false,
         child: Image.asset(
-          'assets/images/logo.png',
+          AppPalette.logo(context),
           width: 170,
           height: 170,
           fit: BoxFit.contain,
@@ -235,12 +236,13 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
+    final dark = AppPalette.isDark(context);
     final List<String> col1 = _shuffledCapas.sublist(0, 11);
     final List<String> col2 = _shuffledCapas.sublist(11, 22);
     final List<String> col3 = _shuffledCapas.sublist(22, 33);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9F4F2),
+      backgroundColor: AppPalette.background(context),
       body: Stack(
         fit: StackFit.expand,
         clipBehavior: Clip.hardEdge,
@@ -274,7 +276,9 @@ class _SplashScreenState extends State<SplashScreen>
           Positioned.fill(
             child: IgnorePointer(
               child: Container(
-                color: const Color(0xFFF9F4F2).withValues(alpha: 0.52),
+                color: AppPalette.background(
+                  context,
+                ).withValues(alpha: dark ? 0.9 : 0.52),
               ),
             ),
           ),
@@ -287,7 +291,7 @@ class _SplashScreenState extends State<SplashScreen>
                     center: Alignment.center,
                     radius: 0.7,
                     colors: [
-                      const Color(0xFFFFE8EC).withValues(alpha: 0.08),
+                      AppPalette.accent(context).withValues(alpha: 0.08),
                       Colors.transparent,
                     ],
                   ),
@@ -306,10 +310,10 @@ class _SplashScreenState extends State<SplashScreen>
                     children: [
                       _buildAnimatedLogo(),
                       const SizedBox(height: 20),
-                      const Text(
+                      Text(
                         'LupTok',
                         style: TextStyle(
-                          color: Color(0xFFA85D63),
+                          color: AppPalette.primaryText(context),
                           fontFamily: 'IMFellFrenchCanon',
                           fontSize: 38,
                           fontWeight: FontWeight.bold,
@@ -320,8 +324,8 @@ class _SplashScreenState extends State<SplashScreen>
                       Text(
                         'filmes  /  séries  /  livros',
                         style: TextStyle(
-                          color: const Color(
-                            0xFF7D171D,
+                          color: AppPalette.primaryText(
+                            context,
                           ).withValues(alpha: 0.82),
                           fontSize: 12,
                           letterSpacing: 1.1,
@@ -340,16 +344,16 @@ class _SplashScreenState extends State<SplashScreen>
                       Container(
                         width: 7,
                         height: 7,
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: Color(0xFF9F555B),
+                          color: AppPalette.accent(context),
                         ),
                       ),
                       const SizedBox(width: 8),
-                      const Text(
+                      Text(
                         'LUPTOK / 01',
                         style: TextStyle(
-                          color: Color(0xFF9F555B),
+                          color: AppPalette.accent(context),
                           fontSize: 10,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 1.7,
@@ -359,8 +363,8 @@ class _SplashScreenState extends State<SplashScreen>
                       Text(
                         'SEU UNIVERSO',
                         style: TextStyle(
-                          color: const Color(
-                            0xFF9F555B,
+                          color: AppPalette.accent(
+                            context,
                           ).withValues(alpha: 0.78),
                           fontSize: 9,
                           letterSpacing: 1.2,
@@ -385,8 +389,8 @@ class _SplashScreenState extends State<SplashScreen>
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  color: const Color(
-                                    0xFF7D171D,
+                                  color: AppPalette.primaryText(
+                                    context,
                                   ).withValues(alpha: 0.78),
                                   fontSize: 9,
                                   fontWeight: FontWeight.w600,
@@ -395,10 +399,10 @@ class _SplashScreenState extends State<SplashScreen>
                               ),
                             ),
                             const SizedBox(width: 12),
-                            const Text(
+                            Text(
                               '01 / 04',
                               style: TextStyle(
-                                color: Color(0xFF9F555B),
+                                color: AppPalette.accent(context),
                                 fontSize: 9,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 1,
@@ -413,7 +417,9 @@ class _SplashScreenState extends State<SplashScreen>
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
                             valueColor: AlwaysStoppedAnimation<Color>(
-                              const Color(0xFFBB7575).withValues(alpha: 0.82),
+                              AppPalette.accent(
+                                context,
+                              ).withValues(alpha: 0.82),
                             ),
                           ),
                         ),
@@ -421,8 +427,8 @@ class _SplashScreenState extends State<SplashScreen>
                         Text(
                           'Carregando...',
                           style: TextStyle(
-                            color: const Color(
-                              0xFF7D171D,
+                            color: AppPalette.primaryText(
+                              context,
                             ).withValues(alpha: 0.72),
                             fontSize: 10,
                             letterSpacing: 0.3,

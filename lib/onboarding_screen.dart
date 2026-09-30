@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'app_preferences.dart';
 import 'home_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -117,7 +119,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     final totalEtapas = _fluxo.length;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFFE9E9),
+      backgroundColor: AppPalette.background(context),
       body: Stack(
         fit: StackFit.expand,
         children: [
@@ -131,11 +133,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   radius: 1.2,
                   colors: [
                     Color.lerp(
-                      const Color(0xFFFFD6D8),
-                      const Color(0xFFFFE9E9),
+                      AppPalette.surface(context),
+                      AppPalette.background(context),
                       _pulseAnim.value,
                     )!,
-                    const Color(0xFFFFE9E9),
+                    AppPalette.background(context),
                   ],
                 ),
               ),
@@ -155,9 +157,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: [
-                      const Color(
-                        0xFFBB7575,
-                      ).withOpacity(0.08 + _pulseAnim.value * 0.06),
+                      AppPalette.accent(
+                        context,
+                      ).withValues(alpha: 0.08 + _pulseAnim.value * 0.06),
                       Colors.transparent,
                     ],
                   ),
@@ -179,9 +181,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: [
-                      const Color(
-                        0xFFB8787C,
-                      ).withOpacity(0.07 + _pulseAnim.value * 0.05),
+                      AppPalette.button(
+                        context,
+                      ).withValues(alpha: 0.07 + _pulseAnim.value * 0.05),
                       Colors.transparent,
                     ],
                   ),
@@ -209,17 +211,19 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(
-                              color: const Color(0xFFB8787C).withOpacity(0.18),
+                              color: AppPalette.button(
+                                context,
+                              ).withValues(alpha: 0.18),
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: const Color(
-                                  0xFFBB7575,
-                                ).withOpacity(0.18),
+                                color: AppPalette.border(
+                                  context,
+                                ).withValues(alpha: 0.4),
                               ),
                             ),
-                            child: const Icon(
+                            child: Icon(
                               Icons.arrow_back_ios_new,
-                              color: Color(0xFFBB7575),
+                              color: AppPalette.primaryText(context),
                               size: 16,
                             ),
                           ),
@@ -241,11 +245,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                                 value: totalEtapas > 0
                                     ? (_etapa + 1) / totalEtapas
                                     : 0,
-                                backgroundColor: const Color(
-                                  0xFFB8787C,
-                                ).withOpacity(0.28),
-                                valueColor: const AlwaysStoppedAnimation<Color>(
-                                  Color(0xFFBB7575),
+                                backgroundColor: AppPalette.border(
+                                  context,
+                                ).withValues(alpha: 0.28),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  AppPalette.accent(context),
                                 ),
                               ),
                             ),
@@ -254,12 +258,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           Text(
                             "${_etapa + 1} de $totalEtapas",
                             style: TextStyle(
-                              color: const Color.fromARGB(
-                                255,
-                                200,
-                                122,
-                                127,
-                              ).withOpacity(0.55),
+                              color: AppPalette.mutedText(context),
                               fontSize: 11,
                             ),
                           ),
@@ -300,47 +299,21 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                       height: 56,
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          shadowColor: Colors.transparent,
+                          backgroundColor: AppPalette.button(context),
+                          foregroundColor: Colors.white,
                           padding: EdgeInsets.zero,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
                           ),
                         ),
                         onPressed: _podeProsseguir ? _avancar : null,
-                        child: Ink(
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [
-                                Color.fromARGB(255, 200, 145, 149),
-                                Color.fromARGB(255, 200, 145, 149),
-                              ],
-                              begin: Alignment.centerLeft,
-                              end: Alignment.centerRight,
-                            ),
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: _podeProsseguir
-                                ? [
-                                    BoxShadow(
-                                      color: const Color(
-                                        0xFFB8787C,
-                                      ).withOpacity(0.4),
-                                      blurRadius: 24,
-                                      offset: const Offset(0, 8),
-                                    ),
-                                  ]
-                                : [],
-                          ),
-                          child: Center(
-                            child: Text(
-                              _ehUltimaEtapa ? "Começar" : "Próximo",
-                              style: const TextStyle(
-                                fontSize: 17,
-                                color: Color(0xFFFFE9E9),
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
+                        child: Text(
+                          _ehUltimaEtapa ? "Começar" : "Próximo",
+                          style: const TextStyle(
+                            fontSize: 17,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5,
                           ),
                         ),
                       ),
@@ -383,7 +356,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           Text(
             "Pode selecionar mais de um.",
             style: TextStyle(
-              color: const Color(0xFFB8787C).withOpacity(0.70),
+              color: AppPalette.mutedText(context),
               fontSize: 14,
             ),
           ),
@@ -405,43 +378,27 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   height: 118,
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    gradient: sel
-                        ? const LinearGradient(
-                            colors: [Color(0xFFBB7575), Color(0xFFBB7575)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          )
-                        : null,
                     color: sel
-                        ? null
-                        : const Color(0xFFB8787C).withOpacity(0.20),
+                        ? AppPalette.accent(context)
+                        : AppPalette.surface(context),
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(
                       color: sel
-                          ? const Color(0xFFB8787C).withOpacity(0.75)
-                          : const Color(0xFFB8787C).withOpacity(0.25),
+                          ? AppPalette.button(context)
+                          : AppPalette.border(context).withValues(alpha: 0.35),
                       width: sel ? 1.5 : 1,
                     ),
                   ),
                   child: Row(
                     children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.asset(
-                          imagem,
-                          width: 68,
-                          height: 72,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
-                            width: 68,
-                            height: 72,
-                            color: const Color(0xFF7D171D),
-                            alignment: Alignment.center,
-                            child: const Icon(
-                              Icons.image_not_supported_outlined,
-                              color: Color(0xFFFFE9E9),
-                            ),
-                          ),
+                      Image.asset(
+                        imagem,
+                        width: valor == 'livros' ? 54 : 68,
+                        height: 72,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => Icon(
+                          Icons.image_not_supported_outlined,
+                          color: AppPalette.primaryText(context),
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -450,8 +407,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           nome,
                           style: TextStyle(
                             color: sel
-                                ? const Color(0xFFFFE9E9)
-                                : const Color(0xFFB8787C),
+                                ? Colors.white
+                                : AppPalette.primaryText(context),
                             fontSize: 17,
                             fontWeight: sel ? FontWeight.w700 : FontWeight.w400,
                           ),
@@ -498,7 +455,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           Text(
             "Selecione quantos quiser.",
             style: TextStyle(
-              color: const Color(0xFFB8787C).withOpacity(0.70),
+              color: AppPalette.mutedText(context),
               fontSize: 14,
             ),
           ),
@@ -531,13 +488,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   duration: const Duration(milliseconds: 200),
                   decoration: BoxDecoration(
                     color: sel
-                        ? const Color(0xFFBB7575)
-                        : const Color(0xFFDEB2B4),
+                        ? AppPalette.accent(context)
+                        : AppPalette.surface(context),
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(
                       color: sel
-                          ? const Color(0xFF9E5555)
-                          : const Color(0xFFD7A5A7),
+                          ? AppPalette.button(context)
+                          : AppPalette.border(context).withValues(alpha: 0.35),
                       width: sel ? 2 : 1,
                     ),
                   ),
@@ -549,10 +506,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                         width: 42,
                         height: 42,
                         fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => const Icon(
+                        errorBuilder: (_, __, ___) => Icon(
                           Icons.image_not_supported_outlined,
                           size: 34,
-                          color: Color(0xFF7D171D),
+                          color: AppPalette.primaryText(context),
                         ),
                       ),
 
@@ -563,8 +520,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: sel
-                              ? const Color(0xFFFFE9E9)
-                              : const Color(0xFF7D1717),
+                              ? Colors.white
+                              : AppPalette.primaryText(context),
                           fontSize: 14,
                           fontWeight: sel ? FontWeight.w600 : FontWeight.w500,
                         ),
@@ -590,8 +547,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       children: [
         Text(
           titulo,
-          style: const TextStyle(
-            color: Color(0xFFB8787C),
+          style: TextStyle(
+            color: AppPalette.mutedText(context),
             fontFamily: 'IMFellFrenchCanon',
             fontSize: 32,
             fontWeight: FontWeight.bold,

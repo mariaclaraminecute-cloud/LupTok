@@ -1,9 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:video_player/video_player.dart';
 import 'app_preferences.dart';
-import 'groups_screen.dart';
+import 'groups_screen.dart' show GroupsScreen;
 import 'interest_utils.dart';
 import 'profile_screen.dart';
 import 'settings_screen.dart';
@@ -189,10 +191,38 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     await _carregarPreferencias();
   }
 
+  Future<void> _abrirGravador() async {
+    final publicado = await Navigator.of(context).push<PublishedVideo>(
+      MaterialPageRoute<PublishedVideo>(
+        builder: (_) => const VideoRecorderScreen(),
+      ),
+    );
+    if (!mounted || publicado == null) return;
+    setState(() {
+      _videos.insert(
+        0,
+        _VideoCard(
+          titulo: publicado.description.isEmpty
+              ? 'Meu vídeo'
+              : publicado.description,
+          autor: '@seu.usuario',
+          tipo: publicado.contentType,
+          genero: 'Vídeo de ${publicado.contentType.toLowerCase()}',
+          spoiler: publicado.spoiler,
+          stars: 0,
+          comentarios: 0,
+          cor: const Color(0xFF191416),
+          videoPath: publicado.videoPath,
+          privacy: publicado.privacy,
+        ),
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFFE9E9),
+      backgroundColor: AppPalette.background(context),
       extendBody: false,
       body: Stack(
         fit: StackFit.expand,
@@ -209,6 +239,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ProfileScreen(
                 onOpenSettings: _abrirConfiguracoes,
                 availableVideos: _videos.map((video) => video.titulo).toList(),
+                privateVideos: _videos
+                    .where((video) => video.privacy == 'Somente amigos')
+                    .map((video) => video.titulo)
+                    .toList(),
               ),
               _LupezOverlay(
                 glowAnim: _glowAnim,
@@ -219,7 +253,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
             ],
           ),
-          if (!_mostrarBemVindo && !_mostrarHumor)
+          if (!_mostrarBemVindo && !_mostrarHumor && _tabAtual != 3)
             Positioned(left: 0, right: 0, bottom: 0, child: _buildBottomNav()),
 
           // ── Bem-vindo (aparece primeiro) ───────────────────────────
@@ -235,7 +269,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   // ── Tela de Bem-vindo ──────────────────────────────────────────────
   Widget _buildBemVindoOverlay() {
     return Container(
-      color: const Color(0xFF000000),
+      color: AppPalette.isDark(context)
+          ? AppPalette.darkBackground
+          : const Color(0xFF000000),
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -310,18 +346,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       ),
                       child: child,
                     ),
-                    child: Image.asset('assets/images/logo.png', height: 100),
+                    child: Image.asset(AppPalette.logo(context), height: 100),
                   ),
 
                   const SizedBox(height: 36),
 
-                  const Text(
+                  Text(
                     "Bem-vindo!",
                     style: TextStyle(
-                      color: Color(0xFFBB7575),
+                      color: AppPalette.isDark(context)
+                          ? Colors.white
+                          : const Color(0xFFBB7575),
                       fontSize: 44,
                       fontWeight: FontWeight.bold,
-                      letterSpacing: -0.5,
                     ),
                   ),
 
@@ -380,7 +417,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return GestureDetector(
       onTap: () => setState(() => _mostrarHumor = false),
       child: Container(
-        color: const Color(0xFFFFE9E9).withOpacity(0.92),
+        color: AppPalette.background(context).withValues(alpha: 0.94),
         child: Center(
           child: GestureDetector(
             onTap: () {},
@@ -388,7 +425,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               margin: const EdgeInsets.symmetric(horizontal: 24),
               padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFE9E9),
+                color: AppPalette.surface(context),
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(
                   color: const Color.fromARGB(
@@ -453,7 +490,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     "Vamos personalizar suas recomendações",
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: const Color(0xFFBB7575).withOpacity(0.65),
+                      color: AppPalette.mutedText(context),
                       fontSize: 14,
                     ),
                   ),
@@ -489,12 +526,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                 : null,
                             color: sel
                                 ? null
-                                : const Color(0xFFB8787C).withOpacity(0.18),
+                                : AppPalette.raisedSurface(context),
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(
                               color: sel
                                   ? cor.withOpacity(0.6)
-                                  : const Color(0xFFBB7575).withOpacity(0.20),
+                                  : AppPalette.border(context),
                               width: sel ? 2 : 1,
                             ),
                             boxShadow: sel
@@ -516,8 +553,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                 nome,
                                 style: TextStyle(
                                   color: sel
-                                      ? const Color(0xFFFFE9E9)
-                                      : const Color(0xFFBB7575),
+                                      ? Colors.white
+                                      : AppPalette.primaryText(context),
                                   fontSize: 14,
                                   fontWeight: sel
                                       ? FontWeight.w600
@@ -539,7 +576,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     height: 52,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
+                        backgroundColor: AppPalette.button(context),
                         shadowColor: Colors.transparent,
                         padding: EdgeInsets.zero,
                         shape: RoundedRectangleBorder(
@@ -549,8 +586,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       onPressed: () => setState(() => _mostrarHumor = false),
                       child: Ink(
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFFB8787C), Color(0xFFBB7575)],
+                          gradient: LinearGradient(
+                            colors: [
+                              AppPalette.button(context),
+                              AppPalette.darkButton,
+                            ],
                             begin: Alignment.centerLeft,
                             end: Alignment.centerRight,
                           ),
@@ -592,14 +632,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget _buildBottomNav() {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFFFE9E9),
+        color: AppPalette.background(context),
         border: Border(
-          top: BorderSide(color: const Color(0xFFBB7575).withOpacity(0.22)),
+          top: BorderSide(
+            color: AppPalette.border(context).withValues(alpha: 0.35),
+          ),
         ),
       ),
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 1),
           child: Row(
             children: [
               _navAssetItem(
@@ -618,24 +660,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               Expanded(
                 child: Center(
                   child: Material(
-                    color: const Color(0xFFBB7575),
+                    color: AppPalette.button(context),
                     borderRadius: BorderRadius.circular(14),
                     child: InkWell(
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const VideoRecorderScreen(),
-                        ),
-                      ),
+                      onTap: _abrirGravador,
                       borderRadius: BorderRadius.circular(14),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
-                          vertical: 8,
+                          vertical: 2,
                         ),
                         child: Image.asset(
                           'assets/images/gravar.png',
-                          width: 34,
-                          height: 34,
+                          width: 28,
+                          height: 28,
                           fit: BoxFit.contain,
                           errorBuilder: (_, __, ___) => const Icon(
                             Icons.add_rounded,
@@ -679,16 +717,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             mainAxisSize: MainAxisSize.min,
             children: [
               SizedBox(
-                width: 28,
-                height: 28,
+                width: 22,
+                height: 22,
                 child: Image.asset(
                   image,
                   fit: BoxFit.contain,
                   errorBuilder: (_, __, ___) => Icon(
                     fallback ?? Icons.circle_outlined,
                     color: active
-                        ? const Color(0xFF7D171D)
-                        : const Color(0xFFBB7575),
+                        ? AppPalette.primaryText(context)
+                        : AppPalette.accent(context),
                     size: 24,
                   ),
                 ),
@@ -698,9 +736,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 label,
                 style: TextStyle(
                   color: active
-                      ? const Color(0xFF7D171D)
-                      : const Color(0xFFBB7575),
-                  fontSize: 10,
+                      ? AppPalette.primaryText(context)
+                      : AppPalette.mutedText(context),
+                  fontSize: 8,
                   fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                 ),
               ),
@@ -723,13 +761,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             mainAxisSize: MainAxisSize.min,
             children: [
               CircleAvatar(
-                radius: 14,
+                radius: 12,
                 backgroundColor: active
-                    ? const Color(0xFF7D171D)
-                    : const Color(0xFFBB7575),
+                    ? AppPalette.button(context)
+                    : AppPalette.accent(context),
                 child: const Text(
                   'A',
-                  style: TextStyle(color: Colors.white, fontSize: 13),
+                  style: TextStyle(color: Colors.white, fontSize: 12),
                 ),
               ),
               const SizedBox(height: 2),
@@ -737,9 +775,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 'Perfil',
                 style: TextStyle(
                   color: active
-                      ? const Color(0xFF7D171D)
-                      : const Color(0xFFBB7575),
-                  fontSize: 10,
+                      ? AppPalette.primaryText(context)
+                      : AppPalette.mutedText(context),
+                  fontSize: 8,
                   fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                 ),
               ),
@@ -761,13 +799,13 @@ class _LoopSearchDelegate extends SearchDelegate<int?> {
 
   @override
   ThemeData appBarTheme(BuildContext context) => Theme.of(context).copyWith(
-    scaffoldBackgroundColor: const Color(0xFFFFE9E9),
-    appBarTheme: const AppBarTheme(
-      backgroundColor: Color(0xFFFFE9E9),
-      foregroundColor: Color(0xFF7D171D),
+    scaffoldBackgroundColor: AppPalette.background(context),
+    appBarTheme: AppBarTheme(
+      backgroundColor: AppPalette.background(context),
+      foregroundColor: AppPalette.primaryText(context),
     ),
-    inputDecorationTheme: const InputDecorationTheme(
-      hintStyle: TextStyle(color: Color(0xFFB8787C)),
+    inputDecorationTheme: InputDecorationTheme(
+      hintStyle: TextStyle(color: AppPalette.mutedText(context)),
     ),
   );
 
@@ -811,7 +849,7 @@ class _LoopSearchDelegate extends SearchDelegate<int?> {
     return ListView.builder(
       itemCount: matches.length,
       itemBuilder: (context, index) {
-        final (videoIndex, video) = matches[index];
+        final video = matches[index].$2;
         return ListTile(
           leading: CircleAvatar(
             backgroundColor: video.cor,
@@ -819,7 +857,6 @@ class _LoopSearchDelegate extends SearchDelegate<int?> {
           ),
           title: Text(video.titulo),
           subtitle: Text('${video.tipo} · ${video.genero}'),
-          onTap: () => close(context, videoIndex),
         );
       },
     );
@@ -832,6 +869,8 @@ class _LoopSearchDelegate extends SearchDelegate<int?> {
 
 class _VideoCard {
   final String titulo, tipo, genero, spoiler, autor;
+  final String? videoPath;
+  final String privacy;
   final int stars, comentarios;
   final Color cor;
   const _VideoCard({
@@ -843,7 +882,69 @@ class _VideoCard {
     required this.stars,
     required this.comentarios,
     required this.cor,
+    this.videoPath,
+    this.privacy = 'Público',
   });
+}
+
+class _FeedVideo extends StatefulWidget {
+  final String path;
+
+  const _FeedVideo({required this.path});
+
+  @override
+  State<_FeedVideo> createState() => _FeedVideoState();
+}
+
+class _FeedVideoState extends State<_FeedVideo> {
+  late final VideoPlayerController _controller;
+  late final Future<void> _initialize;
+
+  @override
+  void initState() {
+    super.initState();
+    final uri = kIsWeb ? Uri.parse(widget.path) : Uri.file(widget.path);
+    _controller = VideoPlayerController.networkUrl(uri);
+    _initialize = _controller.initialize().then((_) async {
+      await _controller.setLooping(true);
+      await _controller.play();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<void>(
+      future: _initialize,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) return const ColoredBox(color: Colors.black);
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const ColoredBox(
+            color: Colors.black,
+            child: Center(
+              child: CircularProgressIndicator(color: Color(0xFFFF4D67)),
+            ),
+          );
+        }
+        final aspectRatio = _controller.value.aspectRatio;
+        return ClipRect(
+          child: FittedBox(
+            fit: BoxFit.cover,
+            child: SizedBox(
+              width: 1000 * aspectRatio,
+              height: 1000,
+              child: VideoPlayer(_controller),
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -981,15 +1082,27 @@ class _LoopTabState extends State<_LoopTab> {
   }
 
   String _spoilerLabel(String s) {
-    if (widget.ocultarSpoilers && s != 'nenhum') return '🔒 Spoiler oculto';
+    if (widget.ocultarSpoilers && s != 'nenhum') return 'Spoiler oculto';
     switch (s) {
       case 'leve':
-        return '⚠️ Spoiler leve';
+        return 'Spoiler leve';
       case 'muito':
-        return '🚨 Muito spoiler';
+        return 'Muito spoiler';
       default:
-        return '✅ Sem spoiler';
+        return 'Sem spoiler';
     }
+  }
+
+  String _tipoImagem(String tipo) {
+    final arquivo = switch (tipo.toLowerCase()) {
+      'filme' => 'filme',
+      'série' || 'serie' => 'serie',
+      'livro' => 'livro',
+      'anime' => 'anime',
+      'k-drama' || 'dorama' => 'dorama',
+      _ => 'filme',
+    };
+    return 'assets/images/$arquivo.png';
   }
 
   Color _spoilerColor(String s) {
@@ -1035,16 +1148,23 @@ class _LoopTabState extends State<_LoopTab> {
 
   @override
   Widget build(BuildContext context) {
+    final publicVideos = widget.videos
+        .where((video) => video.privacy == 'Público')
+        .toList();
     final feed = _mostrandoSeguindo
-        ? widget.videos
+        ? publicVideos
               .where((video) => _following.contains(video.autor))
               .toList()
-        : widget.videos;
+        : publicVideos;
     if (feed.isEmpty) {
       return Stack(
         fit: StackFit.expand,
         children: [
-          const ColoredBox(color: Color(0xFF191416)),
+          ColoredBox(
+            color: AppPalette.isDark(context)
+                ? AppPalette.darkBackground
+                : const Color(0xFF191416),
+          ),
           _buildTopBar(),
           Center(
             child: Padding(
@@ -1104,7 +1224,14 @@ class _LoopTabState extends State<_LoopTab> {
           fit: StackFit.expand,
           children: [
             // Fundo
-            Container(color: v.cor),
+            if (v.videoPath == null)
+              Container(
+                color: AppPalette.isDark(context)
+                    ? AppPalette.darkBackground
+                    : v.cor,
+              )
+            else
+              _FeedVideo(path: v.videoPath!),
             Center(
               child: Opacity(
                 opacity: 0.06,
@@ -1118,35 +1245,16 @@ class _LoopTabState extends State<_LoopTab> {
             Positioned(
               left: 16,
               right: 72,
-              bottom: 124,
+              bottom: 70,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      _badge(
-                        _tipoEmoji(v.tipo) + " " + v.tipo,
-                        const Color.fromARGB(
-                          255,
-                          198,
-                          125,
-                          125,
-                        ).withOpacity(0.12),
-                        const Color(0xFFBB7575),
-                      ),
-                      const SizedBox(width: 8),
-                      _badge(
-                        _spoilerLabel(v.spoiler),
-                        _spoilerColor(v.spoiler).withOpacity(0.15),
-                        _spoilerColor(v.spoiler),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
                   Text(
                     v.titulo,
-                    style: const TextStyle(
-                      color: Color(0xFFBB7575),
+                    style: TextStyle(
+                      color: AppPalette.isDark(context)
+                          ? Colors.white
+                          : const Color(0xFFBB7575),
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
                       shadows: [Shadow(color: Colors.black54, blurRadius: 8)],
@@ -1156,12 +1264,14 @@ class _LoopTabState extends State<_LoopTab> {
                   Text(
                     v.genero,
                     style: TextStyle(
-                      color: const Color.fromARGB(
-                        255,
-                        179,
-                        127,
-                        127,
-                      ).withOpacity(0.6),
+                      color: AppPalette.isDark(context)
+                          ? Colors.white70
+                          : const Color.fromARGB(
+                              255,
+                              179,
+                              127,
+                              127,
+                            ).withOpacity(0.6),
                       fontSize: 14,
                     ),
                   ),
@@ -1169,72 +1279,153 @@ class _LoopTabState extends State<_LoopTab> {
               ),
             ),
             Positioned(
-              top: 112,
+              top: 128,
               left: 14,
+              right: 14,
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  GestureDetector(
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => ProfileScreen(
-                          isOwner: false,
-                          publicUsername: v.autor,
-                          publicInterests: [v.tipo, v.genero],
-                          availableVideos: widget.videos
-                              .map((video) => video.titulo)
-                              .toList(),
-                        ),
-                      ),
-                    ),
-                    child: Row(
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(2.5),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(color: corAnel, width: 2.5),
-                          ),
-                          child: CircleAvatar(
-                            radius: 18,
-                            backgroundColor: const Color(0xFFBB7575),
-                            child: Text(
-                              v.autor
-                                  .replaceFirst('@', '')
-                                  .substring(0, 1)
-                                  .toUpperCase(),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => ProfileScreen(
+                                      isOwner: false,
+                                      publicUsername: v.autor,
+                                      publicInterests: [v.tipo, v.genero],
+                                      availableVideos: widget.videos
+                                          .map((video) => video.titulo)
+                                          .toList(),
+                                    ),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(2.5),
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: corAnel,
+                                          width: 2.5,
+                                        ),
+                                      ),
+                                      child: CircleAvatar(
+                                        radius: 18,
+                                        backgroundColor: AppPalette.accent(
+                                          context,
+                                        ),
+                                        child: Text(
+                                          v.autor
+                                              .replaceFirst('@', '')
+                                              .substring(0, 1)
+                                              .toUpperCase(),
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Flexible(
+                                      child: Text(
+                                        v.autor,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                          shadows: [
+                                            Shadow(
+                                              color: Colors.black87,
+                                              blurRadius: 6,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
+                            const SizedBox(width: 4),
+                            TextButton(
+                              onPressed: () => _toggleFollow(v.autor),
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                backgroundColor: AppPalette.button(context),
+                                minimumSize: const Size(0, 30),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                ),
+                              ),
+                              child: Text(
+                                _following.contains(v.autor)
+                                    ? 'Seguindo'
+                                    : 'Seguir',
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          v.autor,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            shadows: [
-                              Shadow(color: Colors.black87, blurRadius: 6),
-                            ],
-                          ),
+                        const SizedBox(height: 7),
+                        _badge(
+                          _spoilerLabel(v.spoiler),
+                          _spoilerColor(v.spoiler).withOpacity(0.16),
+                          _spoilerColor(v.spoiler),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  TextButton(
-                    onPressed: () => _toggleFollow(v.autor),
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      backgroundColor: Colors.black38,
-                      minimumSize: const Size(0, 32),
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                  const SizedBox(width: 8),
+                  Container(
+                    constraints: const BoxConstraints(maxWidth: 104),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 9,
+                      vertical: 7,
                     ),
-                    child: Text(
-                      _following.contains(v.autor) ? 'Seguindo' : 'Seguir',
+                    decoration: BoxDecoration(
+                      color: AppPalette.isDark(context)
+                          ? AppPalette.darkBackground.withValues(alpha: 0.92)
+                          : Colors.black.withOpacity(0.38),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.white24),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Image.asset(
+                          _tipoImagem(v.tipo),
+                          width: 22,
+                          height: 22,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => const Icon(
+                            Icons.movie_outlined,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        Flexible(
+                          child: Text(
+                            v.tipo,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -1243,7 +1434,7 @@ class _LoopTabState extends State<_LoopTab> {
             // Ações laterais
             Positioned(
               right: 12,
-              bottom: 124,
+              top: MediaQuery.sizeOf(context).height * 0.37,
               child: Column(
                 children: [
                   _acao(
@@ -1251,7 +1442,7 @@ class _LoopTabState extends State<_LoopTab> {
                         ? Icons.star_rounded
                         : Icons.star_outline_rounded,
                     label: _fmt(v.stars + (starrado ? 1 : 0)),
-                    cor: Colors.white,
+                    cor: starrado ? const Color(0xFFFFD54F) : Colors.white,
                     onTap: () => setState(
                       () => starrado
                           ? _starred.remove(videoIndex)
@@ -1261,6 +1452,7 @@ class _LoopTabState extends State<_LoopTab> {
                   const SizedBox(height: 20),
                   _acao(
                     icon: Icons.chat_bubble_outline_rounded,
+                    imageAsset: 'assets/images/balao.png',
                     label: _fmt(
                       v.comentarios + (_comentarios[videoIndex]?.length ?? 0),
                     ),
@@ -1299,14 +1491,14 @@ class _LoopTabState extends State<_LoopTab> {
       left: 0,
       right: 0,
       child: Container(
-        color: const Color(0xFFFFD6D8),
+        color: AppPalette.background(context),
         padding: const EdgeInsets.fromLTRB(12, 4, 10, 8),
         child: SafeArea(
           bottom: false,
           child: Row(
             children: [
               Image.asset(
-                'assets/images/logo.png',
+                AppPalette.logo(context),
                 width: 38,
                 height: 38,
                 fit: BoxFit.contain,
@@ -1317,7 +1509,7 @@ class _LoopTabState extends State<_LoopTab> {
                   height: 38,
                   padding: const EdgeInsets.all(3),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFBB7575).withValues(alpha: 0.14),
+                    color: AppPalette.button(context).withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
@@ -1339,9 +1531,9 @@ class _LoopTabState extends State<_LoopTab> {
               IconButton(
                 tooltip: 'Pesquisar',
                 onPressed: _pesquisar,
-                icon: const Icon(
+                icon: Icon(
                   Icons.search_rounded,
-                  color: Color(0xFF7D171D),
+                  color: AppPalette.primaryText(context),
                 ),
               ),
             ],
@@ -1364,13 +1556,13 @@ class _LoopTabState extends State<_LoopTab> {
           duration: const Duration(milliseconds: 180),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: active ? const Color(0xFFBB7575) : Colors.transparent,
+            color: active ? AppPalette.button(context) : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(
             label,
             style: TextStyle(
-              color: active ? Colors.white : const Color(0xFF7D171D),
+              color: active ? Colors.white : AppPalette.primaryText(context),
               fontSize: 13,
               fontWeight: active ? FontWeight.w700 : FontWeight.w500,
             ),
@@ -1404,17 +1596,21 @@ class _LoopTabState extends State<_LoopTab> {
     required String? label,
     required Color cor,
     required VoidCallback onTap,
+    String? imageAsset,
   }) {
     return GestureDetector(
       onTap: onTap,
       child: Column(
         children: [
-          Icon(
-            icon,
-            color: cor,
-            size: 32,
-            shadows: const [Shadow(color: Colors.black54, blurRadius: 6)],
-          ),
+          if (imageAsset == null)
+            Icon(
+              icon,
+              color: cor,
+              size: 32,
+              shadows: const [Shadow(color: Colors.black54, blurRadius: 6)],
+            )
+          else
+            Image.asset(imageAsset, width: 32, height: 32, fit: BoxFit.contain),
           if (label != null) ...[
             const SizedBox(height: 4),
             Text(
@@ -1495,8 +1691,8 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                 'Comentários · ${widget.titulo}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Color(0xFF493333),
+                style: TextStyle(
+                  color: AppPalette.text(context),
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
                 ),
@@ -1511,11 +1707,13 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                         itemCount: widget.comentarios.length,
                         itemBuilder: (context, index) => ListTile(
                           contentPadding: EdgeInsets.zero,
-                          leading: const CircleAvatar(
-                            backgroundColor: Color(0xFFF1D8D8),
+                          leading: CircleAvatar(
+                            backgroundColor: AppPalette.surface(context),
                             child: Text(
                               'A',
-                              style: TextStyle(color: Color(0xFF8D5558)),
+                              style: TextStyle(
+                                color: AppPalette.primaryText(context),
+                              ),
                             ),
                           ),
                           title: const Text('@anna.beatriz'),
@@ -1534,7 +1732,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                       decoration: InputDecoration(
                         hintText: 'Escreva um comentário',
                         filled: true,
-                        fillColor: Colors.white,
+                        fillColor: AppPalette.input(context),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide.none,
@@ -1547,7 +1745,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                     tooltip: 'Enviar comentário',
                     onPressed: _enviarComentario,
                     style: IconButton.styleFrom(
-                      backgroundColor: const Color(0xFFBB7575),
+                      backgroundColor: AppPalette.button(context),
                     ),
                     icon: const Icon(Icons.send_rounded),
                   ),
@@ -1757,7 +1955,7 @@ class _LupezOverlayState extends State<_LupezOverlay>
   Widget build(BuildContext context) {
     return Container(
       color: widget.fullScreen
-          ? const Color(0xFF111111)
+          ? AppPalette.background(context)
           : Colors.black.withOpacity(0.65),
       child: SafeArea(
         child: Align(
@@ -1767,7 +1965,9 @@ class _LupezOverlayState extends State<_LupezOverlay>
                 ? MediaQuery.sizeOf(context).height
                 : MediaQuery.of(context).size.height * 0.75,
             decoration: BoxDecoration(
-              color: const Color(0xFF0D0D0D),
+              color: AppPalette.isDark(context)
+                  ? AppPalette.darkBackground
+                  : const Color(0xFF0D0D0D),
               borderRadius: widget.fullScreen
                   ? BorderRadius.zero
                   : const BorderRadius.vertical(top: Radius.circular(28)),
@@ -1801,14 +2001,17 @@ class _LupezOverlayState extends State<_LupezOverlay>
                           height: 40,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFFBB7575), Color(0xFFD59EA1)],
+                            gradient: LinearGradient(
+                              colors: [
+                                AppPalette.button(context),
+                                AppPalette.accent(context),
+                              ],
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(
-                                  0xFFBB7575,
-                                ).withOpacity(0.4 * widget.glowAnim.value),
+                                color: AppPalette.accent(context).withValues(
+                                  alpha: 0.4 * widget.glowAnim.value,
+                                ),
                                 blurRadius: 14,
                               ),
                             ],
@@ -1831,8 +2034,11 @@ class _LupezOverlayState extends State<_LupezOverlay>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           ShaderMask(
-                            shaderCallback: (b) => const LinearGradient(
-                              colors: [Color(0xFFBB7575), Color(0xFF7D171D)],
+                            shaderCallback: (b) => LinearGradient(
+                              colors: [
+                                AppPalette.accent(context),
+                                AppPalette.primaryText(context),
+                              ],
                             ).createShader(b),
                             child: const Text(
                               "Lupez",
@@ -1925,10 +2131,10 @@ class _LupezOverlayState extends State<_LupezOverlay>
                             vertical: 8,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.05),
+                            color: AppPalette.surface(context),
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
-                              color: const Color(0xFFBB7575).withOpacity(0.3),
+                              color: AppPalette.border(context),
                             ),
                           ),
                           child: Text(
@@ -1951,7 +2157,9 @@ class _LupezOverlayState extends State<_LupezOverlay>
                     14,
                     0,
                     14,
-                    MediaQuery.of(context).viewInsets.bottom + 12,
+                    widget.fullScreen
+                        ? 12
+                        : MediaQuery.of(context).viewInsets.bottom + 12,
                   ),
                   child: Row(
                     children: [
@@ -1959,10 +2167,12 @@ class _LupezOverlayState extends State<_LupezOverlay>
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 14),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.07),
+                            color: AppPalette.surface(context),
                             borderRadius: BorderRadius.circular(22),
                             border: Border.all(
-                              color: Colors.white.withOpacity(0.10),
+                              color: AppPalette.border(
+                                context,
+                              ).withValues(alpha: 0.45),
                             ),
                           ),
                           child: TextField(
@@ -1997,14 +2207,17 @@ class _LupezOverlayState extends State<_LupezOverlay>
                             height: 44,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFFBB7575), Color(0xFF7D171D)],
+                              gradient: LinearGradient(
+                                colors: [
+                                  AppPalette.button(context),
+                                  AppPalette.darkButton,
+                                ],
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(
-                                    0xFFBB7575,
-                                  ).withOpacity(0.35 * widget.glowAnim.value),
+                                  color: AppPalette.accent(context).withValues(
+                                    alpha: 0.35 * widget.glowAnim.value,
+                                  ),
                                   blurRadius: 14,
                                 ),
                               ],

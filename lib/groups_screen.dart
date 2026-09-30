@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'app_preferences.dart';
 import 'interest_utils.dart';
 
 class GroupsScreen extends StatelessWidget {
@@ -77,18 +78,18 @@ class GroupsScreen extends StatelessWidget {
       );
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFFE9E9),
+      backgroundColor: AppPalette.background(context),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(18, 14, 18, 28),
           children: [
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Grupos',
                     style: TextStyle(
-                      color: Color(0xFF7D171D),
+                      color: AppPalette.primaryText(context),
                       fontFamily: 'IMFellFrenchCanon',
                       fontSize: 30,
                     ),
@@ -98,14 +99,14 @@ class GroupsScreen extends StatelessWidget {
                   tooltip: 'Convidar pessoas',
                   onPressed: () => _showPeople(context),
                   icon: const Icon(Icons.person_add_alt_1_rounded),
-                  color: const Color(0xFF7D171D),
+                  color: AppPalette.primaryText(context),
                 ),
               ],
             ),
             Text(
               'Conversas alinhadas com o que você curte',
               style: TextStyle(
-                color: const Color(0xFF7D171D).withOpacity(0.65),
+                color: AppPalette.mutedText(context),
               ),
             ),
             const SizedBox(height: 20),
@@ -113,7 +114,7 @@ class GroupsScreen extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.72),
+                  color: AppPalette.raisedSurface(context),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Text(
@@ -131,10 +132,10 @@ class GroupsScreen extends StatelessWidget {
                 ),
               ),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'Pessoas para conhecer',
               style: TextStyle(
-                color: Color(0xFF7D171D),
+                color: AppPalette.primaryText(context),
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
               ),
@@ -146,11 +147,14 @@ class GroupsScreen extends StatelessWidget {
                 compatibility: _compatibility(person.interests),
                 onInvite: () => _invite(context, person),
               ),
-            const Padding(
-              padding: EdgeInsets.only(top: 12),
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
               child: Text(
                 'Conversas e convites ficam salvos neste aparelho nesta versão. Para conversar com outras pessoas, o LupTok precisa de um serviço online.',
-                style: TextStyle(fontSize: 12, color: Color(0xFF7D171D)),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppPalette.mutedText(context),
+                ),
               ),
             ),
           ],
@@ -162,7 +166,7 @@ class GroupsScreen extends StatelessWidget {
   void _showPeople(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFFFFF7F7),
+      backgroundColor: AppPalette.surface(context),
       builder: (context) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(20),
@@ -234,7 +238,7 @@ class _GroupCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
-      color: Colors.white.withValues(alpha: 0.82),
+      color: AppPalette.raisedSurface(context),
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       child: ListTile(
@@ -248,9 +252,12 @@ class _GroupCard extends StatelessWidget {
             child: Image.asset(
               group.image,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => const ColoredBox(
-                color: Color(0xFFFFD6D8),
-                child: Icon(Icons.groups_rounded, color: Color(0xFF7D171D)),
+              errorBuilder: (_, __, ___) => ColoredBox(
+                color: AppPalette.surface(context),
+                child: Icon(
+                  Icons.groups_rounded,
+                  color: AppPalette.primaryText(context),
+                ),
               ),
             ),
           ),
@@ -285,7 +292,7 @@ class _PersonCard extends StatelessWidget {
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: CircleAvatar(
-        backgroundColor: const Color(0xFFBB7575),
+        backgroundColor: AppPalette.button(context),
         child: Text(
           person.name.substring(0, 1),
           style: const TextStyle(color: Colors.white),
@@ -297,11 +304,12 @@ class _PersonCard extends StatelessWidget {
         tooltip: 'Convidar para conversar',
         onPressed: onInvite,
         icon: const Icon(Icons.chat_bubble_outline_rounded),
-        color: const Color(0xFF7D171D),
+        color: AppPalette.primaryText(context),
       ),
     );
   }
 }
+
 
 class _GroupChatScreen extends StatefulWidget {
   final _InterestGroup group;
@@ -364,11 +372,11 @@ class _GroupChatScreenState extends State<_GroupChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFFE9E9),
+      backgroundColor: AppPalette.background(context),
       appBar: AppBar(
         title: Text(widget.group.title),
-        backgroundColor: const Color(0xFFFFE9E9),
-        foregroundColor: const Color(0xFF7D171D),
+        backgroundColor: AppPalette.background(context),
+        foregroundColor: AppPalette.primaryText(context),
         actions: [
           IconButton(
             tooltip: 'Detalhes do grupo',
@@ -400,15 +408,15 @@ class _GroupChatScreenState extends State<_GroupChatScreen> {
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: index.isEven
-                              ? Colors.white
-                              : const Color(0xFFBB7575),
+                              ? AppPalette.raisedSurface(context)
+                              : AppPalette.button(context),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
                           _messages[index],
                           style: TextStyle(
                             color: index.isEven
-                                ? const Color(0xFF493333)
+                                ? AppPalette.text(context)
                                 : Colors.white,
                           ),
                         ),
@@ -431,7 +439,7 @@ class _GroupChatScreenState extends State<_GroupChatScreen> {
                       decoration: InputDecoration(
                         hintText: 'Escreva uma mensagem',
                         filled: true,
-                        fillColor: Colors.white,
+                        fillColor: AppPalette.input(context),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide.none,
@@ -443,7 +451,7 @@ class _GroupChatScreenState extends State<_GroupChatScreen> {
                   IconButton.filled(
                     onPressed: _sendMessage,
                     style: IconButton.styleFrom(
-                      backgroundColor: const Color(0xFFBB7575),
+                      backgroundColor: AppPalette.button(context),
                     ),
                     icon: const Icon(Icons.send_rounded),
                   ),

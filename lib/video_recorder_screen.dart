@@ -3,9 +3,12 @@ import 'dart:async';
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:gal/gal.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:video_player/video_player.dart';
+import 'app_preferences.dart';
 
 class VideoRecorderScreen extends StatefulWidget {
   const VideoRecorderScreen({super.key});
@@ -28,7 +31,7 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
   bool _hdRecording = true;
   List<CameraDescription> _cameras = [];
   int _cameraIndex = 0;
-  int _maxDuration = 15;
+  int _maxDuration = 60;
   int _countdownDuration = 0;
   int _countdown = 0;
   int _elapsedSeconds = 0;
@@ -39,6 +42,7 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
   @override
   void initState() {
     super.initState();
+    SystemChrome.setPreferredOrientations(const [DeviceOrientation.portraitUp]);
     _prepareCamera();
   }
 
@@ -67,11 +71,11 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
     try {
       final cameras = await availableCameras();
       if (cameras.isEmpty) throw Exception('Nenhuma câmera foi encontrada.');
-      final backCameraIndex = cameras.indexWhere(
-        (item) => item.lensDirection == CameraLensDirection.back,
+      final frontCameraIndex = cameras.indexWhere(
+        (item) => item.lensDirection == CameraLensDirection.front,
       );
       final selectedIndex =
-          cameraIndex ?? (backCameraIndex < 0 ? 0 : backCameraIndex);
+          cameraIndex ?? (frontCameraIndex < 0 ? 0 : frontCameraIndex);
       final camera = cameras[selectedIndex.clamp(0, cameras.length - 1)];
       final controller = CameraController(
         camera,
@@ -115,7 +119,23 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
           _gallerySaved = false;
           _saveError = null;
         });
-        if (_autoSave) await _salvarNaGaleria(video);
+        if (_autoSave) unawaited(_salvarNaGaleria(video));
+        if (!mounted) return;
+        final publicado = await Navigator.of(context).push<PublishedVideo>(
+          MaterialPageRoute<PublishedVideo>(
+            builder: (_) => VideoPreviewScreen(video: video),
+          ),
+        );
+        if (!mounted) return;
+        if (publicado == null) {
+          setState(() {
+            _recordedVideo = null;
+            _gallerySaved = false;
+            _saveError = null;
+          });
+        } else {
+          Navigator.of(context).pop(publicado);
+        }
       } else {
         setState(() => _startingRecording = true);
         for (var remaining = _countdownDuration; remaining > 0; remaining--) {
@@ -249,12 +269,21 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
   void dispose() {
     _recordingTimer?.cancel();
     _cameraController?.dispose();
+    SystemChrome.setPreferredOrientations(const [
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final controller = _cameraController;
+    final cameraBackground = AppPalette.isDark(context)
+        ? AppPalette.darkBackground
+        : const Color(0xFF171313);
     return PopScope(
       canPop: !_isRecording && !_startingRecording,
       onPopInvokedWithResult: (didPop, _) {
@@ -265,7 +294,7 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
         }
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFF171313),
+        backgroundColor: cameraBackground,
         body: Stack(
           fit: StackFit.expand,
           children: [
@@ -286,7 +315,7 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
                 ),
               )
             else
-              const ColoredBox(color: Color(0xFF171313)),
+              ColoredBox(color: cameraBackground),
             const DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -302,8 +331,10 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
               ),
             ),
             if (_loading)
-              const Center(
-                child: CircularProgressIndicator(color: Color(0xFFFF4D67)),
+              Center(
+                child: CircularProgressIndicator(
+                  color: AppPalette.accent(context),
+                ),
               ),
             if (_error != null)
               Center(
@@ -406,7 +437,9 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
                                 : null,
                             style: TextButton.styleFrom(
                               foregroundColor: Colors.white,
-                              backgroundColor: Colors.black38,
+                              backgroundColor: AppPalette.isDark(context)
+                                  ? AppPalette.darkButton
+                                  : Colors.black38,
                             ),
                             child: Text('$_maxDuration s'),
                           ),
@@ -521,7 +554,9 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
           IconButton.filledTonal(
             onPressed: onTap,
             style: IconButton.styleFrom(
-              backgroundColor: Colors.black45,
+              backgroundColor: AppPalette.isDark(context)
+                  ? AppPalette.surface(context)
+                  : Colors.black45,
               foregroundColor: Colors.white,
               fixedSize: const Size(46, 46),
             ),
@@ -553,7 +588,11 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           decoration: BoxDecoration(
-            color: _isRecording ? const Color(0xFFFF4D67) : Colors.white,
+            color: _isRecording
+                ? AppPalette.isDark(context)
+                      ? AppPalette.darkButton
+                      : const Color(0xFFFF4D67)
+                : Colors.white,
             borderRadius: BorderRadius.circular(_isRecording ? 10 : 40),
           ),
         ),
@@ -617,12 +656,369 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
               icon: const Icon(Icons.share_outlined),
               label: const Text('Compartilhar'),
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFBB7575),
+                backgroundColor: AppPalette.button(context),
               ),
             ),
           ],
         ),
       ],
+    );
+  }
+}
+
+class PublishedVideo {
+  final String videoPath;
+  final String description;
+  final String contentType;
+  final String spoiler;
+  final String privacy;
+
+  const PublishedVideo({
+    required this.videoPath,
+    required this.description,
+    required this.contentType,
+    required this.spoiler,
+    required this.privacy,
+  });
+}
+
+class VideoPreviewScreen extends StatelessWidget {
+  final XFile video;
+
+  const VideoPreviewScreen({super.key, required this.video});
+
+  Future<void> _continueToPost(BuildContext context) async {
+    final published = await Navigator.of(context).push<PublishedVideo>(
+      MaterialPageRoute<PublishedVideo>(
+        builder: (_) => VideoPostScreen(video: video),
+      ),
+    );
+    if (published != null && context.mounted) {
+      Navigator.of(context).pop(published);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppPalette.isDark(context)
+          ? AppPalette.darkBackground
+          : const Color(0xFF171313),
+      appBar: AppBar(
+        backgroundColor: AppPalette.isDark(context)
+            ? AppPalette.darkBackground
+            : const Color(0xFF171313),
+        foregroundColor: Colors.white,
+        title: const Text('Prévia do vídeo'),
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: 420,
+                    maxHeight: 560,
+                  ),
+                  child: _PlayableVideo(path: video.path),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.delete_outline_rounded),
+                      label: const Text('Descartar'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: Colors.white54),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () => _continueToPost(context),
+                      icon: const Icon(Icons.arrow_forward_rounded),
+                      label: const Text('Continuar'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppPalette.button(context),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class VideoPostScreen extends StatefulWidget {
+  final XFile video;
+
+  const VideoPostScreen({super.key, required this.video});
+
+  @override
+  State<VideoPostScreen> createState() => _VideoPostScreenState();
+}
+
+class _VideoPostScreenState extends State<VideoPostScreen> {
+  final TextEditingController _descriptionController = TextEditingController();
+  String? _contentType;
+  String? _spoiler;
+  String _privacy = 'Público';
+
+  @override
+  void dispose() {
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  void _publish() {
+    if (_contentType == null || _spoiler == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Selecione o tipo de conteúdo e o nível de spoiler.'),
+        ),
+      );
+      return;
+    }
+    Navigator.of(context).pop(
+      PublishedVideo(
+        videoPath: widget.video.path,
+        description: _descriptionController.text.trim(),
+        contentType: _contentType!,
+        spoiler: _spoiler!,
+        privacy: _privacy,
+      ),
+    );
+  }
+
+  Widget _sectionTitle(String text) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Text(
+      text,
+      style: TextStyle(
+        color: AppPalette.primaryText(context),
+        fontSize: 15,
+        fontWeight: FontWeight.w700,
+      ),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppPalette.background(context),
+      appBar: AppBar(
+        backgroundColor: AppPalette.background(context),
+        foregroundColor: AppPalette.primaryText(context),
+        title: const Text('POSTAR'),
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 240),
+                        child: _PlayableVideo(path: widget.video.path),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    _sectionTitle('Descrição'),
+                    TextField(
+                      controller: _descriptionController,
+                      minLines: 2,
+                      maxLines: 4,
+                      maxLength: 240,
+                      decoration: InputDecoration(
+                        hintText: 'O que você achou?',
+                        filled: true,
+                        fillColor: AppPalette.input(context),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(
+                            color: AppPalette.border(context),
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(
+                            color: AppPalette.border(context),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _sectionTitle('Adicionar conteúdo *'),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        for (final type in ['Filme', 'Série', 'Livro'])
+                          ChoiceChip(
+                            label: Text(type),
+                            selected: _contentType == type,
+                            onSelected: (_) =>
+                                setState(() => _contentType = type),
+                            selectedColor: AppPalette.surface(context),
+                            side: BorderSide(color: AppPalette.border(context)),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _sectionTitle('Nível de spoiler *'),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        for (final level in [
+                          ('nenhum', 'Sem spoiler'),
+                          ('leve', 'Leve'),
+                          ('muito', 'Muito'),
+                        ])
+                          ChoiceChip(
+                            label: Text(level.$2),
+                            selected: _spoiler == level.$1,
+                            onSelected: (_) =>
+                                setState(() => _spoiler = level.$1),
+                            selectedColor: AppPalette.surface(context),
+                            side: BorderSide(color: AppPalette.border(context)),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _sectionTitle('Privacidade'),
+                    SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(
+                          value: 'Público',
+                          label: Text('Público'),
+                          icon: Icon(Icons.public_rounded),
+                        ),
+                        ButtonSegment(
+                          value: 'Somente amigos',
+                          label: Text('Amigos'),
+                          icon: Icon(Icons.people_outline_rounded),
+                        ),
+                      ],
+                      selected: {_privacy},
+                      onSelectionChanged: (selection) =>
+                          setState(() => _privacy = selection.first),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 8, 18, 14),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: _publish,
+                  icon: const Icon(Icons.publish_rounded),
+                  label: const Text('Publicar vídeo'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppPalette.button(context),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PlayableVideo extends StatefulWidget {
+  final String path;
+
+  const _PlayableVideo({required this.path});
+
+  @override
+  State<_PlayableVideo> createState() => _PlayableVideoState();
+}
+
+class _PlayableVideoState extends State<_PlayableVideo> {
+  late final VideoPlayerController _controller;
+  late final Future<void> _initialize;
+
+  @override
+  void initState() {
+    super.initState();
+    final uri = kIsWeb ? Uri.parse(widget.path) : Uri.file(widget.path);
+    _controller = VideoPlayerController.networkUrl(uri);
+    _initialize = _controller.initialize().then((_) {
+      _controller.setLooping(true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<void>(
+      future: _initialize,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Center(
+            child: Icon(
+              Icons.video_file_outlined,
+              color: Colors.white70,
+              size: 48,
+            ),
+          );
+        }
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(
+            child: CircularProgressIndicator(color: Color(0xFFFF4D67)),
+          );
+        }
+        return GestureDetector(
+          onTap: () => setState(() {
+            _controller.value.isPlaying
+                ? _controller.pause()
+                : _controller.play();
+          }),
+          child: AspectRatio(
+            aspectRatio: _controller.value.aspectRatio,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                VideoPlayer(_controller),
+                if (!_controller.value.isPlaying)
+                  const Center(
+                    child: Icon(
+                      Icons.play_circle_fill_rounded,
+                      color: Colors.white70,
+                      size: 56,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

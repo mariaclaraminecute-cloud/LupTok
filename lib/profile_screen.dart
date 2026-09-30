@@ -10,6 +10,7 @@ class ProfileScreen extends StatefulWidget {
   final String? publicUsername;
   final List<String> publicInterests;
   final List<String> availableVideos;
+  final List<String> privateVideos;
 
   const ProfileScreen({
     super.key,
@@ -18,6 +19,7 @@ class ProfileScreen extends StatefulWidget {
     this.publicUsername,
     this.publicInterests = const [],
     this.availableVideos = const [],
+    this.privateVideos = const [],
   });
 
   @override
@@ -114,7 +116,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         await showModalBottomSheet<(String, String, String, String, String)>(
           context: context,
           isScrollControlled: true,
-          backgroundColor: const Color(0xFFFFF7F7),
+          backgroundColor: AppPalette.surface(context),
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
           ),
@@ -186,7 +188,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                           ));
                         },
                         style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFFBB7575),
+                          backgroundColor: AppPalette.button(context),
                         ),
                         child: const Text('Salvar'),
                       ),
@@ -241,14 +243,14 @@ class _ProfileScreenState extends State<ProfileScreen>
     final username = _shownUsername;
     final initial = _shownName.isEmpty ? '?' : _shownName[0].toUpperCase();
     return Scaffold(
-      backgroundColor: const Color(0xFFFFE9E9),
+      backgroundColor: AppPalette.background(context),
       body: NestedScrollView(
         headerSliverBuilder: (context, innerScrolled) => [
           SliverAppBar(
             pinned: true,
-            expandedHeight: 180,
-            backgroundColor: const Color(0xFFFFE9E9),
-            foregroundColor: const Color(0xFF7D171D),
+            expandedHeight: 228,
+            backgroundColor: AppPalette.background(context),
+            foregroundColor: AppPalette.primaryText(context),
             actions: [
               if (_isOwner)
                 IconButton(
@@ -264,13 +266,19 @@ class _ProfileScreenState extends State<ProfileScreen>
                 children: [
                   Positioned.fill(
                     child: DecoratedBox(
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [
-                            Color(0xFF9D414B),
-                            Color(0xFFDA9297),
-                            Color(0xFFFFD6D8),
-                          ],
+                          colors: AppPalette.isDark(context)
+                              ? [
+                                  AppPalette.darkBackground,
+                                  AppPalette.darkBackground,
+                                  AppPalette.darkBackground,
+                                ]
+                              : const [
+                                  Color(0xFF9D414B),
+                                  Color(0xFFDA9297),
+                                  Color(0xFFFFD6D8),
+                                ],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
@@ -278,29 +286,64 @@ class _ProfileScreenState extends State<ProfileScreen>
                     ),
                   ),
                   Positioned(
-                    bottom: -43,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: const Color(0xFFFFE9E9),
-                        border: Border.all(
-                          color: const Color(0xFFBB7575),
-                          width: 3,
-                        ),
-                      ),
-                      child: CircleAvatar(
-                        radius: 43,
-                        backgroundColor: const Color(0xFFBB7575),
-                        child: Text(
-                          initial,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 30,
-                            fontWeight: FontWeight.w700,
+                    bottom: -48,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: AppPalette.background(context),
+                            border: Border.all(
+                              color: AppPalette.accent(context),
+                              width: 3,
+                            ),
+                          ),
+                          child: CircleAvatar(
+                            radius: 43,
+                            backgroundColor: AppPalette.button(context),
+                            child: Text(
+                              initial,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 30,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
+                        if (_watching.isNotEmpty) ...[
+                          const SizedBox(width: 12),
+                          Container(
+                            constraints: const BoxConstraints(maxWidth: 150),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppPalette.surface(context),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: AppPalette.border(
+                                  context,
+                                ).withValues(alpha: 0.4),
+                              ),
+                            ),
+                            child: Text(
+                              'Assistindo agora\n$_watching',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: AppPalette.primaryText(context),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 ],
@@ -313,9 +356,9 @@ class _ProfileScreenState extends State<ProfileScreen>
           children: [
             TabBar(
               controller: _tabs,
-              labelColor: const Color(0xFF7D171D),
-              unselectedLabelColor: const Color(0xFF9B7072),
-              indicatorColor: const Color(0xFFBB7575),
+              labelColor: AppPalette.primaryText(context),
+              unselectedLabelColor: AppPalette.mutedText(context),
+              indicatorColor: AppPalette.accent(context),
               tabs: const [
                 Tab(text: 'Vídeos'),
                 Tab(text: 'Salvos'),
@@ -328,11 +371,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 children: [
                   _empty('Ainda não há vídeos publicados.'),
                   _savedTab(),
-                  _empty(
-                    _isOwner
-                        ? 'Seus vídeos privados aparecem aqui.'
-                        : 'Este espaço é privado.',
-                  ),
+                  _privateTab(),
                 ],
               ),
             ),
@@ -344,7 +383,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Widget _buildProfileDetails(String initial, String username) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 54, 20, 16),
+      padding: const EdgeInsets.fromLTRB(20, 56, 20, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -353,18 +392,16 @@ class _ProfileScreenState extends State<ProfileScreen>
               children: [
                 Text(
                   _shownName,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 23,
                     fontWeight: FontWeight.w700,
-                    color: Color(0xFF7D171D),
+                    color: AppPalette.primaryText(context),
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   username,
-                  style: TextStyle(
-                    color: const Color(0xFF7D171D).withOpacity(0.64),
-                  ),
+                  style: TextStyle(color: AppPalette.mutedText(context)),
                 ),
               ],
             ),
@@ -378,8 +415,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                 icon: const Icon(Icons.edit_outlined, size: 18),
                 label: const Text('Editar perfil'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF7D171D),
-                  side: const BorderSide(color: Color(0xFFBB7575)),
+                  foregroundColor: AppPalette.primaryText(context),
+                  side: BorderSide(color: AppPalette.border(context)),
                 ),
               ),
             )
@@ -390,7 +427,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                   child: FilledButton(
                     onPressed: _toggleFollow,
                     style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFFBB7575),
+                      backgroundColor: AppPalette.button(context),
                     ),
                     child: Text(
                       _following.contains(username) ? 'Seguindo' : 'Seguir',
@@ -399,13 +436,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                 ),
                 const SizedBox(width: 10),
                 Chip(
-                  avatar: const Icon(
+                  avatar: Icon(
                     Icons.favorite_rounded,
                     size: 16,
-                    color: Color(0xFF7D171D),
+                    color: AppPalette.primaryText(context),
                   ),
                   label: Text('${_compatibility()}% compatível'),
-                  backgroundColor: const Color(0xFFFFD6D8),
+                  backgroundColor: AppPalette.surface(context),
                 ),
               ],
             ),
@@ -420,39 +457,12 @@ class _ProfileScreenState extends State<ProfileScreen>
               _stat('0', 'vídeos'),
             ],
           ),
-          if (_watching.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Center(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.76),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: const Color(0xFFBB7575).withValues(alpha: 0.24),
-                  ),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  child: Text(
-                    'Assistindo agora · $_watching',
-                    style: const TextStyle(
-                      color: Color(0xFF7D171D),
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
           const SizedBox(height: 14),
           if (_isOwner && _bio.isNotEmpty)
             Text(
               _bio,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Color(0xFF493333), height: 1.4),
+              style: TextStyle(color: AppPalette.text(context), height: 1.4),
             ),
           if (_isOwner && _favorite.isNotEmpty) ...[
             const SizedBox(height: 14),
@@ -461,15 +471,15 @@ class _ProfileScreenState extends State<ProfileScreen>
           const SizedBox(height: 16),
           Text(
             _isOwner ? 'Gostos' : 'Gostos em comum',
-            style: const TextStyle(
-              color: Color(0xFF7D171D),
+            style: TextStyle(
+              color: AppPalette.primaryText(context),
               fontSize: 16,
               fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 8),
           if (_loading)
-            const LinearProgressIndicator(color: Color(0xFFBB7575))
+            LinearProgressIndicator(color: AppPalette.accent(context))
           else if (_shownInterests.isEmpty)
             const Text(
               'Adicione gêneros no onboarding para mostrar seus gostos.',
@@ -488,10 +498,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                   avatar: _interestImage(interest),
                   label: Text(displayInterest(interest)),
                   backgroundColor: shared
-                      ? const Color(0xFFFFD6D8)
-                      : Colors.white.withValues(alpha: 0.8),
+                      ? AppPalette.surface(context)
+                      : AppPalette.raisedSurface(context),
                   side: BorderSide(
-                    color: const Color(0xFFBB7575).withValues(alpha: 0.24),
+                    color: AppPalette.border(context).withValues(alpha: 0.3),
                   ),
                 );
               }).toList(),
@@ -511,7 +521,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Widget _favoriteLine() => Row(
     children: [
-      const Icon(Icons.bookmark_rounded, color: Color(0xFFBB7575)),
+      Icon(Icons.bookmark_rounded, color: AppPalette.accent(context)),
       const SizedBox(width: 8),
       Expanded(
         child: Text(
@@ -526,14 +536,14 @@ class _ProfileScreenState extends State<ProfileScreen>
     children: [
       Text(
         value,
-        style: const TextStyle(
+        style: TextStyle(
           fontWeight: FontWeight.w700,
-          color: Color(0xFF7D171D),
+          color: AppPalette.primaryText(context),
         ),
       ),
       Text(
         label,
-        style: const TextStyle(fontSize: 12, color: Color(0xFF8F696C)),
+        style: TextStyle(fontSize: 12, color: AppPalette.mutedText(context)),
       ),
     ],
   );
@@ -557,10 +567,10 @@ class _ProfileScreenState extends State<ProfileScreen>
       width: 20,
       height: 20,
       fit: BoxFit.contain,
-      errorBuilder: (_, __, ___) => const Icon(
+      errorBuilder: (_, __, ___) => Icon(
         Icons.favorite_border_rounded,
         size: 16,
-        color: Color(0xFFBB7575),
+        color: AppPalette.accent(context),
       ),
     );
   }
@@ -598,13 +608,30 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
+  Widget _privateTab() {
+    if (!_isOwner) return _empty('Este espaço é privado.');
+    if (widget.privateVideos.isEmpty) {
+      return _empty('Seus vídeos privados aparecem aqui.');
+    }
+    return ListView(
+      children: [
+        for (final video in widget.privateVideos)
+          ListTile(
+            leading: const Icon(Icons.lock_outline_rounded),
+            title: Text(video),
+            subtitle: const Text('Somente amigos'),
+          ),
+      ],
+    );
+  }
+
   Widget _empty(String message) => Center(
     child: Padding(
       padding: const EdgeInsets.all(24),
       child: Text(
         message,
         textAlign: TextAlign.center,
-        style: const TextStyle(color: Color(0xFF80686A)),
+        style: TextStyle(color: AppPalette.mutedText(context)),
       ),
     ),
   );

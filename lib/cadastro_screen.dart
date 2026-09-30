@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'app_preferences.dart';
+
 class CadastroScreen extends StatefulWidget {
   const CadastroScreen({super.key});
 
@@ -125,71 +127,26 @@ class _CadastroScreenState extends State<CadastroScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFFE9E9),
+      backgroundColor: AppPalette.background(context),
       resizeToAvoidBottomInset: true,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Gradiente inferior para o formulário
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              height: MediaQuery.of(context).size.height * 0.78,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  colors: [
-                    const Color(0xFFFFE9E9).withOpacity(0.97),
-                    const Color(0xFFFFE9E9).withOpacity(0.90),
-                    Colors.transparent,
-                  ],
-                  stops: const [0.0, 0.55, 1.0],
-                ),
-              ),
-            ),
-          ),
-
-          // Vinheta superior
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              height: 140,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    const Color(0xFFFFE9E9).withOpacity(0.92),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // Glow vermelho suave
+          ColoredBox(color: AppPalette.background(context)),
           AnimatedBuilder(
             animation: _glowAnim,
-            builder: (_, __) => Positioned(
-              top: MediaQuery.of(context).size.height * 0.18,
-              left: 0,
-              right: 0,
-              child: Container(
-                height: 180,
-                decoration: BoxDecoration(
-                  gradient: RadialGradient(
-                    colors: [
-                      const Color(
-                        0xFF7D171D,
-                      ).withOpacity(0.12 * _glowAnim.value),
-                      Colors.transparent,
-                    ],
-                  ),
+            builder: (context, _) => Container(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: const Alignment(0, -0.55),
+                  colors: [
+                    AppPalette.button(context).withValues(
+                      alpha:
+                          (AppPalette.isDark(context) ? 0.18 : 0.1) *
+                          _glowAnim.value,
+                    ),
+                    Colors.transparent,
+                  ],
                 ),
               ),
             ),
@@ -214,7 +171,7 @@ class _CadastroScreenState extends State<CadastroScreen>
                       child: IconButton(
                         onPressed: () => Navigator.of(context).pop(),
                         icon: const Icon(Icons.arrow_back_ios_new),
-                        color: const Color(0xFF7D171D),
+                        color: AppPalette.primaryText(context),
                         tooltip: 'Voltar',
                       ),
                     ),
@@ -229,16 +186,16 @@ class _CadastroScreenState extends State<CadastroScreen>
                           borderRadius: BorderRadius.circular(24),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(
-                                0xFF7D171D,
-                              ).withOpacity(0.35 * _glowAnim.value),
+                              color: AppPalette.button(
+                                context,
+                              ).withValues(alpha: 0.35 * _glowAnim.value),
                               blurRadius: 40,
                               spreadRadius: 1,
                             ),
                           ],
                         ),
                         child: Image.asset(
-                          'assets/images/logo.png',
+                          AppPalette.logo(context),
                           height: 75,
                         ),
                       ),
@@ -251,10 +208,10 @@ class _CadastroScreenState extends State<CadastroScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
+                          Text(
                             "Criar conta",
                             style: TextStyle(
-                              color: Color(0xFF7D171D),
+                              color: AppPalette.mutedText(context),
                               fontFamily: 'IMFellFrenchCanon',
                               fontSize: 26,
                               fontWeight: FontWeight.bold,
@@ -267,7 +224,7 @@ class _CadastroScreenState extends State<CadastroScreen>
                           Text(
                             "Comece a descobrir filmes, séries e livros",
                             style: TextStyle(
-                              color: const Color(0xFF7D171D).withOpacity(0.65),
+                              color: AppPalette.mutedText(context),
                               fontSize: 14,
                             ),
                           ),
@@ -350,12 +307,12 @@ class _CadastroScreenState extends State<CadastroScreen>
                           // Botão criar conta
                           SizedBox(
                             width: double.infinity,
-                            height: 56,
+                            height: 54,
                             child: ElevatedButton(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.transparent,
-                                shadowColor: Colors.transparent,
-                                padding: EdgeInsets.zero,
+                                backgroundColor: AppPalette.button(context),
+                                foregroundColor: Colors.white,
+                                elevation: 0,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(16),
                                 ),
@@ -401,37 +358,13 @@ class _CadastroScreenState extends State<CadastroScreen>
                                   ),
                                 );
                               },
-                              child: Ink(
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [
-                                      Color(0xFFBB7575),
-                                      Color(0xFFBB7575),
-                                    ],
-                                    begin: Alignment.centerLeft,
-                                    end: Alignment.centerRight,
-                                  ),
-                                  borderRadius: BorderRadius.circular(16),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(
-                                        0xFFB8787C,
-                                      ).withOpacity(0.35),
-                                      blurRadius: 20,
-                                      offset: const Offset(0, 6),
-                                    ),
-                                  ],
-                                ),
-                                child: const Center(
-                                  child: Text(
-                                    "Criar conta",
-                                    style: TextStyle(
-                                      fontSize: 17,
-                                      color: Color(0xFFFFE9E9),
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
+                              child: const Text(
+                                "Criar conta",
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.5,
                                 ),
                               ),
                             ),
@@ -446,9 +379,7 @@ class _CadastroScreenState extends State<CadastroScreen>
                               "Termos de Uso e Política de Privacidade",
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: const Color(
-                                  0xFF7D171D,
-                                ).withOpacity(0.68),
+                                color: AppPalette.mutedText(context),
                                 fontSize: 12,
                                 height: 1.5,
                               ),
@@ -461,9 +392,9 @@ class _CadastroScreenState extends State<CadastroScreen>
                             children: [
                               Expanded(
                                 child: Divider(
-                                  color: const Color(
-                                    0xFF7D171D,
-                                  ).withOpacity(0.22),
+                                  color: AppPalette.border(
+                                    context,
+                                  ).withValues(alpha: 0.22),
                                   thickness: 1,
                                 ),
                               ),
@@ -474,18 +405,16 @@ class _CadastroScreenState extends State<CadastroScreen>
                                 child: Text(
                                   "ou",
                                   style: TextStyle(
-                                    color: const Color(
-                                      0xFF7D171D,
-                                    ).withOpacity(0.65),
+                                    color: AppPalette.mutedText(context),
                                     fontSize: 13,
                                   ),
                                 ),
                               ),
                               Expanded(
                                 child: Divider(
-                                  color: const Color(
-                                    0xFF7D171D,
-                                  ).withOpacity(0.22),
+                                  color: AppPalette.border(
+                                    context,
+                                  ).withValues(alpha: 0.22),
                                   thickness: 1,
                                 ),
                               ),
@@ -502,16 +431,14 @@ class _CadastroScreenState extends State<CadastroScreen>
                                 text: TextSpan(
                                   text: "Já tem uma conta? ",
                                   style: TextStyle(
-                                    color: const Color(
-                                      0xFF7D171D,
-                                    ).withOpacity(0.68),
+                                    color: AppPalette.mutedText(context),
                                     fontSize: 14,
                                   ),
-                                  children: const [
+                                  children: [
                                     TextSpan(
                                       text: "Entrar",
                                       style: TextStyle(
-                                        color: Color(0xFF7D171D),
+                                        color: AppPalette.primaryText(context),
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
@@ -545,24 +472,22 @@ class _CadastroScreenState extends State<CadastroScreen>
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFBB7575).withOpacity(0.32)),
-        color: Colors.white.withOpacity(0.84),
+        border: Border.all(
+          color: AppPalette.border(context).withValues(alpha: 0.35),
+        ),
+        color: AppPalette.input(context),
       ),
       child: TextField(
         controller: controller,
         obscureText: obscure,
-        style: const TextStyle(color: Color(0xFF7D171D), fontSize: 15),
+        style: TextStyle(color: AppPalette.primaryText(context), fontSize: 15),
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: TextStyle(
-            color: const Color(0xFF7D171D).withOpacity(0.52),
+            color: AppPalette.mutedText(context),
             fontSize: 15,
           ),
-          prefixIcon: Icon(
-            icon,
-            color: const Color(0xFFBB7575).withOpacity(0.85),
-            size: 20,
-          ),
+          prefixIcon: Icon(icon, color: AppPalette.accent(context), size: 20),
           suffixIcon: suffix,
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(

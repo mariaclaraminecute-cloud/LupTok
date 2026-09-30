@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_preferences.dart';
+import 'login_screen.dart';
 
 enum _SettingKind { toggle, choice, text, action }
 
@@ -295,11 +296,11 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFFE9E9),
+      backgroundColor: AppPalette.background(context),
       appBar: AppBar(
         title: const Text('Configurações'),
-        backgroundColor: const Color(0xFFFFE9E9),
-        foregroundColor: const Color(0xFF7D171D),
+        backgroundColor: AppPalette.background(context),
+        foregroundColor: AppPalette.primaryText(context),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
@@ -307,16 +308,19 @@ class SettingsScreen extends StatelessWidget {
           for (final category in _settingsCategories)
             Card(
               margin: const EdgeInsets.only(bottom: 8),
-              color: Colors.white.withValues(alpha: 0.78),
+              color: AppPalette.raisedSurface(context).withValues(alpha: 0.88),
               elevation: 0,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
                 side: BorderSide(
-                  color: const Color(0xFFBB7575).withValues(alpha: 0.16),
+                  color: AppPalette.border(context).withValues(alpha: 0.3),
                 ),
               ),
               child: ListTile(
-                leading: Icon(category.icon, color: const Color(0xFF9B555B)),
+                leading: Icon(
+                  category.icon,
+                  color: AppPalette.accent(context),
+                ),
                 title: Text(
                   category.title,
                   style: const TextStyle(fontWeight: FontWeight.w600),
@@ -332,11 +336,11 @@ class SettingsScreen extends StatelessWidget {
             ),
           const SizedBox(height: 18),
           OutlinedButton.icon(
-            onPressed: () => _showAccountAction(context, 'Sair da conta'),
+            onPressed: () => _sairDaConta(context),
             icon: const Icon(Icons.logout_rounded),
             label: const Text('Sair da conta'),
             style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF7D171D),
+              foregroundColor: AppPalette.primaryText(context),
             ),
           ),
           const SizedBox(height: 8),
@@ -344,12 +348,39 @@ class SettingsScreen extends StatelessWidget {
             onPressed: () => _showAccountAction(context, 'Excluir minha conta'),
             icon: const Icon(Icons.delete_outline_rounded),
             label: const Text('Excluir minha conta'),
-            style: TextButton.styleFrom(foregroundColor: Colors.red.shade800),
+            style: TextButton.styleFrom(
+              foregroundColor: AppPalette.primaryText(context),
+            ),
           ),
         ],
       ),
     );
   }
+}
+
+Future<void> _sairDaConta(BuildContext context) async {
+  final confirmar = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Sair da conta?'),
+      content: const Text('Você poderá entrar novamente com outra conta.'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Sair'),
+        ),
+      ],
+    ),
+  );
+  if (confirmar != true || !context.mounted) return;
+  Navigator.of(context).pushAndRemoveUntil(
+    MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
+    (_) => false,
+  );
 }
 
 class _SettingsCategoryScreen extends StatefulWidget {
@@ -649,11 +680,11 @@ class _SettingsCategoryScreenState extends State<_SettingsCategoryScreen> {
   Widget build(BuildContext context) {
     final category = widget.category;
     return Scaffold(
-      backgroundColor: const Color(0xFFFFE9E9),
+      backgroundColor: AppPalette.background(context),
       appBar: AppBar(
         title: Text(category.title),
-        backgroundColor: const Color(0xFFFFE9E9),
-        foregroundColor: const Color(0xFF7D171D),
+        backgroundColor: AppPalette.background(context),
+        foregroundColor: AppPalette.primaryText(context),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
@@ -662,7 +693,7 @@ class _SettingsCategoryScreenState extends State<_SettingsCategoryScreen> {
             if (option.kind == _SettingKind.toggle)
               SwitchListTile.adaptive(
                 contentPadding: EdgeInsets.zero,
-                activeThumbColor: const Color(0xFFBB7575),
+                activeThumbColor: AppPalette.button(context),
                 title: Text(option.title),
                 subtitle: Text(option.subtitle),
                 value: _toggleValues[option.title] ?? _defaultToggle(option),

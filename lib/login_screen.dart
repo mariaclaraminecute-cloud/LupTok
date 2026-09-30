@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'app_preferences.dart';
 import 'cadastro_screen.dart';
 
 import 'onboarding_screen.dart';
@@ -186,8 +187,8 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
-    final pageColor = const Color(0xFFFFE9E9);
-    final softTextColor = const Color(0xFFB8787C);
+    final pageColor = AppPalette.background(context);
+    final softTextColor = AppPalette.mutedText(context);
 
     return Scaffold(
       backgroundColor: pageColor,
@@ -242,7 +243,6 @@ class _LoginScreenState extends State<LoginScreen>
                   child: Column(
                     children: [
                       const SizedBox(height: 40),
-
                       AnimatedBuilder(
                         animation: _glowController,
 
@@ -258,7 +258,7 @@ class _LoginScreenState extends State<LoginScreen>
 
                                     boxShadow: [
                                       BoxShadow(
-                                        color: const Color(0xFF7D171D)
+                                        color: AppPalette.button(context)
                                             .withValues(
                                               alpha: 0.35 * _glowAnim.value,
                                             ),
@@ -271,7 +271,7 @@ class _LoginScreenState extends State<LoginScreen>
                                   ),
 
                                   child: Image.asset(
-                                    'assets/images/logo.png',
+                                    AppPalette.logo(context),
 
                                     height: 70,
 
@@ -414,9 +414,9 @@ class _LoginScreenState extends State<LoginScreen>
 
                               child: ElevatedButton(
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFFB8787C),
+                                  backgroundColor: AppPalette.button(context),
 
-                                  foregroundColor: const Color(0xFFD9AEB2),
+                                  foregroundColor: Colors.white,
 
                                   elevation: 0,
 
@@ -433,7 +433,7 @@ class _LoginScreenState extends State<LoginScreen>
 
                                 child: Container(
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFB8787C),
+                                    color: AppPalette.button(context),
                                     borderRadius: BorderRadius.circular(16),
                                   ),
                                   child: const Center(
@@ -441,7 +441,7 @@ class _LoginScreenState extends State<LoginScreen>
                                       'Entrar',
                                       style: TextStyle(
                                         fontSize: 17,
-                                        color: Color(0xFFFFE9E9),
+                                        color: Colors.white,
                                         fontWeight: FontWeight.w600,
                                         letterSpacing: 0.5,
                                       ),
@@ -502,17 +502,19 @@ class _LoginScreenState extends State<LoginScreen>
                               height: 50,
                               child: OutlinedButton.icon(
                                 onPressed: _entrarComGoogle,
-                                icon: const Text(
+                                icon: Text(
                                   'G',
                                   style: TextStyle(
-                                    color: Color(0xFF7D171D),
+                                    color: AppPalette.primaryText(context),
                                     fontWeight: FontWeight.bold,
                                     fontSize: 18,
                                   ),
                                 ),
                                 label: const Text('Continuar com Google'),
                                 style: OutlinedButton.styleFrom(
-                                  foregroundColor: const Color(0xFF7D171D),
+                                  foregroundColor: AppPalette.primaryText(
+                                    context,
+                                  ),
                                   side: BorderSide(
                                     color: const Color(
                                       0xFFBB7575,
@@ -569,19 +571,19 @@ class _LoginScreenState extends State<LoginScreen>
                                     text: 'Não tem conta? ',
 
                                     style: TextStyle(
-                                      color: const Color(
-                                        0xFF8F555A,
-                                      ).withValues(alpha: 0.78),
+                                      color: AppPalette.mutedText(context),
 
                                       fontSize: 14,
                                     ),
 
-                                    children: const [
+                                    children: [
                                       TextSpan(
                                         text: 'Criar conta',
 
                                         style: TextStyle(
-                                          color: Color(0xFF7D171D),
+                                          color: AppPalette.primaryText(
+                                            context,
+                                          ),
 
                                           fontWeight: FontWeight.w600,
                                         ),
@@ -618,22 +620,17 @@ class _LoginScreenState extends State<LoginScreen>
 
     Widget? suffix,
   }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final fieldTextColor = isDark
-        ? const Color(0xFFD09A9F)
-        : const Color(0xFF6B252D);
+    final fieldTextColor = AppPalette.primaryText(context);
 
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
 
         border: Border.all(
-          color: fieldTextColor.withValues(alpha: isDark ? 0.35 : 0.18),
+          color: AppPalette.border(context).withValues(alpha: 0.35),
         ),
 
-        color: isDark
-            ? const Color(0xFF25080C).withValues(alpha: 0.75)
-            : const Color(0xFFFFE4E4),
+        color: AppPalette.input(context),
       ),
 
       child: TextField(

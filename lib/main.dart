@@ -46,17 +46,49 @@ class LupTokApp extends StatelessWidget {
           themeMode: themeMode,
           theme: ThemeData(
             scaffoldBackgroundColor: const Color(0xFFFFE9E9),
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: const Color(0xFF7D171D),
-              brightness: Brightness.light,
-              surface: const Color(0xFFFFE9E9),
+            colorScheme:
+                ColorScheme.fromSeed(
+                  seedColor: const Color(0xFF7D171D),
+                  brightness: Brightness.light,
+                ).copyWith(
+                  primary: const Color(0xFFB8787C),
+                  onPrimary: Colors.white,
+                  secondary: const Color(0xFF7D171D),
+                  onSecondary: Colors.white,
+                  surface: const Color(0xFFFFF7F7),
+                  onSurface: const Color(0xFF493333),
+                ),
+            appBarTheme: const AppBarTheme(
+              backgroundColor: Color(0xFFFFE9E9),
+              foregroundColor: Color(0xFF7D171D),
             ),
           ),
           darkTheme: ThemeData(
             brightness: Brightness.dark,
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: const Color(0xFFBB7575),
-              brightness: Brightness.dark,
+            scaffoldBackgroundColor: AppPalette.darkBackground,
+            colorScheme:
+                ColorScheme.fromSeed(
+                  seedColor: AppPalette.darkButton,
+                  brightness: Brightness.dark,
+                ).copyWith(
+                  primary: AppPalette.darkButton,
+                  onPrimary: Colors.white,
+                  secondary: AppPalette.darkButton,
+                  onSecondary: Colors.white,
+                  surface: AppPalette.darkBackground,
+                  onSurface: Colors.white,
+                ),
+            appBarTheme: const AppBarTheme(
+              backgroundColor: AppPalette.darkBackground,
+              foregroundColor: Colors.white,
+            ),
+            cardTheme: const CardThemeData(
+              color: Color(0xFF451717),
+              surfaceTintColor: Colors.transparent,
+            ),
+            dialogTheme: const DialogThemeData(
+              backgroundColor: Color(0xFF451717),
+              surfaceTintColor: Colors.transparent,
             ),
           ),
           builder: (context, child) => MediaQuery(
