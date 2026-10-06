@@ -248,7 +248,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         headerSliverBuilder: (context, innerScrolled) => [
           SliverAppBar(
             pinned: true,
-            expandedHeight: 228,
+            expandedHeight: 264,
             backgroundColor: AppPalette.background(context),
             foregroundColor: AppPalette.primaryText(context),
             actions: [
@@ -260,97 +260,70 @@ class _ProfileScreenState extends State<ProfileScreen>
                 ),
             ],
             flexibleSpace: FlexibleSpaceBar(
-              background: Stack(
-                clipBehavior: Clip.none,
-                alignment: Alignment.bottomCenter,
-                children: [
-                  Positioned.fill(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: AppPalette.isDark(context)
-                              ? [
-                                  AppPalette.darkBackground,
-                                  AppPalette.darkBackground,
-                                  AppPalette.darkBackground,
-                                ]
-                              : const [
-                                  Color(0xFF9D414B),
-                                  Color(0xFFDA9297),
-                                  Color(0xFFFFD6D8),
-                                ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
+              background: LayoutBuilder(
+                builder: (context, constraints) {
+                  final showAvatar = constraints.maxHeight >= 180;
+                  return Stack(
+                    alignment: Alignment.bottomCenter,
+                    children: [
+                      Positioned.fill(
+                        bottom: 58,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: AppPalette.isDark(context)
+                                  ? [
+                                      AppPalette.darkBackground,
+                                      AppPalette.darkBackground,
+                                      AppPalette.darkBackground,
+                                    ]
+                                  : const [
+                                      Color(0xFF9D414B),
+                                      Color(0xFFDA9297),
+                                      Color(0xFFFFD6D8),
+                                    ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                  Positioned(
-                    bottom: -48,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: AppPalette.background(context),
-                            border: Border.all(
-                              color: AppPalette.accent(context),
-                              width: 3,
+                      if (showAvatar)
+                        Positioned(
+                          bottom: 0,
+                          child: Container(
+                            width: 116,
+                            height: 116,
+                            padding: const EdgeInsets.all(5),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: AppPalette.background(context),
+                              border: Border.all(
+                                color: AppPalette.accent(context),
+                                width: 3,
+                              ),
                             ),
-                          ),
-                          child: CircleAvatar(
-                            radius: 43,
-                            backgroundColor: AppPalette.button(context),
-                            child: Text(
-                              initial,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 30,
-                                fontWeight: FontWeight.w700,
+                            child: CircleAvatar(
+                              radius: 48,
+                              backgroundColor: AppPalette.button(context),
+                              child: Text(
+                                initial,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 34,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
                           ),
                         ),
-                        if (_watching.isNotEmpty) ...[
-                          const SizedBox(width: 12),
-                          Container(
-                            constraints: const BoxConstraints(maxWidth: 150),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppPalette.surface(context),
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: AppPalette.border(
-                                  context,
-                                ).withValues(alpha: 0.4),
-                              ),
-                            ),
-                            child: Text(
-                              'Assistindo agora\n$_watching',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: AppPalette.primaryText(context),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
+                    ],
+                  );
+                },
               ),
             ),
           ),
-          SliverToBoxAdapter(child: _buildProfileDetails(initial, username)),
+          SliverToBoxAdapter(child: _buildProfileDetails(username)),
         ],
         body: Column(
           children: [
@@ -381,12 +354,41 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  Widget _buildProfileDetails(String initial, String username) {
+  Widget _buildProfileDetails(String username) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 56, 20, 16),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_watching.isNotEmpty)
+            Center(
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 280),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: AppPalette.surface(context),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: AppPalette.border(context).withValues(alpha: 0.4),
+                  ),
+                ),
+                child: Text(
+                  'Assistindo agora · $_watching',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: AppPalette.primaryText(context),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          if (_watching.isNotEmpty) const SizedBox(height: 14),
           Center(
             child: Column(
               children: [

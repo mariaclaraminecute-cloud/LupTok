@@ -41,6 +41,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       autor: '@gui.scifi',
       tipo: "Filme",
       genero: "Ficção Científica",
+      descricao:
+          "Uma jornada emocionante pelo espaço sobre amor, tempo e sobrevivência.",
       spoiler: "nenhum",
       stars: 2341,
       comentarios: 187,
@@ -51,6 +53,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       autor: '@marina.anime',
       tipo: "Anime",
       genero: "Ação",
+      descricao:
+          "Uma história intensa de coragem, escolhas difíceis e grandes batalhas.",
       spoiler: "leve",
       stars: 5820,
       comentarios: 932,
@@ -61,6 +65,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       autor: '@bia.leitora',
       tipo: "Livro",
       genero: "Fantasia",
+      descricao:
+          "Uma aventura fantástica que começa com uma jornada inesperada.",
       spoiler: "nenhum",
       stars: 1203,
       comentarios: 74,
@@ -71,6 +77,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       autor: '@gui.scifi',
       tipo: "Série",
       genero: "Suspense",
+      descricao:
+          "Mistério, suspense e viagens no tempo em uma pequena cidade alemã.",
       spoiler: "muito",
       stars: 3910,
       comentarios: 445,
@@ -81,6 +89,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       autor: '@julia.dorama',
       tipo: "K-Drama",
       genero: "Romance",
+      descricao:
+          "Um romance delicado que atravessa fronteiras e muda duas vidas.",
       spoiler: "nenhum",
       stars: 4102,
       comentarios: 661,
@@ -204,10 +214,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         _VideoCard(
           titulo: publicado.description.isEmpty
               ? 'Meu vídeo'
-              : publicado.description,
+              : 'Minha recomendação',
           autor: '@seu.usuario',
           tipo: publicado.contentType,
           genero: 'Vídeo de ${publicado.contentType.toLowerCase()}',
+          descricao: publicado.description.isEmpty
+              ? 'Confira minha recomendação de ${publicado.contentType.toLowerCase()}.'
+              : publicado.description,
           spoiler: publicado.spoiler,
           stars: 0,
           comentarios: 0,
@@ -868,7 +881,7 @@ class _LoopSearchDelegate extends SearchDelegate<int?> {
 // ══════════════════════════════════════════════════════════════════
 
 class _VideoCard {
-  final String titulo, tipo, genero, spoiler, autor;
+  final String titulo, tipo, genero, descricao, spoiler, autor;
   final String? videoPath;
   final String privacy;
   final int stars, comentarios;
@@ -878,6 +891,7 @@ class _VideoCard {
     required this.autor,
     required this.tipo,
     required this.genero,
+    required this.descricao,
     required this.spoiler,
     required this.stars,
     required this.comentarios,
@@ -1260,19 +1274,36 @@ class _LoopTabState extends State<_LoopTab> {
                       shadows: [Shadow(color: Colors.black54, blurRadius: 8)],
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 8),
+                  _badge(
+                    _spoilerLabel(v.spoiler),
+                    _spoilerColor(v.spoiler).withOpacity(0.16),
+                    _spoilerColor(v.spoiler),
+                  ),
+                  const SizedBox(height: 8),
                   Text(
-                    v.genero,
+                    v.descricao,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: AppPalette.isDark(context)
-                          ? Colors.white70
-                          : const Color.fromARGB(
-                              255,
-                              179,
-                              127,
-                              127,
-                            ).withOpacity(0.6),
+                          ? Colors.white
+                          : const Color(0xFFFFE9E9),
                       fontSize: 14,
+                      height: 1.35,
+                      shadows: const [
+                        Shadow(color: Colors.black87, blurRadius: 6),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${v.tipo} · ${v.genero}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.72),
+                      fontSize: 12,
                     ),
                   ),
                 ],
@@ -1290,6 +1321,7 @@ class _LoopTabState extends State<_LoopTab> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             Expanded(
                               child: GestureDetector(
@@ -1356,15 +1388,22 @@ class _LoopTabState extends State<_LoopTab> {
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 4),
-                            TextButton(
+                            const SizedBox(width: 8),
+                            OutlinedButton(
                               onPressed: () => _toggleFollow(v.autor),
-                              style: TextButton.styleFrom(
+                              style: OutlinedButton.styleFrom(
                                 foregroundColor: Colors.white,
-                                backgroundColor: AppPalette.button(context),
-                                minimumSize: const Size(0, 30),
+                                backgroundColor: Colors.transparent,
+                                minimumSize: const Size(0, 32),
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 7,
+                                  horizontal: 11,
+                                ),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                side: BorderSide(
+                                  color: Colors.white.withValues(alpha: 0.8),
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(18),
                                 ),
                               ),
                               child: Text(
@@ -1374,12 +1413,6 @@ class _LoopTabState extends State<_LoopTab> {
                               ),
                             ),
                           ],
-                        ),
-                        const SizedBox(height: 7),
-                        _badge(
-                          _spoilerLabel(v.spoiler),
-                          _spoilerColor(v.spoiler).withOpacity(0.16),
-                          _spoilerColor(v.spoiler),
                         ),
                       ],
                     ),
@@ -3071,151 +3104,170 @@ class _PerfilTabState extends State<_PerfilTab>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Capa
-        Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Container(
-              height: 150,
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Color(0xFFBB7575),
-                    Color(0xFFBB7575),
-                    Color(0xFFFFD6D8),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+        SizedBox(
+          height: 230,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  height: 150,
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Color(0xFFBB7575),
+                        Color(0xFFBB7575),
+                        Color(0xFFFFD6D8),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Positioned(
+                        right: -30,
+                        top: -30,
+                        child: Container(
+                          width: 180,
+                          height: 180,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Color(0x08FFFFFF),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              child: Stack(
-                children: [
-                  Positioned(
-                    right: -30,
-                    top: -30,
-                    child: Container(
-                      width: 180,
-                      height: 180,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Color(0x08FFFFFF),
+              // Foto de perfil
+              Positioned(
+                top: 108,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Container(
+                    width: 88,
+                    height: 88,
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFFFFE9E9),
+                        width: 4,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFB8787C).withOpacity(0.3),
+                          blurRadius: 18,
+                        ),
+                      ],
+                    ),
+                    child: const CircleAvatar(
+                      radius: 40,
+                      backgroundColor: Color(0xFFB8787C),
+                      child: Text(
+                        "A",
+                        style: TextStyle(
+                          color: Color(0xFFFFE9E9),
+                          fontSize: 30,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),
-                ],
-              ),
-            ),
-            // Foto de perfil
-            Positioned(
-              bottom: -42,
-              left: 20,
-              child: Container(
-                width: 84,
-                height: 84,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFFFFE9E9), width: 4),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFB8787C).withOpacity(0.3),
-                      blurRadius: 18,
-                    ),
-                  ],
                 ),
-                child: const CircleAvatar(
-                  radius: 40,
-                  backgroundColor: Color(0xFFB8787C),
-                  child: Text(
-                    "A",
-                    style: TextStyle(
-                      color: Color(0xFFFFE9E9),
-                      fontSize: 30,
-                      fontWeight: FontWeight.bold,
+              ),
+              // Status
+              Positioned(
+                top: 198,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFE9E9),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: const Color(0xFFBB7575).withOpacity(0.45),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Color(0xFF4CAF50),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        const Text(
+                          "Assistindo: Dark",
+                          style: TextStyle(
+                            color: Color(0xFFBB7575),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
               ),
-            ),
-            // Status
-            Positioned(
-              bottom: -14,
-              left: 80,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFE9E9),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: const Color(0xFFBB7575).withOpacity(0.45),
-                  ),
-                ),
+              // Botão editar
+              Positioned(
+                top: 48,
+                right: 12,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Color(0xFF4CAF50),
+                    IconButton.filledTonal(
+                      tooltip: 'Configurações',
+                      onPressed: widget.onAbrirConfiguracoes,
+                      style: IconButton.styleFrom(
+                        foregroundColor: const Color(0xFFFFE9E9),
+                        backgroundColor: const Color(0xFFBB7575),
+                        fixedSize: const Size(38, 38),
                       ),
+                      icon: const Icon(Icons.settings_outlined, size: 19),
                     ),
                     const SizedBox(width: 6),
-                    const Text(
-                      "Assistindo: Dark",
-                      style: TextStyle(
-                        color: Color(0xFFBB7575),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
+                    TextButton.icon(
+                      onPressed: _editarPerfil,
+                      icon: const Icon(Icons.edit_outlined, size: 15),
+                      label: const Text('Editar perfil'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFFFFE9E9),
+                        backgroundColor: const Color(0xFFBB7575),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 7,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
-            // Botão editar
-            Positioned(
-              top: 48,
-              right: 12,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton.filledTonal(
-                    tooltip: 'Configurações',
-                    onPressed: widget.onAbrirConfiguracoes,
-                    style: IconButton.styleFrom(
-                      foregroundColor: const Color(0xFFFFE9E9),
-                      backgroundColor: const Color(0xFFBB7575),
-                      fixedSize: const Size(38, 38),
-                    ),
-                    icon: const Icon(Icons.settings_outlined, size: 19),
-                  ),
-                  const SizedBox(width: 6),
-                  TextButton.icon(
-                    onPressed: _editarPerfil,
-                    icon: const Icon(Icons.edit_outlined, size: 15),
-                    label: const Text('Editar perfil'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: const Color(0xFFFFE9E9),
-                      backgroundColor: const Color(0xFFBB7575),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 7,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
 
-        const SizedBox(height: 52),
+        const SizedBox(height: 10),
 
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
