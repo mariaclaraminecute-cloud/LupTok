@@ -240,34 +240,42 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          IndexedStack(
-            index: _tabAtual,
+          Column(
             children: [
-              _LoopTab(
-                videos: _videos,
-                ocultarSpoilers: _ocultarSpoilers,
-                profileInterests: _gostosPerfil,
+              Expanded(
+                child: IndexedStack(
+                  index: _tabAtual,
+                  children: [
+                    _LoopTab(
+                      videos: _videos,
+                      ocultarSpoilers: _ocultarSpoilers,
+                      profileInterests: _gostosPerfil,
+                    ),
+                    GroupsScreen(interests: _gostosPerfil),
+                    ProfileScreen(
+                      onOpenSettings: _abrirConfiguracoes,
+                      availableVideos: _videos
+                          .map((video) => video.titulo)
+                          .toList(),
+                      privateVideos: _videos
+                          .where((video) => video.privacy == 'Somente amigos')
+                          .map((video) => video.titulo)
+                          .toList(),
+                    ),
+                    _LupezOverlay(
+                      glowAnim: _glowAnim,
+                      onFechar: () => setState(() => _tabAtual = 0),
+                      fullScreen: true,
+                      videos: _videos,
+                      interests: _gostosPerfil,
+                    ),
+                  ],
+                ),
               ),
-              GroupsScreen(interests: _gostosPerfil),
-              ProfileScreen(
-                onOpenSettings: _abrirConfiguracoes,
-                availableVideos: _videos.map((video) => video.titulo).toList(),
-                privateVideos: _videos
-                    .where((video) => video.privacy == 'Somente amigos')
-                    .map((video) => video.titulo)
-                    .toList(),
-              ),
-              _LupezOverlay(
-                glowAnim: _glowAnim,
-                onFechar: () => setState(() => _tabAtual = 0),
-                fullScreen: true,
-                videos: _videos,
-                interests: _gostosPerfil,
-              ),
+              if (!_mostrarBemVindo && !_mostrarHumor && _tabAtual != 3)
+                _buildBottomNav(),
             ],
           ),
-          if (!_mostrarBemVindo && !_mostrarHumor && _tabAtual != 3)
-            Positioned(left: 0, right: 0, bottom: 0, child: _buildBottomNav()),
 
           // ── Bem-vindo (aparece primeiro) ───────────────────────────
           if (_mostrarBemVindo) _buildBemVindoOverlay(),
@@ -653,8 +661,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ),
       ),
       child: SafeArea(
+        top: false,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 1),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
           child: Row(
             children: [
               _navAssetItem(
@@ -680,18 +689,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       borderRadius: BorderRadius.circular(14),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 2,
+                          horizontal: 10,
+                          vertical: 1,
                         ),
                         child: Image.asset(
                           'assets/images/gravar.png',
-                          width: 28,
-                          height: 28,
+                          width: 24,
+                          height: 24,
                           fit: BoxFit.contain,
                           errorBuilder: (_, __, ___) => const Icon(
                             Icons.add_rounded,
                             color: Colors.white,
-                            size: 30,
+                            size: 26,
                           ),
                         ),
                       ),
@@ -725,13 +734,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         onTap: onTap,
         borderRadius: BorderRadius.circular(10),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 3),
+          padding: const EdgeInsets.symmetric(vertical: 1),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               SizedBox(
-                width: 22,
-                height: 22,
+                width: 20,
+                height: 20,
                 child: Image.asset(
                   image,
                   fit: BoxFit.contain,
@@ -740,7 +749,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     color: active
                         ? AppPalette.primaryText(context)
                         : AppPalette.accent(context),
-                    size: 24,
+                    size: 22,
                   ),
                 ),
               ),
@@ -769,12 +778,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         onTap: () => setState(() => _tabAtual = 2),
         borderRadius: BorderRadius.circular(10),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 3),
+          padding: const EdgeInsets.symmetric(vertical: 1),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               CircleAvatar(
-                radius: 12,
+                radius: 10,
                 backgroundColor: active
                     ? AppPalette.button(context)
                     : AppPalette.accent(context),
