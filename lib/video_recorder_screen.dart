@@ -9,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 import 'app_preferences.dart';
+import 'api_service.dart';
 
 class VideoRecorderScreen extends StatefulWidget {
   const VideoRecorderScreen({super.key});
@@ -668,6 +669,9 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
 
 class PublishedVideo {
   final String videoPath;
+  final String videoToken;
+  final String videoId;
+  final String ownerId;
   final String description;
   final String contentType;
   final String spoiler;
@@ -675,6 +679,9 @@ class PublishedVideo {
 
   const PublishedVideo({
     required this.videoPath,
+    required this.videoToken,
+    required this.videoId,
+    required this.ownerId,
     required this.description,
     required this.contentType,
     required this.spoiler,
@@ -777,6 +784,7 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
   String? _contentType;
   String? _spoiler;
   String _privacy = 'Público';
+  bool _publicando = false;
 
   @override
   void dispose() {
@@ -784,7 +792,7 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
     super.dispose();
   }
 
-  void _publish() {
+  Future<void> _publish() async {
     if (_contentType == null || _spoiler == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -793,15 +801,47 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
       );
       return;
     }
-    Navigator.of(context).pop(
-      PublishedVideo(
-        videoPath: widget.video.path,
-        description: _descriptionController.text.trim(),
-        contentType: _contentType!,
+    if (_publicando) return;
+    setState(() => _publicando = true);
+    try {
+      final descricao = _descriptionController.text.trim();
+      final resposta = await ApiService.publicarVideo(
+        arquivo: widget.video,
+        descricao: descricao,
+        tipoConteudo: _contentType!,
         spoiler: _spoiler!,
-        privacy: _privacy,
-      ),
-    );
+        privacidade: _privacy,
+      );
+      final video = resposta['video'];
+      final id = video is Map<String, dynamic> ? video['id'] : null;
+      final ownerId = video is Map<String, dynamic>
+          ? video['id_usuario']
+          : null;
+      final token = await ApiService.tokenDaSessao();
+      if (id == null || ownerId == null || token == null) {
+        throw Exception('O servidor não confirmou a publicação do vídeo.');
+      }
+      if (!mounted) return;
+      Navigator.of(context).pop(
+        PublishedVideo(
+          videoPath: ApiService.urlArquivoVideo(id),
+          videoToken: token,
+          videoId: id.toString(),
+          ownerId: ownerId.toString(),
+          description: descricao,
+          contentType: _contentType!,
+          spoiler: _spoiler!,
+          privacy: _privacy,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    } finally {
+      if (mounted) setState(() => _publicando = false);
+    }
   }
 
   Widget _sectionTitle(String text) => Padding(
@@ -929,9 +969,15 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
               child: SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
-                  onPressed: _publish,
-                  icon: const Icon(Icons.publish_rounded),
-                  label: const Text('Publicar vídeo'),
+                  onPressed: _publicando ? null : _publish,
+                  icon: _publicando
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.publish_rounded),
+                  label: Text(_publicando ? 'Publicando...' : 'Publicar vídeo'),
                   style: FilledButton.styleFrom(
                     backgroundColor: AppPalette.button(context),
                     padding: const EdgeInsets.symmetric(vertical: 14),

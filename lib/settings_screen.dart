@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_preferences.dart';
+import 'api_service.dart';
 import 'login_screen.dart';
 
 enum _SettingKind { toggle, choice, text, action }
@@ -317,10 +318,7 @@ class SettingsScreen extends StatelessWidget {
                 ),
               ),
               child: ListTile(
-                leading: Icon(
-                  category.icon,
-                  color: AppPalette.accent(context),
-                ),
+                leading: Icon(category.icon, color: AppPalette.accent(context)),
                 title: Text(
                   category.title,
                   style: const TextStyle(fontWeight: FontWeight.w600),
@@ -377,6 +375,8 @@ Future<void> _sairDaConta(BuildContext context) async {
     ),
   );
   if (confirmar != true || !context.mounted) return;
+  await ApiService.encerrarSessao();
+  if (!context.mounted) return;
   Navigator.of(context).pushAndRemoveUntil(
     MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
     (_) => false,

@@ -87,6 +87,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         'perfil_generos',
         _generosEntretenimento.toList(),
       );
+      await preferencias.setBool('onboarding_completed', true);
+      if (!mounted) return;
       Navigator.pushReplacement(
         context,
         PageRouteBuilder(

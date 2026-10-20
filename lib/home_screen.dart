@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +12,7 @@ import 'interest_utils.dart';
 import 'profile_screen.dart';
 import 'settings_screen.dart';
 import 'video_recorder_screen.dart';
+import 'api_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -35,74 +38,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   late AnimationController _glowCtrl;
   late Animation<double> _glowAnim;
 
-  final List<_VideoCard> _videos = [
-    _VideoCard(
-      titulo: "Interstellar",
-      autor: '@gui.scifi',
-      tipo: "Filme",
-      genero: "Ficção Científica",
-      descricao:
-          "Uma jornada emocionante pelo espaço sobre amor, tempo e sobrevivência.",
-      spoiler: "nenhum",
-      stars: 2341,
-      comentarios: 187,
-      cor: const Color(0xFF0D1B2A),
-    ),
-    _VideoCard(
-      titulo: "Attack on Titan",
-      autor: '@marina.anime',
-      tipo: "Anime",
-      genero: "Ação",
-      descricao:
-          "Uma história intensa de coragem, escolhas difíceis e grandes batalhas.",
-      spoiler: "leve",
-      stars: 5820,
-      comentarios: 932,
-      cor: const Color(0xFF1A0A00),
-    ),
-    _VideoCard(
-      titulo: "O Hobbit",
-      autor: '@bia.leitora',
-      tipo: "Livro",
-      genero: "Fantasia",
-      descricao:
-          "Uma aventura fantástica que começa com uma jornada inesperada.",
-      spoiler: "nenhum",
-      stars: 1203,
-      comentarios: 74,
-      cor: const Color(0xFF0A1A0A),
-    ),
-    _VideoCard(
-      titulo: "Dark",
-      autor: '@gui.scifi',
-      tipo: "Série",
-      genero: "Suspense",
-      descricao:
-          "Mistério, suspense e viagens no tempo em uma pequena cidade alemã.",
-      spoiler: "muito",
-      stars: 3910,
-      comentarios: 445,
-      cor: const Color(0xFF0F0F1A),
-    ),
-    _VideoCard(
-      titulo: "Crash Landing on You",
-      autor: '@julia.dorama',
-      tipo: "K-Drama",
-      genero: "Romance",
-      descricao:
-          "Um romance delicado que atravessa fronteiras e muda duas vidas.",
-      spoiler: "nenhum",
-      stars: 4102,
-      comentarios: 661,
-      cor: const Color(0xFF1A001A),
-    ),
-  ];
+  final List<_VideoCard> _videos = [];
 
   @override
   void initState() {
     super.initState();
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
     _carregarPreferencias();
+    unawaited(_carregarVideosApi());
 
     _glowCtrl = AnimationController(
       vsync: this,
@@ -208,6 +151,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ),
     );
     if (!mounted || publicado == null) return;
+    final preferencias = await SharedPreferences.getInstance();
+    final nomeUsuario = preferencias.getString('perfil_usuario') ?? '@usuario';
     setState(() {
       _videos.insert(
         0,
@@ -215,7 +160,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           titulo: publicado.description.isEmpty
               ? 'Meu vídeo'
               : 'Minha recomendação',
-          autor: '@seu.usuario',
+          autor: nomeUsuario,
           tipo: publicado.contentType,
           genero: 'Vídeo de ${publicado.contentType.toLowerCase()}',
           descricao: publicado.description.isEmpty
@@ -226,10 +171,72 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           comentarios: 0,
           cor: const Color(0xFF191416),
           videoPath: publicado.videoPath,
+          videoToken: publicado.videoToken,
+          videoId: publicado.videoId,
+          ownerId: publicado.ownerId,
           privacy: publicado.privacy,
         ),
       );
     });
+  }
+
+  Future<void> _carregarVideosApi() async {
+    try {
+      final videos = await ApiService.listarVideos();
+      final token = await ApiService.tokenDaSessao();
+      if (token == null) {
+        throw Exception('Sua sessão expirou. Entre novamente.');
+      }
+      final publicados = videos.map((video) {
+        final id = video['id'];
+        final ownerId = video['id_usuario'];
+        final autor = video['autor'];
+        final descricao = video['descricao'];
+        final tipo = video['tipo_conteudo'];
+        final spoiler = video['spoiler'];
+        final privacidade = video['privacidade'];
+        if (id == null ||
+            ownerId == null ||
+            autor is! String ||
+            descricao is! String ||
+            tipo is! String ||
+            spoiler is! String ||
+            privacidade is! String) {
+          throw Exception('O servidor retornou dados de vídeo inválidos.');
+        }
+        return _VideoCard(
+          titulo: descricao.isEmpty ? 'Vídeo publicado' : 'Minha recomendação',
+          autor: autor,
+          tipo: tipo,
+          genero: 'Vídeo de ${tipo.toLowerCase()}',
+          descricao: descricao,
+          spoiler: spoiler,
+          stars: 0,
+          comentarios: 0,
+          cor: const Color(0xFF191416),
+          videoPath: ApiService.urlArquivoVideo(id),
+          videoToken: token,
+          videoId: id.toString(),
+          ownerId: ownerId.toString(),
+          privacy: privacidade,
+        );
+      }).toList();
+      if (!mounted) return;
+      setState(() {
+        _videos.removeWhere((video) => video.videoToken != null);
+        _videos.insertAll(0, publicados);
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Não foi possível carregar os vídeos do servidor: '
+            '${e.toString().replaceFirst('Exception: ', '')}',
+          ),
+        ),
+      );
+    }
   }
 
   @override
@@ -251,7 +258,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       ocultarSpoilers: _ocultarSpoilers,
                       profileInterests: _gostosPerfil,
                     ),
-                    GroupsScreen(interests: _gostosPerfil),
+                    const GroupsScreen(),
                     ProfileScreen(
                       onOpenSettings: _abrirConfiguracoes,
                       availableVideos: _videos
@@ -290,9 +297,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   // ── Tela de Bem-vindo ──────────────────────────────────────────────
   Widget _buildBemVindoOverlay() {
     return Container(
-      color: AppPalette.isDark(context)
-          ? AppPalette.darkBackground
-          : const Color(0xFF000000),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: AppPalette.isDark(context)
+              ? [
+                  AppPalette.darkBackground,
+                  const Color(0xFF54242B),
+                  AppPalette.darkBackground,
+                ]
+              : const [Color(0xFFFFF4F5), Color(0xFFFFE2E5), Color(0xFFF8CDD2)],
+        ),
+      ),
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -307,7 +324,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    const Color(0xFFB8787C).withOpacity(0.10),
+                    const Color(0xFFB8787C).withValues(alpha: 0.16),
                     Colors.transparent,
                   ],
                 ),
@@ -325,7 +342,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    const Color.fromARGB(255, 255, 215, 218).withOpacity(0.12),
+                    const Color(0xFFBB7575).withValues(alpha: 0.14),
                     Colors.transparent,
                   ],
                 ),
@@ -370,16 +387,27 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     child: Image.asset(AppPalette.logo(context), height: 100),
                   ),
 
-                  const SizedBox(height: 36),
+                  const SizedBox(height: 30),
 
                   Text(
                     "Bem-vindo!",
                     style: TextStyle(
                       color: AppPalette.isDark(context)
-                          ? Colors.white
-                          : const Color(0xFFBB7575),
-                      fontSize: 44,
-                      fontWeight: FontWeight.bold,
+                          ? const Color(0xFFFFE9E9)
+                          : const Color(0xFF7D343E),
+                      fontFamily: 'IMFellFrenchCanon',
+                      fontSize: 50,
+                      fontWeight: FontWeight.w400,
+                      letterSpacing: 1.2,
+                      shadows: [
+                        Shadow(
+                          color: const Color(
+                            0xFF7D343E,
+                          ).withValues(alpha: 0.14),
+                          blurRadius: 18,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
                     ),
                   ),
 
@@ -391,26 +419,41 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     height: 3,
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
-                        colors: [Color(0xFFBB7575), Color(0xFFBB7575)],
+                        colors: [Color(0xFFBB7575), Color(0xFFD99AA0)],
                       ),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
 
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 32),
 
-                  Text(
-                    "Seu universo de entretenimento começa aqui",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: const Color.fromARGB(
-                        255,
-                        255,
-                        218,
-                        220,
-                      ).withOpacity(0.60),
-                      fontSize: 15,
-                      height: 1.55,
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 32),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 14,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppPalette.isDark(context)
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : Colors.white.withValues(alpha: 0.58),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: AppPalette.accent(
+                          context,
+                        ).withValues(alpha: 0.24),
+                      ),
+                    ),
+                    child: Text(
+                      "Seu universo de entretenimento começa aqui",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: AppPalette.isDark(context)
+                            ? const Color(0xFFFFE9E9)
+                            : const Color(0xFF70494D),
+                        fontSize: 15,
+                        height: 1.55,
+                      ),
                     ),
                   ),
                 ],
@@ -663,7 +706,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           child: Row(
             children: [
               _navAssetItem(
@@ -674,7 +717,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
               _navAssetItem(
                 image: 'assets/images/grupos.png',
-                label: 'Grupos',
+                label: 'Pessoas',
                 active: _tabAtual == 1,
                 onTap: () => setState(() => _tabAtual = 1),
                 fallback: Icons.groups_rounded,
@@ -690,7 +733,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 10,
-                          vertical: 1,
+                          vertical: 4,
                         ),
                         child: Image.asset(
                           'assets/images/gravar.png',
@@ -734,7 +777,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         onTap: onTap,
         borderRadius: BorderRadius.circular(10),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 1),
+          padding: const EdgeInsets.symmetric(vertical: 3),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -760,7 +803,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   color: active
                       ? AppPalette.primaryText(context)
                       : AppPalette.mutedText(context),
-                  fontSize: 8,
+                  fontSize: 9,
                   fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                 ),
               ),
@@ -778,7 +821,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         onTap: () => setState(() => _tabAtual = 2),
         borderRadius: BorderRadius.circular(10),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 1),
+          padding: const EdgeInsets.symmetric(vertical: 3),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -799,7 +842,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   color: active
                       ? AppPalette.primaryText(context)
                       : AppPalette.mutedText(context),
-                  fontSize: 8,
+                  fontSize: 9,
                   fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                 ),
               ),
@@ -892,6 +935,9 @@ class _LoopSearchDelegate extends SearchDelegate<int?> {
 class _VideoCard {
   final String titulo, tipo, genero, descricao, spoiler, autor;
   final String? videoPath;
+  final String? videoToken;
+  final String? videoId;
+  final String? ownerId;
   final String privacy;
   final int stars, comentarios;
   final Color cor;
@@ -906,38 +952,70 @@ class _VideoCard {
     required this.comentarios,
     required this.cor,
     this.videoPath,
+    this.videoToken,
+    this.videoId,
+    this.ownerId,
     this.privacy = 'Público',
   });
 }
 
 class _FeedVideo extends StatefulWidget {
   final String path;
+  final String? token;
+  final String? videoId;
 
-  const _FeedVideo({required this.path});
+  const _FeedVideo({required this.path, this.token, this.videoId});
 
   @override
   State<_FeedVideo> createState() => _FeedVideoState();
 }
 
 class _FeedVideoState extends State<_FeedVideo> {
-  late final VideoPlayerController _controller;
+  VideoPlayerController? _controller;
   late final Future<void> _initialize;
+  bool _muted = false;
 
   @override
   void initState() {
     super.initState();
-    final uri = kIsWeb ? Uri.parse(widget.path) : Uri.file(widget.path);
-    _controller = VideoPlayerController.networkUrl(uri);
-    _initialize = _controller.initialize().then((_) async {
-      await _controller.setLooping(true);
-      await _controller.play();
-    });
+    _initialize = _initializeVideo();
+  }
+
+  Future<void> _initializeVideo() async {
+    final parsedUri = Uri.tryParse(widget.path);
+    final isNetworkUri =
+        parsedUri != null &&
+        (parsedUri.scheme == 'http' || parsedUri.scheme == 'https');
+    final uri = kIsWeb && widget.videoId != null
+        ? Uri.parse(await ApiService.urlArquivoVideoWeb(widget.videoId!))
+        : isNetworkUri
+        ? parsedUri
+        : kIsWeb
+        ? Uri.parse(widget.path)
+        : Uri.file(widget.path);
+    if (!mounted) return;
+    final controller = VideoPlayerController.networkUrl(
+      uri,
+      httpHeaders: kIsWeb || widget.token == null
+          ? const {}
+          : {'Authorization': 'Bearer ${widget.token}'},
+    );
+    _controller = controller;
+    await controller.initialize();
+    await controller.setLooping(true);
+    await controller.play();
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller?.dispose();
     super.dispose();
+  }
+
+  Future<void> _toggleMute() async {
+    final muted = !_muted;
+    await _controller!.setVolume(muted ? 0 : 1);
+    if (mounted) setState(() => _muted = muted);
   }
 
   @override
@@ -954,16 +1032,38 @@ class _FeedVideoState extends State<_FeedVideo> {
             ),
           );
         }
-        final aspectRatio = _controller.value.aspectRatio;
-        return ClipRect(
-          child: FittedBox(
-            fit: BoxFit.cover,
-            child: SizedBox(
-              width: 1000 * aspectRatio,
-              height: 1000,
-              child: VideoPlayer(_controller),
+        final controller = _controller!;
+        final aspectRatio = controller.value.aspectRatio;
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            ClipRect(
+              child: FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: 1000 * aspectRatio,
+                  height: 1000,
+                  child: VideoPlayer(controller),
+                ),
+              ),
             ),
-          ),
+            Positioned(
+              top: 70,
+              right: 12,
+              child: Material(
+                color: Colors.black.withValues(alpha: 0.42),
+                borderRadius: BorderRadius.circular(10),
+                child: IconButton(
+                  tooltip: _muted ? 'Ativar som' : 'Silenciar vídeo',
+                  onPressed: _toggleMute,
+                  color: Colors.white,
+                  icon: Icon(
+                    _muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                  ),
+                ),
+              ),
+            ),
+          ],
         );
       },
     );
@@ -1022,6 +1122,44 @@ class _LoopTabState extends State<_LoopTab> {
         ..clear()
         ..addAll(savedVideoIndices.value);
     });
+  }
+
+  Future<void> _abrirPerfilAutor(_VideoCard video) async {
+    final id = video.ownerId;
+    if (id == null) return;
+    try {
+      final account = await ApiService.obterConta(id);
+      final preferences = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      final isOwner =
+          preferences.getString('perfil_id') == account['id'].toString();
+      final username = account['nome_usuario'] as String;
+      final works = account['obras'] as List<Map<String, dynamic>>;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => ProfileScreen(
+            isOwner: isOwner,
+            publicUsername: '@$username',
+            publicName: account['nome'] as String,
+            publicWorks: works,
+            availableVideos: widget.videos
+                .where((item) => item.ownerId == id)
+                .map((item) => item.titulo)
+                .toList(),
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Não foi possível abrir esse perfil: '
+            '${error.toString().replaceFirst('Exception: ', '')}',
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _carregarInteracoes() async {
@@ -1254,7 +1392,11 @@ class _LoopTabState extends State<_LoopTab> {
                     : v.cor,
               )
             else
-              _FeedVideo(path: v.videoPath!),
+              _FeedVideo(
+                path: v.videoPath!,
+                token: v.videoToken,
+                videoId: v.videoId,
+              ),
             Center(
               child: Opacity(
                 opacity: 0.06,
@@ -1272,6 +1414,12 @@ class _LoopTabState extends State<_LoopTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  _badge(
+                    _spoilerLabel(v.spoiler),
+                    _spoilerColor(v.spoiler).withOpacity(0.16),
+                    _spoilerColor(v.spoiler),
+                  ),
+                  const SizedBox(height: 8),
                   Text(
                     v.titulo,
                     style: TextStyle(
@@ -1282,12 +1430,6 @@ class _LoopTabState extends State<_LoopTab> {
                       fontWeight: FontWeight.bold,
                       shadows: [Shadow(color: Colors.black54, blurRadius: 8)],
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  _badge(
-                    _spoilerLabel(v.spoiler),
-                    _spoilerColor(v.spoiler).withOpacity(0.16),
-                    _spoilerColor(v.spoiler),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -1303,16 +1445,6 @@ class _LoopTabState extends State<_LoopTab> {
                       shadows: const [
                         Shadow(color: Colors.black87, blurRadius: 6),
                       ],
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${v.tipo} · ${v.genero}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.72),
-                      fontSize: 12,
                     ),
                   ),
                 ],
@@ -1334,18 +1466,7 @@ class _LoopTabState extends State<_LoopTab> {
                           children: [
                             Expanded(
                               child: GestureDetector(
-                                onTap: () => Navigator.of(context).push(
-                                  MaterialPageRoute<void>(
-                                    builder: (_) => ProfileScreen(
-                                      isOwner: false,
-                                      publicUsername: v.autor,
-                                      publicInterests: [v.tipo, v.genero],
-                                      availableVideos: widget.videos
-                                          .map((video) => video.titulo)
-                                          .toList(),
-                                    ),
-                                  ),
-                                ),
+                                onTap: () => _abrirPerfilAutor(v),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -1397,31 +1518,38 @@ class _LoopTabState extends State<_LoopTab> {
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            OutlinedButton(
-                              onPressed: () => _toggleFollow(v.autor),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.white,
-                                backgroundColor: Colors.transparent,
-                                minimumSize: const Size(0, 32),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 11,
-                                ),
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                side: BorderSide(
-                                  color: Colors.white.withValues(alpha: 0.8),
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(18),
-                                ),
-                              ),
-                              child: Text(
-                                _following.contains(v.autor)
-                                    ? 'Seguindo'
-                                    : 'Seguir',
-                              ),
-                            ),
                           ],
+                        ),
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed: () => _toggleFollow(v.autor),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            backgroundColor: AppPalette.button(
+                              context,
+                            ).withValues(alpha: 0.72),
+                            minimumSize: const Size(0, 30),
+                            padding: const EdgeInsets.symmetric(horizontal: 9),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            side: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.48),
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          icon: Icon(
+                            _following.contains(v.autor)
+                                ? Icons.check_rounded
+                                : Icons.person_add_alt_1_rounded,
+                            size: 14,
+                          ),
+                          label: Text(
+                            _following.contains(v.autor)
+                                ? 'Seguindo'
+                                : 'Seguir',
+                            style: const TextStyle(fontSize: 12),
+                          ),
                         ),
                       ],
                     ),
@@ -1774,7 +1902,9 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                       decoration: InputDecoration(
                         hintText: 'Escreva um comentário',
                         filled: true,
-                        fillColor: AppPalette.input(context),
+                        fillColor: AppPalette.isDark(context)
+                            ? const Color(0xFF55232A)
+                            : const Color(0xFFFFF0F1),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide.none,
@@ -2007,9 +2137,7 @@ class _LupezOverlayState extends State<_LupezOverlay>
                 ? MediaQuery.sizeOf(context).height
                 : MediaQuery.of(context).size.height * 0.75,
             decoration: BoxDecoration(
-              color: AppPalette.isDark(context)
-                  ? AppPalette.darkBackground
-                  : const Color(0xFF0D0D0D),
+              color: AppPalette.raisedSurface(context),
               borderRadius: widget.fullScreen
                   ? BorderRadius.zero
                   : const BorderRadius.vertical(top: Radius.circular(28)),
@@ -2023,7 +2151,7 @@ class _LupezOverlayState extends State<_LupezOverlay>
                     width: 40,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: Colors.white12,
+                      color: AppPalette.border(context).withValues(alpha: 0.5),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -2085,7 +2213,7 @@ class _LupezOverlayState extends State<_LupezOverlay>
                             child: const Text(
                               "Lupez",
                               style: TextStyle(
-                                color: Color.fromARGB(255, 207, 143, 143),
+                                color: Colors.white,
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -2105,12 +2233,7 @@ class _LupezOverlayState extends State<_LupezOverlay>
                               Text(
                                 "IA de entretenimento",
                                 style: TextStyle(
-                                  color: const Color.fromARGB(
-                                    255,
-                                    211,
-                                    146,
-                                    146,
-                                  ).withOpacity(0.38),
+                                  color: AppPalette.mutedText(context),
                                   fontSize: 11,
                                 ),
                               ),
@@ -2125,12 +2248,14 @@ class _LupezOverlayState extends State<_LupezOverlay>
                           width: 34,
                           height: 34,
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.07),
+                            color: AppPalette.button(
+                              context,
+                            ).withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.close,
-                            color: Colors.white54,
+                            color: AppPalette.mutedText(context),
                             size: 18,
                           ),
                         ),
@@ -2139,7 +2264,10 @@ class _LupezOverlayState extends State<_LupezOverlay>
                   ),
                 ),
 
-                Divider(color: Colors.white.withOpacity(0.07), height: 1),
+                Divider(
+                  color: AppPalette.border(context).withValues(alpha: 0.18),
+                  height: 1,
+                ),
 
                 // Mensagens
                 Expanded(
@@ -2181,8 +2309,8 @@ class _LupezOverlayState extends State<_LupezOverlay>
                           ),
                           child: Text(
                             _sugestoes[i],
-                            style: const TextStyle(
-                              color: Colors.white70,
+                            style: TextStyle(
+                              color: AppPalette.primaryText(context),
                               fontSize: 12,
                             ),
                           ),
@@ -2219,14 +2347,16 @@ class _LupezOverlayState extends State<_LupezOverlay>
                           ),
                           child: TextField(
                             controller: _inputCtrl,
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: AppPalette.text(context),
                               fontSize: 13,
                             ),
                             decoration: InputDecoration(
                               hintText: "Pergunte à Lupez...",
                               hintStyle: TextStyle(
-                                color: Colors.white.withOpacity(0.32),
+                                color: AppPalette.mutedText(
+                                  context,
+                                ).withValues(alpha: 0.72),
                                 fontSize: 13,
                               ),
                               border: InputBorder.none,
@@ -2248,11 +2378,11 @@ class _LupezOverlayState extends State<_LupezOverlay>
                             width: 44,
                             height: 44,
                             decoration: BoxDecoration(
-                              shape: BoxShape.circle,
+                              borderRadius: BorderRadius.circular(12),
                               gradient: LinearGradient(
                                 colors: [
                                   AppPalette.button(context),
-                                  AppPalette.darkButton,
+                                  AppPalette.accent(context),
                                 ],
                               ),
                               boxShadow: [
@@ -2298,10 +2428,13 @@ class _LupezOverlayState extends State<_LupezOverlay>
               width: 26,
               height: 26,
               margin: const EdgeInsets.only(right: 7),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
-                  colors: [Color(0xFFBB7575), Color(0xFF7D171D)],
+                  colors: [
+                    AppPalette.button(context),
+                    AppPalette.accent(context),
+                  ],
                 ),
               ),
               child: const Center(
@@ -2322,10 +2455,13 @@ class _LupezOverlayState extends State<_LupezOverlay>
               decoration: BoxDecoration(
                 gradient: msg.deLupez
                     ? null
-                    : const LinearGradient(
-                        colors: [Color(0xFFBB7575), Color(0xFF7D171D)],
+                    : LinearGradient(
+                        colors: [
+                          AppPalette.button(context),
+                          AppPalette.accent(context),
+                        ],
                       ),
-                color: msg.deLupez ? const Color(0xFF1A1A1A) : null,
+                color: msg.deLupez ? AppPalette.surface(context) : null,
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(16),
                   topRight: const Radius.circular(16),
@@ -2333,7 +2469,11 @@ class _LupezOverlayState extends State<_LupezOverlay>
                   bottomRight: Radius.circular(msg.deLupez ? 16 : 4),
                 ),
                 border: msg.deLupez
-                    ? Border.all(color: Colors.white.withOpacity(0.07))
+                    ? Border.all(
+                        color: AppPalette.border(
+                          context,
+                        ).withValues(alpha: 0.18),
+                      )
                     : null,
               ),
               child: _textoFormatado(msg.texto, msg.deLupez),
@@ -2352,7 +2492,7 @@ class _LupezOverlayState extends State<_LupezOverlay>
         TextSpan(
           text: partes[i],
           style: TextStyle(
-            color: deLupez ? Colors.white.withOpacity(0.85) : Colors.white,
+            color: deLupez ? AppPalette.text(context) : Colors.white,
             fontWeight: i.isOdd ? FontWeight.bold : FontWeight.normal,
             fontSize: 13,
             height: 1.5,
@@ -2373,10 +2513,13 @@ class _LupezOverlayState extends State<_LupezOverlay>
             width: 26,
             height: 26,
             margin: const EdgeInsets.only(right: 7),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: LinearGradient(
-                colors: [Color(0xFFBB7575), Color(0xFF7D171D)],
+                colors: [
+                  AppPalette.button(context),
+                  AppPalette.accent(context),
+                ],
               ),
             ),
             child: const Center(
@@ -2393,14 +2536,16 @@ class _LupezOverlayState extends State<_LupezOverlay>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
             decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1A),
+              color: AppPalette.surface(context),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(16),
                 topRight: Radius.circular(16),
                 bottomLeft: Radius.circular(4),
                 bottomRight: Radius.circular(16),
               ),
-              border: Border.all(color: Colors.white.withOpacity(0.07)),
+              border: Border.all(
+                color: AppPalette.border(context).withValues(alpha: 0.18),
+              ),
             ),
             child: AnimatedBuilder(
               animation: _dotCtrl,
@@ -2441,197 +2586,6 @@ class _Mensagem {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// TAB: BIBLIOTECA
-// ══════════════════════════════════════════════════════════════════
-
-class _BibliotecaTab extends StatelessWidget {
-  const _BibliotecaTab();
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFFE9E9),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-              child: Row(
-                children: [
-                  const Text(
-                    "Biblioteca",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const Spacer(),
-                  _badge("🎬", "12"),
-                  const SizedBox(width: 8),
-                  _badge("📺", "8"),
-                  const SizedBox(width: 8),
-                  _badge("📖", "5"),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            DefaultTabController(
-              length: 3,
-              child: Expanded(
-                child: Column(
-                  children: [
-                    const TabBar(
-                      labelColor: Color(0xFF7D171D),
-                      unselectedLabelColor: Color(0xFFB8787C),
-                      indicatorColor: Color(0xFFB8787C),
-                      indicatorSize: TabBarIndicatorSize.label,
-                      tabs: [
-                        Tab(text: "Quero ver"),
-                        Tab(text: "Em andamento"),
-                        Tab(text: "Já vi"),
-                      ],
-                    ),
-                    Expanded(
-                      child: TabBarView(
-                        children: [
-                          _vazio("📌", "Sua lista 'quero ver'\naparece aqui"),
-                          _vazio("⏳", "O que você está\nassistindo agora"),
-                          _vazio("✅", "Obras que você\njá concluiu"),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  static Widget _badge(String emoji, String count) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(emoji, style: const TextStyle(fontSize: 14)),
-          const SizedBox(width: 4),
-          Text(
-            count,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static Widget _vazio(String emoji, String msg) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(emoji, style: const TextStyle(fontSize: 44)),
-          const SizedBox(height: 12),
-          Text(
-            msg,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.35),
-              fontSize: 14,
-              height: 1.5,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ══════════════════════════════════════════════════════════════════
-// TAB: AVALIAÇÕES
-// ══════════════════════════════════════════════════════════════════
-
-class _AvaliacoesTab extends StatelessWidget {
-  const _AvaliacoesTab();
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFFE9E9),
-      body: SafeArea(
-        child: Column(
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 20, 20, 0),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  "Avaliações",
-                  style: TextStyle(
-                    color: Color(0xFF7D171D),
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-            Expanded(
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ShaderMask(
-                      shaderCallback: (b) => const LinearGradient(
-                        colors: [Color(0xFFB8787C), Color(0xFF7D171D)],
-                      ).createShader(b),
-                      child: const Text(
-                        "⭐",
-                        style: TextStyle(fontSize: 64, color: Colors.white),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      "Suas stars aparecem aqui",
-                      style: TextStyle(
-                        color: Color(0xFF7D171D),
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      "Avalie obras e acompanhe\nsuas reviews",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.35),
-                        fontSize: 14,
-                        height: 1.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ══════════════════════════════════════════════════════════════════
 // TAB: EXPLORAR
 // ══════════════════════════════════════════════════════════════════
 
@@ -2646,14 +2600,6 @@ class _ExplorarTab extends StatefulWidget {
 
 class _ExplorarTabState extends State<_ExplorarTab> {
   String _consulta = '';
-
-  static const _trending = [
-    ("🔥", "Duna: Parte 2", "34.2k comentários"),
-    ("🔥", "The Last of Us S2", "28.7k comentários"),
-    ("🔥", "Cem Anos de Solidão", "19.1k comentários"),
-    ("📈", "Shogun", "14.5k comentários"),
-    ("📈", "Persepólis", "9.8k comentários"),
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -2766,77 +2712,6 @@ class _ExplorarTabState extends State<_ExplorarTab> {
                     child: Text('Nenhuma obra encontrada no catálogo atual.'),
                   ),
               ],
-              const SizedBox(height: 28),
-              ShaderMask(
-                shaderCallback: (b) => const LinearGradient(
-                  colors: [Color(0xFFBB7575), Color(0xFF7D171D)],
-                ).createShader(b),
-                child: const Text(
-                  "🔥  Em alta agora",
-                  style: TextStyle(
-                    color: Color(0xFFBB7575),
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-              ..._trending.asMap().entries.map((e) {
-                final i = e.key + 1;
-                final (badge, titulo, stats) = e.value;
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFBB7575).withOpacity(0.10),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: const Color(0xFFBB7575).withOpacity(0.20),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Text(
-                        "$i",
-                        style: TextStyle(
-                          color: i <= 3
-                              ? const Color(0xFFBB7575)
-                              : const Color(0xFFBB7575).withOpacity(0.55),
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              titulo,
-                              style: const TextStyle(
-                                color: Color(0xFFBB7575),
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              stats,
-                              style: TextStyle(
-                                color: const Color(
-                                  0xFFBB7575,
-                                ).withOpacity(0.65),
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Text(badge, style: const TextStyle(fontSize: 18)),
-                    ],
-                  ),
-                );
-              }),
               const SizedBox(height: 24),
               ShaderMask(
                 shaderCallback: (b) => const LinearGradient(
@@ -2922,19 +2797,9 @@ class _PerfilTab extends StatefulWidget {
 class _PerfilTabState extends State<_PerfilTab>
     with SingleTickerProviderStateMixin {
   late TabController _tabCtrl;
-  bool _mostrarFrase = true;
-  String _nomePerfil = 'Anna Beatriz';
-  String _usuarioPerfil = '@anna.beatriz';
-  String _bioPerfil =
-      'Cinéfila de plantão 🎬 | Amante de doramas e sci-fi | Leio tudo que posso ✨';
-
-  final _selos = const [
-    ("🎬", "Cinéfilo", Color(0xFFBB7575)),
-    ("🇰🇷", "Dorameiro", Color(0xFFBB7575)),
-    ("🗺️", "Aventureiro", Color(0xFFFFA726)),
-    ("📖", "Leitor", Color(0xFF4CAF50)),
-    ("🎌", "Otaku", Color(0xFF9C27B0)),
-  ];
+  String _nomePerfil = '';
+  String _usuarioPerfil = '';
+  String _bioPerfil = '';
 
   @override
   void initState() {
@@ -3307,37 +3172,6 @@ class _PerfilTabState extends State<_PerfilTab>
                     ],
                   ),
                   const Spacer(),
-                  // Compatibilidade
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFFBB7575), Color(0xFFBB7575)],
-                      ),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: const Color(0xFFBB7575).withOpacity(0.45),
-                      ),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text("💞", style: TextStyle(fontSize: 13)),
-                        SizedBox(width: 5),
-                        Text(
-                          "87% compatível",
-                          style: TextStyle(
-                            color: Color(0xFFFFE9E9),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ],
               ),
               const SizedBox(height: 10),
@@ -3350,121 +3184,6 @@ class _PerfilTabState extends State<_PerfilTab>
                 ),
               ),
               const SizedBox(height: 14),
-              // Contadores
-              Row(
-                children: [
-                  _contador("1.2k", "seguidores"),
-                  const SizedBox(width: 24),
-                  _contador("340", "seguindo"),
-                  const SizedBox(width: 24),
-                  _contador("4.8k", "⭐ stars"),
-                ],
-              ),
-              const SizedBox(height: 16),
-              // Obra favorita
-              Row(
-                children: [
-                  Container(
-                    width: 48,
-                    height: 66,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0D1B2A),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: const Color(0xFFBB7575).withOpacity(0.3),
-                      ),
-                    ),
-                    child: const Center(
-                      child: Text("🚀", style: TextStyle(fontSize: 22)),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        "Obra favorita",
-                        style: TextStyle(
-                          color: const Color(0xFF7D171D).withOpacity(0.65),
-                          fontSize: 11,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        "Interstellar",
-                        style: TextStyle(
-                          color: Color(0xFF7D171D),
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        "Filme • Ficção Científica",
-                        style: TextStyle(
-                          color: const Color(0xFF7D171D).withOpacity(0.60),
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              // Selos
-              Text(
-                "Selos conquistados",
-                style: TextStyle(
-                  color: const Color(0xFF7D171D).withOpacity(0.65),
-                  fontSize: 12,
-                ),
-              ),
-              const SizedBox(height: 10),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: _selos.map((s) {
-                    final (emoji, nome, cor) = s;
-                    return GestureDetector(
-                      onTap: () => _mostrarSeloDialog(emoji, nome, cor),
-                      child: Container(
-                        margin: const EdgeInsets.only(right: 10),
-                        width: 50,
-                        height: 50,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: RadialGradient(
-                            colors: [
-                              cor.withOpacity(0.25),
-                              cor.withOpacity(0.05),
-                            ],
-                          ),
-                          border: Border.all(
-                            color: cor.withOpacity(0.6),
-                            width: 1.5,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: cor.withOpacity(0.22),
-                              blurRadius: 10,
-                            ),
-                          ],
-                        ),
-                        child: Center(
-                          child: Text(
-                            emoji,
-                            style: const TextStyle(fontSize: 20),
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              // Frase fixada
-              if (_mostrarFrase) _buildFrase(),
-              const SizedBox(height: 12),
               // Botão seguir
               SizedBox(
                 width: double.infinity,
@@ -3515,161 +3234,6 @@ class _PerfilTabState extends State<_PerfilTab>
               ),
               const SizedBox(height: 10),
             ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFrase() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.04),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              ShaderMask(
-                shaderCallback: (b) => const LinearGradient(
-                  colors: [
-                    Color.fromARGB(255, 199, 138, 141),
-                    Color.fromARGB(255, 208, 146, 146),
-                  ],
-                ).createShader(b),
-                child: const Text(
-                  "📌 Frase fixada",
-                  style: TextStyle(
-                    color: Color.fromARGB(255, 209, 144, 144),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              const Spacer(),
-              GestureDetector(
-                onTap: () => setState(() => _mostrarFrase = false),
-                child: Icon(
-                  Icons.close,
-                  color: const Color.fromARGB(97, 203, 141, 141),
-                  size: 15,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '"Não importa o que o tempo faça conosco, o que importa é o que fazemos com ele."\n— Interstellar',
-            style: TextStyle(
-              color: const Color(0xFFBB7575).withOpacity(0.78),
-              fontSize: 13,
-              fontStyle: FontStyle.italic,
-              height: 1.5,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _mostrarSeloDialog(String emoji, String nome, Color cor) {
-    showDialog(
-      context: context,
-      builder: (_) => Dialog(
-        backgroundColor: const Color(0xFF111111),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [cor.withOpacity(0.3), cor.withOpacity(0.05)],
-                  ),
-                  border: Border.all(color: cor.withOpacity(0.7), width: 2),
-                  boxShadow: [
-                    BoxShadow(color: cor.withOpacity(0.35), blurRadius: 22),
-                  ],
-                ),
-                child: Center(
-                  child: Text(emoji, style: const TextStyle(fontSize: 36)),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                nome,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                "Conquistado por dedicação e paixão pelo entretenimento!",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.5),
-                  fontSize: 13,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 20),
-              GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 28,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [cor, cor.withOpacity(0.6)],
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    "Fechar",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _contador(String valor, String label) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          valor,
-          style: const TextStyle(
-            color: Color(0xFF7D171D),
-            fontSize: 17,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        Text(
-          label,
-          style: TextStyle(
-            color: const Color(0xFF7D171D).withOpacity(0.58),
-            fontSize: 12,
           ),
         ),
       ],

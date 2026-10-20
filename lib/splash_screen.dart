@@ -1,9 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_preferences.dart';
+import 'api_service.dart';
+import 'home_screen.dart';
 import 'login_screen.dart';
+import 'onboarding_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -73,13 +77,24 @@ class _SplashScreenState extends State<SplashScreen>
       _startScrolls();
     });
 
-    _loginTimer = Timer(const Duration(seconds: 4), () {
+    _loginTimer = Timer(const Duration(seconds: 4), () async {
+      if (!mounted) return;
+
+      final temSessao = await ApiService.temSessaoValida();
+      if (!mounted) return;
+      Widget destino = const LoginScreen();
+      if (temSessao) {
+        final preferencias = await SharedPreferences.getInstance();
+        destino = preferencias.getBool('onboarding_completed') ?? false
+            ? const HomeScreen()
+            : const OnboardingScreen();
+      }
       if (!mounted) return;
 
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
           pageBuilder: (context, animation, secondaryAnimation) {
-            return const LoginScreen();
+            return destino;
           },
           transitionDuration: const Duration(milliseconds: 800),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {

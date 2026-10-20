@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'api_service.dart';
 import 'app_preferences.dart';
-import 'interest_utils.dart';
+import 'work_compatibility.dart';
+import 'works_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final bool isOwner;
   final VoidCallback? onOpenSettings;
   final String? publicUsername;
-  final List<String> publicInterests;
+  final String? publicName;
+  final List<Map<String, dynamic>> publicWorks;
   final List<String> availableVideos;
   final List<String> privateVideos;
 
@@ -17,7 +20,8 @@ class ProfileScreen extends StatefulWidget {
     this.isOwner = true,
     this.onOpenSettings,
     this.publicUsername,
-    this.publicInterests = const [],
+    this.publicName,
+    this.publicWorks = const [],
     this.availableVideos = const [],
     this.privateVideos = const [],
   });
@@ -29,22 +33,25 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs;
-  String _name = 'Seu nome';
-  String _username = '@seu.usuario';
+  String _name = '';
+  String _username = '';
   String _bio = '';
-  String _favorite = '';
   String _watching = '';
-  List<String> _interests = [];
+  List<Map<String, dynamic>> _works = [];
+  String? _worksError;
   Set<String> _following = {};
   Set<int> _savedIndices = {};
   bool _loading = true;
 
   bool get _isOwner => widget.isOwner;
   String get _shownUsername =>
-      _isOwner ? _username : widget.publicUsername ?? '@criador';
-  String get _shownName => _isOwner ? _name : _nameFromUsername(_shownUsername);
-  List<String> get _shownInterests =>
-      _isOwner ? _interests : widget.publicInterests;
+      _isOwner ? _username : widget.publicUsername ?? '';
+  String get _shownName =>
+      _isOwner ? _name : widget.publicName ?? _nameFromUsername(_shownUsername);
+  List<Map<String, dynamic>> get _shownWorks =>
+      _isOwner
+      ? _works.where((work) => work['sou_fa'] is bool).toList()
+      : widget.publicWorks;
 
   @override
   void initState() {
@@ -77,17 +84,22 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Future<void> _loadProfile() async {
     final preferences = await SharedPreferences.getInstance();
+    List<Map<String, dynamic>> works = _works;
+    String? worksError;
+    try {
+      works = await ApiService.listarObras();
+    } catch (error) {
+      worksError = error.toString().replaceFirst('Exception: ', '');
+    }
     if (!mounted) return;
     setState(() {
       _name = preferences.getString('perfil_nome') ?? _name;
-      _username = preferences.getString('perfil_usuario') ?? _username;
+      _username =
+          preferences.getString('perfil_usuario') ?? _username;
       _bio = preferences.getString('perfil_bio') ?? _bio;
-      _favorite = preferences.getString('perfil_obra_favorita') ?? '';
       _watching = preferences.getString('perfil_assistindo') ?? '';
-      _interests = [
-        ...?preferences.getStringList('perfil_tipos'),
-        ...?preferences.getStringList('perfil_generos'),
-      ];
+      _works = works;
+      _worksError = worksError;
       _following = Set<String>.from(followedUsernames.value);
       _savedIndices = Set<int>.from(savedVideoIndices.value);
       _loading = false;
@@ -95,11 +107,18 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   int _compatibility() {
-    final own = _interests.map(normalizeInterest).toSet();
-    final other = widget.publicInterests.map(normalizeInterest).toSet();
-    if (own.isEmpty || other.isEmpty) return 0;
-    return (own.intersection(other).length / own.union(other).length * 100)
-        .round();
+    return workCompatibility(_works, widget.publicWorks);
+  }
+
+  bool get _hasCompatibilityData =>
+      _works.any((work) => work['sou_fa'] is bool) &&
+      widget.publicWorks.any((work) => work['sou_fa'] is bool);
+
+  Future<void> _manageWorks() async {
+    await Navigator.of(
+      context,
+    ).push<void>(MaterialPageRoute<void>(builder: (_) => const WorksScreen()));
+    await _loadProfile();
   }
 
   Future<void> _editProfile() async {
@@ -110,10 +129,9 @@ class _ProfileScreenState extends State<ProfileScreen>
       text: _username.replaceFirst('@', ''),
     );
     final bio = TextEditingController(text: _bio);
-    final favorite = TextEditingController(text: _favorite);
     final watching = TextEditingController(text: _watching);
     final updated =
-        await showModalBottomSheet<(String, String, String, String, String)>(
+        await showModalBottomSheet<(String, String, String, String)>(
           context: context,
           isScrollControlled: true,
           backgroundColor: AppPalette.surface(context),
@@ -158,12 +176,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                       decoration: const InputDecoration(labelText: 'Biografia'),
                     ),
                     TextField(
-                      controller: favorite,
-                      decoration: const InputDecoration(
-                        labelText: 'Obra favorita',
-                      ),
-                    ),
-                    TextField(
                       controller: watching,
                       decoration: const InputDecoration(
                         labelText: 'Assistindo agora',
@@ -183,7 +195,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                             name.text.trim(),
                             '@$cleanUsername',
                             bio.text.trim(),
-                            favorite.text.trim(),
                             watching.text.trim(),
                           ));
                         },
@@ -202,21 +213,18 @@ class _ProfileScreenState extends State<ProfileScreen>
     name.dispose();
     username.dispose();
     bio.dispose();
-    favorite.dispose();
     watching.dispose();
     if (updated == null) return;
     await preferences.setString('perfil_nome', updated.$1);
     await preferences.setString('perfil_usuario', updated.$2);
     await preferences.setString('perfil_bio', updated.$3);
-    await preferences.setString('perfil_obra_favorita', updated.$4);
-    await preferences.setString('perfil_assistindo', updated.$5);
+    await preferences.setString('perfil_assistindo', updated.$4);
     if (!mounted) return;
     setState(() {
       _name = updated.$1;
       _username = updated.$2;
       _bio = updated.$3;
-      _favorite = updated.$4;
-      _watching = updated.$5;
+      _watching = updated.$4;
     });
   }
 
@@ -317,6 +325,46 @@ class _ProfileScreenState extends State<ProfileScreen>
                             ),
                           ),
                         ),
+                      if (showAvatar && _watching.isNotEmpty)
+                        Positioned(
+                          left: constraints.maxWidth / 2 + 64,
+                          right: 12,
+                          bottom: 34,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 11,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppPalette.surface(context).withValues(
+                                alpha: 0.94,
+                              ),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: AppPalette.border(
+                                  context,
+                                ).withValues(alpha: 0.4),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.08),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Text(
+                              'Assistindo agora · $_watching',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: AppPalette.primaryText(context),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
                     ],
                   );
                 },
@@ -360,35 +408,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (_watching.isNotEmpty)
-            Center(
-              child: Container(
-                constraints: const BoxConstraints(maxWidth: 280),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: AppPalette.surface(context),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: AppPalette.border(context).withValues(alpha: 0.4),
-                  ),
-                ),
-                child: Text(
-                  'Assistindo agora · $_watching',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppPalette.primaryText(context),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          if (_watching.isNotEmpty) const SizedBox(height: 14),
           Center(
             child: Column(
               children: [
@@ -437,26 +456,35 @@ class _ProfileScreenState extends State<ProfileScreen>
                   ),
                 ),
                 const SizedBox(width: 10),
-                Chip(
-                  avatar: Icon(
-                    Icons.favorite_rounded,
-                    size: 16,
-                    color: AppPalette.primaryText(context),
-                  ),
-                  label: Text('${_compatibility()}% compatível'),
-                  backgroundColor: AppPalette.surface(context),
-                ),
+                if (_hasCompatibilityData)
+                  Chip(
+                    avatar: Icon(
+                      Icons.favorite_rounded,
+                      size: 16,
+                      color: AppPalette.primaryText(context),
+                    ),
+                    label: Text('${_compatibility()}% compatível'),
+                    backgroundColor: AppPalette.surface(context),
+                  )
+                else
+                  const Chip(label: Text('Compatibilidade indisponível')),
               ],
             ),
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _stat(_following.length.toString(), 'seguindo'),
+              if (_isOwner) ...[
+                _stat(_following.length.toString(), 'seguindo'),
+                const SizedBox(width: 30),
+              ],
+              _stat(
+                _shownWorks.where((work) => work['sou_fa'] == true).length
+                    .toString(),
+                'obras favoritas',
+              ),
               const SizedBox(width: 30),
-              _stat('0', 'seguidores'),
-              const SizedBox(width: 30),
-              _stat('0', 'vídeos'),
+              _stat(widget.availableVideos.length.toString(), 'vídeos'),
             ],
           ),
           const SizedBox(height: 14),
@@ -466,40 +494,70 @@ class _ProfileScreenState extends State<ProfileScreen>
               textAlign: TextAlign.center,
               style: TextStyle(color: AppPalette.text(context), height: 1.4),
             ),
-          if (_isOwner && _favorite.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            _favoriteLine(),
-          ],
           const SizedBox(height: 16),
-          Text(
-            _isOwner ? 'Gostos' : 'Gostos em comum',
-            style: TextStyle(
-              color: AppPalette.primaryText(context),
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _isOwner ? 'Obras' : 'Obras e afinidades',
+                  style: TextStyle(
+                    color: AppPalette.primaryText(context),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              if (_isOwner)
+                TextButton.icon(
+                  onPressed: _manageWorks,
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  label: const Text('Gerenciar'),
+                ),
+            ],
           ),
           const SizedBox(height: 8),
           if (_loading)
             LinearProgressIndicator(color: AppPalette.accent(context))
-          else if (_shownInterests.isEmpty)
-            const Text(
-              'Adicione gêneros no onboarding para mostrar seus gostos.',
+          else if (_worksError != null && _isOwner)
+            Text(
+              'Não foi possível carregar suas obras: $_worksError',
+              style: TextStyle(color: AppPalette.mutedText(context)),
+            )
+          else if (_shownWorks.isEmpty)
+            Text(
+              _isOwner
+                  ? 'O catálogo ainda está vazio. Adicione obras para começar a comparar gostos.'
+                  : 'Esta pessoa ainda não adicionou obras ao perfil.',
+              style: TextStyle(color: AppPalette.mutedText(context)),
             )
           else
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: _shownInterests.map((interest) {
-                final shared =
+              children: _shownWorks.map((work) {
+                final myRating = _works
+                    .where((mine) => mine['id'].toString() == work['id'].toString())
+                    .firstOrNull;
+                final sameOpinion =
                     !_isOwner &&
-                    _interests
-                        .map(normalizeInterest)
-                        .contains(normalizeInterest(interest));
+                    myRating != null &&
+                    myRating['sou_fa'] is bool &&
+                    myRating['sou_fa'] == work['sou_fa'];
+                final rating = work['sou_fa'];
                 return Chip(
-                  avatar: _interestImage(interest),
-                  label: Text(displayInterest(interest)),
-                  backgroundColor: shared
+                  avatar: Icon(
+                    rating == true
+                        ? Icons.favorite_rounded
+                        : rating == false
+                        ? Icons.thumb_down_alt_outlined
+                        : Icons.help_outline_rounded,
+                    size: 16,
+                  ),
+                  label: Text(
+                    '${work['titulo']} · ${work['tipo']}'
+                    '${rating == true ? ' · Fã' : rating == false ? ' · Não é fã' : ' · Sem avaliação'}',
+                  ),
+                  backgroundColor: sameOpinion
                       ? AppPalette.surface(context)
                       : AppPalette.raisedSurface(context),
                   side: BorderSide(
@@ -508,31 +566,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                 );
               }).toList(),
             ),
-          if (_isOwner && _favorite.isEmpty) ...[
-            const SizedBox(height: 10),
-            TextButton.icon(
-              onPressed: _editProfile,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Adicionar obra favorita'),
-            ),
-          ],
         ],
       ),
     );
   }
-
-  Widget _favoriteLine() => Row(
-    children: [
-      Icon(Icons.bookmark_rounded, color: AppPalette.accent(context)),
-      const SizedBox(width: 8),
-      Expanded(
-        child: Text(
-          'Obra favorita · $_favorite',
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-      ),
-    ],
-  );
 
   Widget _stat(String value, String label) => Column(
     children: [
@@ -549,47 +586,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       ),
     ],
   );
-
-  Widget _interestImage(String interest) {
-    final normalized = interest.toLowerCase();
-    final asset =
-        normalized.contains('dorama') || normalized.contains('k-drama')
-        ? 'assets/images/dorama.png'
-        : normalized.contains('anime')
-        ? 'assets/images/anime.png'
-        : normalized.contains('livro')
-        ? 'assets/images/livro.png'
-        : normalized.contains('filme')
-        ? 'assets/images/filme.png'
-        : normalized.contains('série') || normalized.contains('serie')
-        ? 'assets/images/serie.png'
-        : 'assets/images/${_interestFile(normalized)}.png';
-    return Image.asset(
-      asset,
-      width: 20,
-      height: 20,
-      fit: BoxFit.contain,
-      errorBuilder: (_, __, ___) => Icon(
-        Icons.favorite_border_rounded,
-        size: 16,
-        color: AppPalette.accent(context),
-      ),
-    );
-  }
-
-  String _interestFile(String value) {
-    if (value.contains('ficção') || value.contains('ficcao')) return 'ficcao';
-    if (value.contains('suspense')) return 'suspense';
-    if (value.contains('romance')) return 'romance';
-    if (value.contains('fantasia')) return 'fantasia';
-    if (value.contains('terror')) return 'terror';
-    if (value.contains('drama')) return 'drama';
-    if (value.contains('comédia') || value.contains('comedia'))
-      return 'comedia';
-    if (value.contains('ação') || value.contains('acao')) return 'acao';
-    if (value.contains('aventura')) return 'aventura';
-    return 'historico';
-  }
 
   Widget _savedTab() {
     if (_savedIndices.isEmpty)
