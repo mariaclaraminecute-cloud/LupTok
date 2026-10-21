@@ -284,17 +284,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ],
           ),
 
-          // ── Bem-vindo (aparece primeiro) ───────────────────────────
+         
           if (_mostrarBemVindo) _buildBemVindoOverlay(),
 
-          // ── Humor (aparece depois do bem-vindo) ────────────────────
           if (_mostrarHumor) _buildHumorOverlay(),
         ],
       ),
     );
   }
 
-  // ── Tela de Bem-vindo ──────────────────────────────────────────────
+
   Widget _buildBemVindoOverlay() {
     return Container(
       decoration: BoxDecoration(
@@ -313,7 +312,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // Ornamento superior direito
+         
           Positioned(
             top: -80,
             right: -60,
@@ -331,7 +330,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
             ),
           ),
-          // Ornamento inferior esquerdo
+         
           Positioned(
             bottom: -60,
             left: -50,
@@ -350,7 +349,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
           ),
 
-          // Conteúdo animado
+        
           AnimatedBuilder(
             animation: _bemVindoCtrl,
             builder: (_, child) => Opacity(
@@ -367,7 +366,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Logo com glow pulsante
+              
                   TweenAnimationBuilder<double>(
                     tween: Tween(begin: 0.2, end: 0.6),
                     duration: const Duration(milliseconds: 2000),
@@ -413,7 +412,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
                   const SizedBox(height: 14),
 
-                  // Linha decorativa
+                  
                   Container(
                     width: 56,
                     height: 3,
@@ -465,7 +464,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  // ── Humor do dia ───────────────────────────────────────────────────
+
   Widget _buildHumorOverlay() {
     final humores = [
       ("😊", "Feliz", const Color(0xFFFFD700)),
@@ -514,7 +513,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Ícone decorativo
+        
                   Container(
                     width: 60,
                     height: 60,
@@ -692,7 +691,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  // ── Bottom Navigation ──────────────────────────────────────────────
   Widget _buildBottomNav() {
     return Container(
       decoration: BoxDecoration(
@@ -1033,7 +1031,11 @@ class _FeedVideoState extends State<_FeedVideo> {
           );
         }
         final controller = _controller!;
-        final aspectRatio = controller.value.aspectRatio;
+        final value = controller.value;
+        final aspectRatio = value.aspectRatio;
+        final displayAspectRatio = value.rotationCorrection % 180 == 0
+            ? aspectRatio
+            : 1 / aspectRatio;
         return Stack(
           fit: StackFit.expand,
           children: [
@@ -1041,7 +1043,7 @@ class _FeedVideoState extends State<_FeedVideo> {
               child: FittedBox(
                 fit: BoxFit.cover,
                 child: SizedBox(
-                  width: 1000 * aspectRatio,
+                  width: 1000 * displayAspectRatio,
                   height: 1000,
                   child: VideoPlayer(controller),
                 ),

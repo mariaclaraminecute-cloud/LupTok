@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 
 import 'package:camera/camera.dart';
@@ -10,12 +9,13 @@ class ApiService {
   static const String _configuredBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
   );
+
   static String get baseUrl {
     final value = _configuredBaseUrl.isNotEmpty
-          ? _configuredBaseUrl
-          : kIsWeb
-          ? 'http://localhost:3000'
-          : 'http://10.0.2.2:3000';
+        ? _configuredBaseUrl
+        : kIsWeb
+            ? 'http://localhost:3000'
+            : 'http://10.0.2.2:3000';
     return value.endsWith('/') ? value.substring(0, value.length - 1) : value;
   }
 
@@ -28,17 +28,17 @@ class ApiService {
     return _post('/api/auth/register', {
       'nome': nome,
       'nome_usuario': nomeUsuario,
-      'email': email,
+      'email': email.trim(),
       'senha': senha,
     });
   }
 
   static Future<Map<String, dynamic>> login({
-    required String email,
+    required String identificador,
     required String senha,
   }) async {
     return _post('/api/auth/login', {
-      'email': email,
+      'identificador': identificador.trim(),
       'senha': senha,
     });
   }
@@ -159,7 +159,7 @@ class ApiService {
         'video',
         arquivo.openRead(),
         await arquivo.length(),
-        filename: arquivo.name,
+        filename: _nomeArquivoUploadVideo(arquivo),
       ),
     );
 
@@ -168,6 +168,36 @@ class ApiService {
         .timeout(const Duration(minutes: 5));
     final response = await http.Response.fromStream(streamedResponse);
     return _decodeResponse(response);
+  }
+
+  static String _nomeArquivoUploadVideo(XFile arquivo) {
+    const extensoesPermitidas = {'.mp4', '.mov', '.m4v', '.webm'};
+
+    String extensaoDe(String caminho) {
+      final nome = caminho.split(RegExp(r'[/\\]')).last;
+      final ponto = nome.lastIndexOf('.');
+      return ponto < 0 ? '' : nome.substring(ponto).toLowerCase();
+    }
+
+    final extensao = [arquivo.name, arquivo.path]
+        .map(extensaoDe)
+        .where(extensoesPermitidas.contains)
+        .firstOrNull;
+    if (extensao != null) return 'video$extensao';
+
+    final extensaoMime = switch (arquivo.mimeType?.toLowerCase()) {
+      'video/mp4' => '.mp4',
+      'video/quicktime' => '.mov',
+      'video/x-m4v' => '.m4v',
+      'video/webm' => '.webm',
+      _ => null,
+    };
+    if (extensaoMime != null) return 'video$extensaoMime';
+    if (!kIsWeb) return 'video.mp4';
+
+    throw Exception(
+      'Não foi possível identificar o formato do vídeo. Grave novamente e tente publicar.',
+    );
   }
 
   static String urlArquivoVideo(Object id) =>
@@ -234,8 +264,7 @@ class ApiService {
         utf8.decode(base64Url.decode(base64Url.normalize(partes[1]))),
       );
       final expiracao = payload is Map<String, dynamic> ? payload['exp'] : null;
-      final valida =
-          expiracao is num &&
+      final valida = expiracao is num &&
           expiracao > DateTime.now().millisecondsSinceEpoch ~/ 1000;
       if (!valida) await _limparDadosSessao(preferencias);
       return valida;
@@ -295,7 +324,9 @@ class ApiService {
   }
 
   static Map<String, dynamic> _mapResponseItem(Object? item) {
-    if (item is! Map) throw Exception('O servidor retornou um item inválido.');
+    if (item is! Map) {
+      throw Exception('O servidor retornou um item inválido.');
+    }
     return Map<String, dynamic>.from(item);
   }
 
@@ -315,18 +346,15 @@ class ApiService {
     final Map<String, dynamic> data;
     try {
       final decoded = jsonDecode(response.body);
-
       if (decoded is! Map<String, dynamic>) {
         throw const FormatException();
       }
-
       data = decoded;
     } on FormatException {
       throw Exception('O servidor retornou uma resposta inválida.');
     }
 
-    if (response.statusCode >= 200 &&
-        response.statusCode < 300) {
+    if (response.statusCode >= 200 && response.statusCode < 300) {
       return data;
     }
 

@@ -84,6 +84,11 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
         enableAudio: _recordAudio,
       );
       await controller.initialize();
+      if (!kIsWeb &&
+          (defaultTargetPlatform == TargetPlatform.android ||
+              defaultTargetPlatform == TargetPlatform.iOS)) {
+        await controller.lockCaptureOrientation(DeviceOrientation.portraitUp);
+      }
       if (!mounted) {
         await controller.dispose();
         return;
@@ -1040,6 +1045,11 @@ class _PlayableVideoState extends State<_PlayableVideo> {
             child: CircularProgressIndicator(color: Color(0xFFFF4D67)),
           );
         }
+        final value = _controller.value;
+        final aspectRatio = value.aspectRatio;
+        final displayAspectRatio = value.rotationCorrection % 180 == 0
+            ? aspectRatio
+            : 1 / aspectRatio;
         return GestureDetector(
           onTap: () => setState(() {
             _controller.value.isPlaying
@@ -1047,7 +1057,7 @@ class _PlayableVideoState extends State<_PlayableVideo> {
                 : _controller.play();
           }),
           child: AspectRatio(
-            aspectRatio: _controller.value.aspectRatio,
+            aspectRatio: displayAspectRatio,
             child: Stack(
               fit: StackFit.expand,
               children: [

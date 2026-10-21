@@ -72,10 +72,10 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Future<void> _entrar() async {
-    final email = _emailController.text.trim();
-    if (!email.contains('@') || _senhaController.text.isEmpty) {
+    final identificador = _emailController.text.trim();
+    if (identificador.isEmpty || _senhaController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Informe um e-mail e uma senha válidos.')),
+        const SnackBar(content: Text('Informe seu e-mail ou nome de usuário e a senha.')),
       );
       return;
     }
@@ -84,7 +84,7 @@ class _LoginScreenState extends State<LoginScreen>
     setState(() => _carregando = true);
     try {
       final resposta = await ApiService.login(
-        email: email,
+        identificador: identificador,
         senha: _senhaController.text,
       );
       await ApiService.salvarSessao(resposta);
@@ -157,23 +157,6 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  Future<void> _entrarComGoogle() async {
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Google ainda não configurado'),
-        content: const Text(
-          'Para ativar o login, o app precisa de um provedor de autenticação e do OAuth Client ID deste projeto. Nenhuma conta foi conectada.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Fechar'),
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -304,8 +287,8 @@ class _LoginScreenState extends State<LoginScreen>
                             const SizedBox(height: 32),
                             _buildTextField(
                               controller: _emailController,
-                              hint: 'Email',
-                              icon: Icons.email_outlined,
+                              hint: 'E-mail ou nome de usuário',
+                              icon: Icons.alternate_email,
                               obscure: false,
                             ),
                             const SizedBox(height: 16),
@@ -389,70 +372,6 @@ class _LoginScreenState extends State<LoginScreen>
                             ),
 
                             const SizedBox(height: 24),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Divider(
-                                    color: AppPalette.border(
-                                      context,
-                                    ).withValues(alpha: 0.22),
-                                    thickness: 1,
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                  ),
-                                  child: Text(
-                                    'ou',
-                                    style: TextStyle(
-                                      color: AppPalette.mutedText(context),
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ),
-
-                                Expanded(
-                                  child: Divider(
-                                    color: AppPalette.border(
-                                      context,
-                                    ).withValues(alpha: 0.22),
-                                    thickness: 1,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 20),
-                            SizedBox(
-                              width: double.infinity,
-                              height: 50,
-                              child: OutlinedButton.icon(
-                                onPressed: _entrarComGoogle,
-                                icon: Text(
-                                  'G',
-                                  style: TextStyle(
-                                    color: AppPalette.primaryText(context),
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 18,
-                                  ),
-                                ),
-                                label: const Text('Continuar com Google'),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: AppPalette.primaryText(
-                                    context,
-                                  ),
-                                  side: BorderSide(
-                                    color: const Color(
-                                      0xFFBB7575,
-                                    ).withValues(alpha: 0.4),
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 20),
                             Center(
                               child: GestureDetector(
                                 onTap: () {

@@ -18,7 +18,6 @@ fs.mkdirSync(uploadsDirectory, { recursive: true });
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
-// Conexão com o banco de dados
 const db = mysql.createPool({
   host: process.env.DB_HOST,
   port: Number(process.env.DB_PORT) || 3306,
@@ -107,14 +106,13 @@ function receberVideo(req, res, next) {
   });
 }
 
-// Rota inicial
+
 app.get('/', (req, res) => {
   res.json({
     mensagem: 'API do LupTok funcionando!',
   });
 });
 
-// Teste de conexão com o MySQL
 app.get('/api/test-db', async (req, res) => {
   try {
     const [rows] = await db.query(
@@ -221,34 +219,35 @@ app.post('/api/auth/register', async (req, res) => {
 // LOGIN COM JWT
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { email, senha } = req.body;
+    const identificadorRecebido = req.body.identificador ?? req.body.email;
+    const { senha } = req.body;
 
     if (
-      typeof email !== 'string' ||
+      typeof identificadorRecebido !== 'string' ||
       typeof senha !== 'string' ||
-      !email.trim() ||
+      !identificadorRecebido.trim() ||
       !senha ||
       senha.length > 72
     ) {
       return res.status(400).json({
-        erro: 'Informe o e-mail e a senha corretamente.',
+        erro: 'Informe seu e-mail ou nome de usuário e a senha.',
       });
     }
 
-    const emailLimpo = email.trim().toLowerCase();
+    const identificador = identificadorRecebido.trim().toLowerCase();
 
     const [usuarios] = await db.execute(
       `SELECT id_usuario, nome, nome_usuario, email,
               senha_hash, role, ativo
        FROM usuario
-       WHERE email = ?
+       WHERE LOWER(email) = ? OR LOWER(nome_usuario) = ?
        LIMIT 1`,
-      [emailLimpo]
+      [identificador, identificador]
     );
 
     if (usuarios.length === 0) {
       return res.status(401).json({
-        erro: 'E-mail ou senha incorretos.',
+        erro: 'E-mail/nome de usuário ou senha incorretos.',
       });
     }
 
@@ -261,7 +260,7 @@ app.post('/api/auth/login', async (req, res) => {
 
     if (!usuario.ativo || !senhaCorreta) {
       return res.status(401).json({
-        erro: 'E-mail ou senha incorretos.',
+        erro: 'E-mail/nome de usuário ou senha incorretos.',
       });
     }
 

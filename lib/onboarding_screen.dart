@@ -203,7 +203,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
                   child: Row(
                     children: [
-                      // Botão voltar
+                    
                       GestureDetector(
                         onTap: _voltar,
                         child: AnimatedOpacity(
@@ -234,7 +234,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
                       const Spacer(),
 
-                      // Barra de progresso
+                 
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
@@ -275,7 +275,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
                 const SizedBox(height: 28),
 
-                // Conteúdo animado
+              
                 Expanded(
                   child: AnimatedBuilder(
                     animation: _slideController,
@@ -290,7 +290,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   ),
                 ),
 
-                // Botão avançar
                 Padding(
                   padding: const EdgeInsets.fromLTRB(24, 12, 24, 36),
                   child: AnimatedOpacity(

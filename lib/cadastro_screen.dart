@@ -21,7 +21,7 @@ class _CadastroScreenState extends State<CadastroScreen>
   late Animation<double> _contentSlide;
   late Animation<double> _glowAnim;
 
-  final _nomeCompletoController = TextEditingController();
+  final _apelidoController = TextEditingController();
   final _nomeController = TextEditingController();
   final _emailController = TextEditingController();
   final _senhaController = TextEditingController();
@@ -86,7 +86,7 @@ class _CadastroScreenState extends State<CadastroScreen>
     _contentController.dispose();
     _glowController.dispose();
 
-    _nomeCompletoController.dispose();
+    _apelidoController.dispose();
     _nomeController.dispose();
     _emailController.dispose();
     _senhaController.dispose();
@@ -96,13 +96,13 @@ class _CadastroScreenState extends State<CadastroScreen>
   }
 
   Future<void> _cadastrar() async {
-    final nomeCompleto = _nomeCompletoController.text.trim();
+    final apelido = _apelidoController.text.trim();
     final nomeUsuario = _nomeController.text.trim();
     final email = _emailController.text.trim();
     final senha = _senhaController.text;
     final confirmarSenha = _confirmarSenhaController.text;
 
-    if (nomeCompleto.isEmpty ||
+    if (apelido.isEmpty ||
         nomeUsuario.isEmpty ||
         email.isEmpty ||
         senha.isEmpty ||
@@ -144,7 +144,7 @@ class _CadastroScreenState extends State<CadastroScreen>
 
     try {
       await ApiService.cadastrar(
-        nome: nomeCompleto,
+        nome: apelido,
         nomeUsuario: nomeUsuario,
         email: email,
         senha: senha,
@@ -341,11 +341,11 @@ class _CadastroScreenState extends State<CadastroScreen>
 
                           const SizedBox(height: 28),
 
-                          // Nome completo
+                          // Apelido
                           _buildTextField(
-                            controller: _nomeCompletoController,
-                            hint: 'Nome completo',
-                            icon: Icons.badge_outlined,
+                            controller: _apelidoController,
+                            hint: 'Apelido',
+                            icon: Icons.person_outline,
                             obscure: false,
                           ),
 
