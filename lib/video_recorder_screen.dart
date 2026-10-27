@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gal/gal.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
@@ -37,8 +38,10 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
   int _countdown = 0;
   int _elapsedSeconds = 0;
   bool _startingRecording = false;
+  bool _selectingVideo = false;
   bool _flashOn = false;
   Timer? _recordingTimer;
+  final ImagePicker _imagePicker = ImagePicker();
 
   @override
   void initState() {
@@ -189,6 +192,47 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Não foi possível gravar o vídeo: $error')),
       );
+    }
+  }
+
+  Future<void> _selecionarDaGaleria() async {
+    if (_isRecording || _startingRecording || _selectingVideo) return;
+    setState(() => _selectingVideo = true);
+    try {
+      final video = await _imagePicker.pickVideo(source: ImageSource.gallery);
+      if (video == null || !mounted) return;
+
+      final camera = _cameraController;
+      _cameraController = null;
+      await camera?.dispose();
+      if (!mounted) return;
+
+      final publicado = await Navigator.of(context).push<PublishedVideo>(
+        MaterialPageRoute<PublishedVideo>(
+          builder: (_) => VideoPreviewScreen(video: video),
+        ),
+      );
+      if (!mounted) return;
+      if (publicado != null) {
+        Navigator.of(context).pop(publicado);
+        return;
+      }
+      await _initializeCamera(cameraIndex: _cameraIndex);
+    } on PlatformException catch (error) {
+      if (!mounted) return;
+      final message = error.code == 'photo_access_denied'
+          ? 'Permita acesso à galeria nas configurações do dispositivo.'
+          : 'Não foi possível selecionar o vídeo: ${error.message ?? error.code}';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Não foi possível selecionar o vídeo: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _selectingVideo = false);
     }
   }
 
@@ -532,6 +576,36 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
+                              if (!_isRecording && !_startingRecording) ...[
+                                const SizedBox(height: 10),
+                                OutlinedButton.icon(
+                                  onPressed: _selectingVideo
+                                      ? null
+                                      : _selecionarDaGaleria,
+                                  icon: _selectingVideo
+                                      ? const SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.video_library_outlined,
+                                        ),
+                                  label: Text(
+                                    _selectingVideo
+                                        ? 'Abrindo galeria...'
+                                        : 'Selecionar da galeria',
+                                  ),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.white,
+                                    side: const BorderSide(
+                                      color: Colors.white70,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                   ),
@@ -681,6 +755,12 @@ class PublishedVideo {
   final String contentType;
   final String spoiler;
   final String privacy;
+  final String? workId;
+  final String? workTitle;
+  final String? workType;
+  final String? workDescription;
+  final List<String> workGenres;
+  final List<String> workKeywords;
 
   const PublishedVideo({
     required this.videoPath,
@@ -691,6 +771,12 @@ class PublishedVideo {
     required this.contentType,
     required this.spoiler,
     required this.privacy,
+    this.workId,
+    this.workTitle,
+    this.workType,
+    this.workDescription,
+    this.workGenres = const [],
+    this.workKeywords = const [],
   });
 }
 
@@ -790,6 +876,14 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
   String? _spoiler;
   String _privacy = 'Público';
   bool _publicando = false;
+  String? _workId;
+  late Future<List<Map<String, dynamic>>> _works;
+
+  @override
+  void initState() {
+    super.initState();
+    _works = ApiService.listarObras();
+  }
 
   @override
   void dispose() {
@@ -816,6 +910,7 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
         tipoConteudo: _contentType!,
         spoiler: _spoiler!,
         privacidade: _privacy,
+        idObra: _workId,
       );
       final video = resposta['video'];
       final id = video is Map<String, dynamic> ? video['id'] : null;
@@ -823,6 +918,9 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
           ? video['id_usuario']
           : null;
       final token = await ApiService.tokenDaSessao();
+      final obra = video is Map<String, dynamic> && video['obra'] is Map
+          ? Map<String, dynamic>.from(video['obra'] as Map)
+          : null;
       if (id == null || ownerId == null || token == null) {
         throw Exception('O servidor não confirmou a publicação do vídeo.');
       }
@@ -837,6 +935,12 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
           contentType: _contentType!,
           spoiler: _spoiler!,
           privacy: _privacy,
+          workId: obra?['id']?.toString(),
+          workTitle: obra?['titulo'] as String?,
+          workType: obra?['tipo'] as String?,
+          workDescription: obra?['descricao'] as String?,
+          workGenres: _stringList(obra?['generos']),
+          workKeywords: _stringList(obra?['palavras_chave']),
         ),
       );
     } catch (e) {
@@ -847,6 +951,73 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
     } finally {
       if (mounted) setState(() => _publicando = false);
     }
+  }
+
+  List<String> _stringList(Object? value) {
+    if (value is! List) return const [];
+    return value.whereType<String>().toList();
+  }
+
+  Widget _buildWorkSelector() {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _works,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Não foi possível carregar as obras: '
+                '${snapshot.error.toString().replaceFirst('Exception: ', '')}',
+              ),
+              TextButton(
+                onPressed: () => setState(() {
+                  _works = ApiService.listarObras();
+                }),
+                child: const Text('Tentar novamente'),
+              ),
+            ],
+          );
+        }
+        if (!snapshot.hasData) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final works = snapshot.data!;
+        return DropdownButtonFormField<String>(
+          initialValue: _workId ?? '',
+          decoration: InputDecoration(
+            labelText: 'Obra relacionada (opcional)',
+            filled: true,
+            fillColor: AppPalette.input(context),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: AppPalette.border(context)),
+            ),
+          ),
+          items: [
+            const DropdownMenuItem(
+              value: '',
+              child: Text('Sem obra específica'),
+            ),
+            for (final work in works)
+              DropdownMenuItem(
+                value: work['id'].toString(),
+                child: Text(
+                  '${work['titulo']} · ${work['tipo']}',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
+          onChanged: (value) => setState(
+            () => _workId = value == null || value.isEmpty ? null : value,
+          ),
+        );
+      },
+    );
   }
 
   Widget _sectionTitle(String text) => Padding(
@@ -926,6 +1097,8 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
                           ),
                       ],
                     ),
+                    const SizedBox(height: 12),
+                    _buildWorkSelector(),
                     const SizedBox(height: 16),
                     _sectionTitle('Nível de spoiler *'),
                     Wrap(

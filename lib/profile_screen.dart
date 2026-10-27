@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:video_player/video_player.dart';
 
 import 'api_service.dart';
 import 'app_preferences.dart';
@@ -13,7 +15,8 @@ class ProfileScreen extends StatefulWidget {
   final String? publicName;
   final List<Map<String, dynamic>> publicWorks;
   final List<String> availableVideos;
-  final List<String> privateVideos;
+  final List<ProfileVideo> profileVideos;
+  final List<ProfileVideo> privateVideos;
 
   const ProfileScreen({
     super.key,
@@ -23,11 +26,30 @@ class ProfileScreen extends StatefulWidget {
     this.publicName,
     this.publicWorks = const [],
     this.availableVideos = const [],
+    this.profileVideos = const [],
     this.privateVideos = const [],
   });
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class ProfileVideo {
+  final String title;
+  final String? videoPath;
+  final String? videoToken;
+  final String? videoId;
+  final String privacy;
+  final String contentType;
+
+  const ProfileVideo({
+    required this.title,
+    required this.videoPath,
+    required this.videoToken,
+    required this.videoId,
+    required this.privacy,
+    required this.contentType,
+  });
 }
 
 class _ProfileScreenState extends State<ProfileScreen>
@@ -48,8 +70,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       _isOwner ? _username : widget.publicUsername ?? '';
   String get _shownName =>
       _isOwner ? _name : widget.publicName ?? _nameFromUsername(_shownUsername);
-  List<Map<String, dynamic>> get _shownWorks =>
-      _isOwner
+  List<Map<String, dynamic>> get _shownWorks => _isOwner
       ? _works.where((work) => work['sou_fa'] is bool).toList()
       : widget.publicWorks;
 
@@ -94,8 +115,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     if (!mounted) return;
     setState(() {
       _name = preferences.getString('perfil_nome') ?? _name;
-      _username =
-          preferences.getString('perfil_usuario') ?? _username;
+      _username = preferences.getString('perfil_usuario') ?? _username;
       _bio = preferences.getString('perfil_bio') ?? _bio;
       _watching = preferences.getString('perfil_assistindo') ?? '';
       _works = works;
@@ -189,8 +209,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                           final cleanUsername = username.text
                               .trim()
                               .replaceFirst(RegExp(r'^@+'), '');
-                          if (name.text.trim().isEmpty || cleanUsername.isEmpty)
+                          if (name.text.trim().isEmpty ||
+                              cleanUsername.isEmpty) {
                             return;
+                          }
                           Navigator.pop(sheetContext, (
                             name.text.trim(),
                             '@$cleanUsername',
@@ -336,9 +358,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                               vertical: 8,
                             ),
                             decoration: BoxDecoration(
-                              color: AppPalette.surface(context).withValues(
-                                alpha: 0.94,
-                              ),
+                              color: AppPalette.surface(
+                                context,
+                              ).withValues(alpha: 0.94),
                               borderRadius: BorderRadius.circular(14),
                               border: Border.all(
                                 color: AppPalette.border(
@@ -389,11 +411,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             Expanded(
               child: TabBarView(
                 controller: _tabs,
-                children: [
-                  _empty('Ainda não há vídeos publicados.'),
-                  _savedTab(),
-                  _privateTab(),
-                ],
+                children: [_videosTab(), _savedTab(), _privateTab()],
               ),
             ),
           ],
@@ -479,12 +497,14 @@ class _ProfileScreenState extends State<ProfileScreen>
                 const SizedBox(width: 30),
               ],
               _stat(
-                _shownWorks.where((work) => work['sou_fa'] == true).length
+                _shownWorks
+                    .where((work) => work['sou_fa'] == true)
+                    .length
                     .toString(),
                 'obras favoritas',
               ),
               const SizedBox(width: 30),
-              _stat(widget.availableVideos.length.toString(), 'vídeos'),
+              _stat(widget.profileVideos.length.toString(), 'vídeos'),
             ],
           ),
           const SizedBox(height: 14),
@@ -536,7 +556,9 @@ class _ProfileScreenState extends State<ProfileScreen>
               runSpacing: 8,
               children: _shownWorks.map((work) {
                 final myRating = _works
-                    .where((mine) => mine['id'].toString() == work['id'].toString())
+                    .where(
+                      (mine) => mine['id'].toString() == work['id'].toString(),
+                    )
                     .firstOrNull;
                 final sameOpinion =
                     !_isOwner &&
@@ -555,7 +577,11 @@ class _ProfileScreenState extends State<ProfileScreen>
                   ),
                   label: Text(
                     '${work['titulo']} · ${work['tipo']}'
-                    '${rating == true ? ' · Fã' : rating == false ? ' · Não é fã' : ' · Sem avaliação'}',
+                    '${rating == true
+                        ? ' · Fã'
+                        : rating == false
+                        ? ' · Não é fã'
+                        : ' · Sem avaliação'}',
                   ),
                   backgroundColor: sameOpinion
                       ? AppPalette.surface(context)
@@ -588,8 +614,12 @@ class _ProfileScreenState extends State<ProfileScreen>
   );
 
   Widget _savedTab() {
-    if (_savedIndices.isEmpty)
+    if (!_isOwner) {
+      return _empty('Os vídeos salvos são privados.');
+    }
+    if (_savedIndices.isEmpty) {
       return _empty('Seus vídeos salvos aparecem aqui.');
+    }
     final items = _savedIndices
         .where((index) => index >= 0 && index < widget.availableVideos.length)
         .map((index) => widget.availableVideos[index])
@@ -616,10 +646,147 @@ class _ProfileScreenState extends State<ProfileScreen>
         for (final video in widget.privateVideos)
           ListTile(
             leading: const Icon(Icons.lock_outline_rounded),
-            title: Text(video),
+            title: Text(video.title),
             subtitle: const Text('Somente amigos'),
           ),
       ],
+    );
+  }
+
+  Widget _videosTab() {
+    if (widget.profileVideos.isEmpty) {
+      return _empty('Ainda não há vídeos publicados neste perfil.');
+    }
+    return GridView.builder(
+      padding: const EdgeInsets.all(3),
+      itemCount: widget.profileVideos.length,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 3,
+        mainAxisSpacing: 3,
+        childAspectRatio: 0.7,
+      ),
+      itemBuilder: (context, index) {
+        final video = widget.profileVideos[index];
+        final isPrivate = video.privacy == 'Somente amigos';
+        return Material(
+          color: AppPalette.raisedSurface(context),
+          child: InkWell(
+            onTap: () => _openProfileVideo(video),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        AppPalette.button(context),
+                        AppPalette.raisedSurface(context),
+                        AppPalette.background(context),
+                      ],
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 10,
+                  left: 10,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.movie_creation_outlined,
+                        color: AppPalette.primaryText(
+                          context,
+                        ).withValues(alpha: 0.7),
+                        size: 17,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        video.contentType,
+                        style: TextStyle(
+                          color: AppPalette.primaryText(context),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Center(
+                  child: Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.32),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.68),
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.play_arrow_rounded,
+                      color: Colors.white,
+                      size: 28,
+                    ),
+                  ),
+                ),
+                if (isPrivate)
+                  Positioned(
+                    top: 7,
+                    right: 7,
+                    child: Icon(
+                      Icons.lock_rounded,
+                      color: Colors.white.withValues(alpha: 0.9),
+                      size: 17,
+                    ),
+                  ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(8, 24, 8, 8),
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Colors.transparent, Color(0xD9000000)],
+                      ),
+                    ),
+                    child: Text(
+                      video.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _openProfileVideo(ProfileVideo video) async {
+    final path = video.videoPath;
+    if (path == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Este vídeo não está disponível.')),
+      );
+      return;
+    }
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => _ProfileVideoScreen(video: video),
+      ),
     );
   }
 
@@ -633,4 +800,113 @@ class _ProfileScreenState extends State<ProfileScreen>
       ),
     ),
   );
+}
+
+class _ProfileVideoScreen extends StatefulWidget {
+  final ProfileVideo video;
+
+  const _ProfileVideoScreen({required this.video});
+
+  @override
+  State<_ProfileVideoScreen> createState() => _ProfileVideoScreenState();
+}
+
+class _ProfileVideoScreenState extends State<_ProfileVideoScreen> {
+  VideoPlayerController? _controller;
+  late final Future<void> _initialize;
+
+  @override
+  void initState() {
+    super.initState();
+    _initialize = _initializeVideo();
+  }
+
+  Future<void> _initializeVideo() async {
+    final video = widget.video;
+    final path = video.videoPath!;
+    final parsedUri = Uri.tryParse(path);
+    final isNetworkUri =
+        parsedUri != null &&
+        (parsedUri.scheme == 'http' || parsedUri.scheme == 'https');
+    final uri = kIsWeb && video.videoId != null
+        ? Uri.parse(await ApiService.urlArquivoVideoWeb(video.videoId!))
+        : isNetworkUri
+        ? parsedUri
+        : Uri.file(path);
+    if (!mounted) return;
+    final controller = VideoPlayerController.networkUrl(
+      uri,
+      httpHeaders: kIsWeb || video.videoToken == null
+          ? const {}
+          : {'Authorization': 'Bearer ${video.videoToken}'},
+    );
+    _controller = controller;
+    await controller.initialize();
+    await controller.setLooping(true);
+    await controller.play();
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: Text(widget.video.title),
+      ),
+      body: Center(
+        child: FutureBuilder<void>(
+          future: _initialize,
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return const Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  'Não foi possível reproduzir este vídeo.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white),
+                ),
+              );
+            }
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const CircularProgressIndicator(color: Colors.white);
+            }
+            final controller = _controller!;
+            return GestureDetector(
+              onTap: () {
+                if (controller.value.isPlaying) {
+                  controller.pause();
+                } else {
+                  controller.play();
+                }
+                setState(() {});
+              },
+              child: AspectRatio(
+                aspectRatio: controller.value.aspectRatio,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    VideoPlayer(controller),
+                    if (!controller.value.isPlaying)
+                      const Icon(
+                        Icons.play_arrow_rounded,
+                        color: Colors.white,
+                        size: 64,
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
 }

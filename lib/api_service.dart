@@ -1,3 +1,4 @@
+
 import 'dart:convert';
 
 import 'package:camera/camera.dart';
@@ -14,8 +15,8 @@ class ApiService {
     final value = _configuredBaseUrl.isNotEmpty
         ? _configuredBaseUrl
         : kIsWeb
-            ? 'http://localhost:3000'
-            : 'http://10.0.2.2:3000';
+        ? 'http://localhost:3000'
+        : 'http://10.0.2.2:3000';
     return value.endsWith('/') ? value.substring(0, value.length - 1) : value;
   }
 
@@ -48,18 +49,25 @@ class ApiService {
     return preferencias.getString('session_token');
   }
 
-  static Future<List<Map<String, dynamic>>> listarVideos() async {
+  static Future<List<Map<String, dynamic>>> listarVideos({
+    String? query,
+  }) async {
     final token = await tokenDaSessao();
-    if (token == null) throw Exception('Faça login para carregar o feed.');
+    if (token == null) {
+      throw Exception('Faça login para carregar o feed.');
+    }
+
+    final uri = Uri.parse(
+      '$baseUrl/api/videos',
+    ).replace(queryParameters: query == null ? null : {'q': query});
 
     final response = await http
-        .get(
-          Uri.parse('$baseUrl/api/videos'),
-          headers: {'Authorization': 'Bearer $token'},
-        )
+        .get(uri, headers: {'Authorization': 'Bearer $token'})
         .timeout(const Duration(seconds: 20));
+
     final data = _decodeResponse(response);
     final videos = data['videos'];
+
     if (videos is! List) {
       throw Exception('O servidor retornou uma lista de vídeos inválida.');
     }
@@ -72,21 +80,112 @@ class ApiService {
     }).toList();
   }
 
-  static Future<List<Map<String, dynamic>>> listarObras() async {
-    final data = await _authenticatedGet('/api/works');
+  static Future<List<Map<String, dynamic>>> buscarVideos(String query) =>
+      listarVideos(query: query);
+
+  // Curtir ou descurtir um vídeo.
+  static Future<Map<String, dynamic>> atualizarCurtidaVideo({
+    required Object id,
+    required bool curtido,
+  }) async {
+    final token = await tokenDaSessao();
+
+    if (token == null) {
+      throw Exception('Faça login para curtir vídeos.');
+    }
+
+    final response = await http
+        .put(
+          Uri.parse('$baseUrl/api/videos/$id/like'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({'curtido': curtido}),
+        )
+        .timeout(const Duration(seconds: 15));
+
+    return _decodeResponse(response);
+  }
+
+  // Denunciar um vídeo.
+  static Future<void> denunciarVideo({
+    required Object id,
+    required String motivo,
+    required String descricao,
+  }) async {
+    final token = await tokenDaSessao();
+
+    if (token == null) {
+      throw Exception('Faça login para denunciar vídeos.');
+    }
+
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/api/videos/$id/report'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({
+            'motivo': motivo,
+            'descricao': descricao,
+          }),
+        )
+        .timeout(const Duration(seconds: 15));
+
+    _decodeResponse(response);
+  }
+
+  static Future<List<Map<String, dynamic>>> listarObras({
+    String? query,
+  }) async {
+    final endpoint = query == null
+        ? '/api/works'
+        : '/api/works?q=${Uri.encodeQueryComponent(query)}';
+
+    final data = await _authenticatedGet(endpoint);
     final obras = data['obras'];
+
     if (obras is! List) {
       throw Exception('O servidor retornou uma lista de obras inválida.');
     }
+
     return obras.map(_mapResponseItem).toList();
+  }
+
+  static Future<List<Map<String, dynamic>>> listarGeneros() async {
+    final data = await _authenticatedGet('/api/genres');
+    final generos = data['generos'];
+
+    if (generos is! List) {
+      throw Exception('O servidor retornou uma lista de gêneros inválida.');
+    }
+
+    return generos.map(_mapResponseItem).toList();
+  }
+
+  static Future<List<Map<String, dynamic>>> listarPalavrasChave() async {
+    final data = await _authenticatedGet('/api/keywords');
+    final palavras = data['palavras_chave'];
+
+    if (palavras is! List) {
+      throw Exception(
+        'O servidor retornou uma lista de palavras-chave inválida.',
+      );
+    }
+
+    return palavras.map(_mapResponseItem).toList();
   }
 
   static Future<List<Map<String, dynamic>>> listarContas() async {
     final data = await _authenticatedGet('/api/users');
     final contas = data['usuarios'];
+
     if (contas is! List) {
       throw Exception('O servidor retornou uma lista de contas inválida.');
     }
+
     return contas.map(_parseAccount).toList();
   }
 
@@ -98,9 +197,16 @@ class ApiService {
   static Future<void> adicionarObra({
     required String titulo,
     required String tipo,
+    String descricao = '',
+    List<String> generos = const [],
+    List<String> palavrasChave = const [],
   }) async {
     final token = await tokenDaSessao();
-    if (token == null) throw Exception('Faça login para adicionar uma obra.');
+
+    if (token == null) {
+      throw Exception('Faça login para adicionar uma obra.');
+    }
+
     final response = await http
         .post(
           Uri.parse('$baseUrl/api/works'),
@@ -108,10 +214,48 @@ class ApiService {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token',
           },
-          body: jsonEncode({'titulo': titulo, 'tipo': tipo}),
+          body: jsonEncode({
+            'titulo': titulo,
+            'tipo': tipo,
+            'descricao': descricao,
+            'generos': generos,
+            'palavras_chave': palavrasChave,
+          }),
         )
         .timeout(const Duration(seconds: 20));
+
     _decodeResponse(response);
+  }
+
+  // Editar os metadados de uma obra.
+  static Future<Map<String, dynamic>> atualizarMetadadosObra({
+    required Object id,
+    required String descricao,
+    required List<String> generos,
+    required List<String> palavrasChave,
+  }) async {
+    final token = await tokenDaSessao();
+
+    if (token == null) {
+      throw Exception('Faça login para editar uma obra.');
+    }
+
+    final response = await http
+        .put(
+          Uri.parse('$baseUrl/api/works/$id/metadata'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({
+            'descricao': descricao,
+            'generos': generos,
+            'palavras_chave': palavrasChave,
+          }),
+        )
+        .timeout(const Duration(seconds: 20));
+
+    return _decodeResponse(response);
   }
 
   static Future<void> avaliarObra({
@@ -119,7 +263,11 @@ class ApiService {
     required bool souFa,
   }) async {
     final token = await tokenDaSessao();
-    if (token == null) throw Exception('Faça login para avaliar uma obra.');
+
+    if (token == null) {
+      throw Exception('Faça login para avaliar uma obra.');
+    }
+
     final response = await http
         .put(
           Uri.parse('$baseUrl/api/works/$id/rating'),
@@ -130,6 +278,7 @@ class ApiService {
           body: jsonEncode({'sou_fa': souFa}),
         )
         .timeout(const Duration(seconds: 20));
+
     _decodeResponse(response);
   }
 
@@ -139,21 +288,32 @@ class ApiService {
     required String tipoConteudo,
     required String spoiler,
     required String privacidade,
+    Object? idObra,
   }) async {
     final token = await tokenDaSessao();
-    if (token == null) throw Exception('Faça login para publicar um vídeo.');
+
+    if (token == null) {
+      throw Exception('Faça login para publicar um vídeo.');
+    }
 
     final request = http.MultipartRequest(
       'POST',
       Uri.parse('$baseUrl/api/videos'),
     );
+
     request.headers['Authorization'] = 'Bearer $token';
+
     request.fields.addAll({
       'descricao': descricao,
       'tipo_conteudo': tipoConteudo,
       'spoiler': spoiler,
       'privacidade': privacidade,
     });
+
+    if (idObra != null) {
+      request.fields['id_obra'] = idObra.toString();
+    }
+
     request.files.add(
       http.MultipartFile(
         'video',
@@ -163,15 +323,21 @@ class ApiService {
       ),
     );
 
-    final streamedResponse = await request
-        .send()
-        .timeout(const Duration(minutes: 5));
+    final streamedResponse = await request.send().timeout(
+      const Duration(minutes: 5),
+    );
+
     final response = await http.Response.fromStream(streamedResponse);
     return _decodeResponse(response);
   }
 
   static String _nomeArquivoUploadVideo(XFile arquivo) {
-    const extensoesPermitidas = {'.mp4', '.mov', '.m4v', '.webm'};
+    const extensoesPermitidas = {
+      '.mp4',
+      '.mov',
+      '.m4v',
+      '.webm',
+    };
 
     String extensaoDe(String caminho) {
       final nome = caminho.split(RegExp(r'[/\\]')).last;
@@ -179,11 +345,14 @@ class ApiService {
       return ponto < 0 ? '' : nome.substring(ponto).toLowerCase();
     }
 
-    final extensao = [arquivo.name, arquivo.path]
-        .map(extensaoDe)
-        .where(extensoesPermitidas.contains)
-        .firstOrNull;
-    if (extensao != null) return 'video$extensao';
+    final extensao = [
+      arquivo.name,
+      arquivo.path,
+    ].map(extensaoDe).where(extensoesPermitidas.contains).firstOrNull;
+
+    if (extensao != null) {
+      return 'video$extensao';
+    }
 
     final extensaoMime = switch (arquivo.mimeType?.toLowerCase()) {
       'video/mp4' => '.mp4',
@@ -192,12 +361,14 @@ class ApiService {
       'video/webm' => '.webm',
       _ => null,
     };
-    if (extensaoMime != null) return 'video$extensaoMime';
-    if (!kIsWeb) return 'video.mp4';
 
-    throw Exception(
-      'Não foi possível identificar o formato do vídeo. Grave novamente e tente publicar.',
-    );
+    if (extensaoMime != null) {
+      return 'video$extensaoMime';
+    }
+
+    if (kIsWeb) return 'video.webm';
+
+    return 'video.mp4';
   }
 
   static String urlArquivoVideo(Object id) =>
@@ -205,24 +376,32 @@ class ApiService {
 
   static Future<String> urlArquivoVideoWeb(Object id) async {
     final token = await tokenDaSessao();
-    if (token == null) throw Exception('Faça login para reproduzir o vídeo.');
+
+    if (token == null) {
+      throw Exception('Faça login para reproduzir o vídeo.');
+    }
+
     final response = await http
         .get(
           Uri.parse('$baseUrl/api/videos/$id/acesso'),
           headers: {'Authorization': 'Bearer $token'},
         )
         .timeout(const Duration(seconds: 15));
+
     final data = _decodeResponse(response);
     final url = data['url'];
+
     if (url is! String) {
       throw Exception('O servidor não retornou um link de vídeo válido.');
     }
+
     return '$baseUrl$url';
   }
 
   static Future<void> salvarSessao(Map<String, dynamic> resposta) async {
     final token = resposta['token'];
     final usuario = resposta['usuario'];
+
     if (token is! String ||
         token.isEmpty ||
         usuario is! Map<String, dynamic>) {
@@ -233,6 +412,7 @@ class ApiService {
     final nomeUsuario = usuario['nome_usuario'];
     final email = usuario['email'];
     final idUsuario = usuario['id_usuario'];
+
     if (nome is! String ||
         nomeUsuario is! String ||
         email is! String ||
@@ -241,6 +421,7 @@ class ApiService {
     }
 
     final preferencias = await SharedPreferences.getInstance();
+
     await preferencias.setString('session_token', token);
     await preferencias.setString('perfil_nome', nome);
     await preferencias.setString('perfil_usuario', '@$nomeUsuario');
@@ -251,9 +432,11 @@ class ApiService {
   static Future<bool> temSessaoValida() async {
     final preferencias = await SharedPreferences.getInstance();
     final token = preferencias.getString('session_token');
+
     if (token == null) return false;
 
     final partes = token.split('.');
+
     if (partes.length != 3) {
       await _limparDadosSessao(preferencias);
       return false;
@@ -263,10 +446,19 @@ class ApiService {
       final payload = jsonDecode(
         utf8.decode(base64Url.decode(base64Url.normalize(partes[1]))),
       );
-      final expiracao = payload is Map<String, dynamic> ? payload['exp'] : null;
-      final valida = expiracao is num &&
+
+      final expiracao = payload is Map<String, dynamic>
+          ? payload['exp']
+          : null;
+
+      final valida =
+          expiracao is num &&
           expiracao > DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      if (!valida) await _limparDadosSessao(preferencias);
+
+      if (!valida) {
+        await _limparDadosSessao(preferencias);
+      }
+
       return valida;
     } on FormatException {
       await _limparDadosSessao(preferencias);
@@ -311,15 +503,22 @@ class ApiService {
     return _decodeResponse(response);
   }
 
-  static Future<Map<String, dynamic>> _authenticatedGet(String endpoint) async {
+  static Future<Map<String, dynamic>> _authenticatedGet(
+    String endpoint,
+  ) async {
     final token = await tokenDaSessao();
-    if (token == null) throw Exception('Faça login para continuar.');
+
+    if (token == null) {
+      throw Exception('Faça login para continuar.');
+    }
+
     final response = await http
         .get(
           Uri.parse('$baseUrl$endpoint'),
           headers: {'Authorization': 'Bearer $token'},
         )
         .timeout(const Duration(seconds: 20));
+
     return _decodeResponse(response);
   }
 
@@ -327,15 +526,18 @@ class ApiService {
     if (item is! Map) {
       throw Exception('O servidor retornou um item inválido.');
     }
+
     return Map<String, dynamic>.from(item);
   }
 
   static Map<String, dynamic> _parseAccount(Object? item) {
     final account = _mapResponseItem(item);
     final works = account['obras'];
+
     if (works is! List) {
       throw Exception('O servidor retornou obras de conta inválidas.');
     }
+
     return {
       ...account,
       'obras': works.map(_mapResponseItem).toList(),
@@ -344,11 +546,14 @@ class ApiService {
 
   static Map<String, dynamic> _decodeResponse(http.Response response) {
     final Map<String, dynamic> data;
+
     try {
       final decoded = jsonDecode(response.body);
+
       if (decoded is! Map<String, dynamic>) {
         throw const FormatException();
       }
+
       data = decoded;
     } on FormatException {
       throw Exception('O servidor retornou uma resposta inválida.');

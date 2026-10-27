@@ -21,6 +21,73 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
+class _LikeBurst extends StatelessWidget {
+  const _LikeBurst({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 720),
+      curve: Curves.easeOutCubic,
+      builder: (context, progress, _) {
+        final scale = Curves.easeOutBack.transform(progress);
+        final opacity = (1 - Curves.easeIn.transform(progress)).clamp(0.0, 1.0);
+        return Opacity(
+          opacity: opacity,
+          child: Transform.scale(
+            scale: 0.55 + scale * 0.55,
+            child: SizedBox(
+              width: 148,
+              height: 148,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    width: 112 + progress * 24,
+                    height: 112 + progress * 24,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.white.withValues(
+                          alpha: 0.38 * (1 - progress),
+                        ),
+                        width: 2,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(
+                            0xFFFFD166,
+                          ).withValues(alpha: 0.28 * (1 - progress)),
+                          blurRadius: 24,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    Icons.star_rounded,
+                    color: Color(0xFFFFD166),
+                    size: 96,
+                    shadows: [
+                      Shadow(
+                        color: Colors.black38,
+                        blurRadius: 18,
+                        offset: Offset(0, 5),
+                      ),
+                      Shadow(color: Color(0x99FFD166), blurRadius: 28),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   int _tabAtual = 0;
 
@@ -29,6 +96,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   bool _ocultarSpoilers = false;
   List<String> _gostosPerfil = [];
   String? _humorSelecionado;
+  String? _idUsuarioAtual;
 
   late AnimationController _bemVindoCtrl;
   late Animation<double> _bemVindoOpacity;
@@ -128,6 +196,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final preferencias = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
+      _idUsuarioAtual = preferencias.getString('perfil_id');
       _ocultarSpoilers =
           preferencias.getBool('settings_hide_spoilers') ?? false;
       _gostosPerfil = [
@@ -154,6 +223,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final preferencias = await SharedPreferences.getInstance();
     final nomeUsuario = preferencias.getString('perfil_usuario') ?? '@usuario';
     setState(() {
+      _idUsuarioAtual ??= publicado.ownerId;
       _videos.insert(
         0,
         _VideoCard(
@@ -167,6 +237,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ? 'Confira minha recomendação de ${publicado.contentType.toLowerCase()}.'
               : publicado.description,
           spoiler: publicado.spoiler,
+          obraId: publicado.workId,
+          obraTitulo: publicado.workTitle,
+          obraTipo: publicado.workType,
+          obraDescricao: publicado.workDescription,
+          obraGeneros: publicado.workGenres,
+          obraPalavrasChave: publicado.workKeywords,
           stars: 0,
           comentarios: 0,
           cor: const Color(0xFF191416),
@@ -195,25 +271,47 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         final tipo = video['tipo_conteudo'];
         final spoiler = video['spoiler'];
         final privacidade = video['privacidade'];
+        final curtidas = video['curtidas'];
+        final curtidaUsuario = video['curtida_usuario'];
+        final obraData = video['obra'];
         if (id == null ||
             ownerId == null ||
             autor is! String ||
             descricao is! String ||
             tipo is! String ||
             spoiler is! String ||
-            privacidade is! String) {
+            privacidade is! String ||
+            (curtidas != null && curtidas is! num) ||
+            curtidaUsuario is! bool ||
+            (obraData != null && obraData is! Map)) {
           throw Exception('O servidor retornou dados de vídeo inválidos.');
         }
+        final obra = obraData is Map
+            ? Map<String, dynamic>.from(obraData)
+            : null;
+        final generos = _apiStringList(obra?['generos']);
+        final palavrasChave = _apiStringList(obra?['palavras_chave']);
         return _VideoCard(
-          titulo: descricao.isEmpty ? 'Vídeo publicado' : 'Minha recomendação',
+          titulo:
+              obra?['titulo'] as String? ??
+              (descricao.isEmpty ? 'Vídeo publicado' : 'Minha recomendação'),
           autor: autor,
-          tipo: tipo,
-          genero: 'Vídeo de ${tipo.toLowerCase()}',
+          tipo: obra?['tipo'] as String? ?? tipo,
+          genero: generos.isEmpty
+              ? 'Vídeo de ${tipo.toLowerCase()}'
+              : generos.join(' · '),
           descricao: descricao,
           spoiler: spoiler,
-          stars: 0,
+          obraId: obra?['id']?.toString(),
+          obraTitulo: obra?['titulo'] as String?,
+          obraTipo: obra?['tipo'] as String?,
+          obraDescricao: obra?['descricao'] as String?,
+          obraGeneros: generos,
+          obraPalavrasChave: palavrasChave,
+          stars: curtidas is num ? curtidas.toInt() : 0,
           comentarios: 0,
           cor: const Color(0xFF191416),
+          likedByMe: curtidaUsuario,
           videoPath: ApiService.urlArquivoVideo(id),
           videoToken: token,
           videoId: id.toString(),
@@ -257,6 +355,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       videos: _videos,
                       ocultarSpoilers: _ocultarSpoilers,
                       profileInterests: _gostosPerfil,
+                      currentUserId: _idUsuarioAtual,
                     ),
                     const GroupsScreen(),
                     ProfileScreen(
@@ -264,9 +363,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       availableVideos: _videos
                           .map((video) => video.titulo)
                           .toList(),
+                      profileVideos: _videos
+                          .where(
+                            (video) =>
+                                _idUsuarioAtual != null &&
+                                video.ownerId == _idUsuarioAtual,
+                          )
+                          .map(_toProfileVideo)
+                          .toList(),
                       privateVideos: _videos
-                          .where((video) => video.privacy == 'Somente amigos')
-                          .map((video) => video.titulo)
+                          .where(
+                            (video) =>
+                                video.ownerId == _idUsuarioAtual &&
+                                video.privacy == 'Somente amigos',
+                          )
+                          .map(_toProfileVideo)
                           .toList(),
                     ),
                     _LupezOverlay(
@@ -284,7 +395,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ],
           ),
 
-         
           if (_mostrarBemVindo) _buildBemVindoOverlay(),
 
           if (_mostrarHumor) _buildHumorOverlay(),
@@ -293,6 +403,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+  ProfileVideo _toProfileVideo(_VideoCard video) => ProfileVideo(
+    title: video.titulo,
+    videoPath: video.videoPath,
+    videoToken: video.videoToken,
+    videoId: video.videoId,
+    privacy: video.privacy,
+    contentType: video.tipo,
+  );
 
   Widget _buildBemVindoOverlay() {
     return Container(
@@ -312,7 +430,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       child: Stack(
         fit: StackFit.expand,
         children: [
-         
           Positioned(
             top: -80,
             right: -60,
@@ -330,7 +447,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
             ),
           ),
-         
+
           Positioned(
             bottom: -60,
             left: -50,
@@ -349,7 +466,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
           ),
 
-        
           AnimatedBuilder(
             animation: _bemVindoCtrl,
             builder: (_, child) => Opacity(
@@ -366,7 +482,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-              
                   TweenAnimationBuilder<double>(
                     tween: Tween(begin: 0.2, end: 0.6),
                     duration: const Duration(milliseconds: 2000),
@@ -412,7 +527,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
                   const SizedBox(height: 14),
 
-                  
                   Container(
                     width: 56,
                     height: 3,
@@ -464,7 +578,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-
   Widget _buildHumorOverlay() {
     final humores = [
       ("😊", "Feliz", const Color(0xFFFFD700)),
@@ -513,7 +626,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-        
                   Container(
                     width: 60,
                     height: 60,
@@ -852,13 +964,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 }
 
-class _LoopSearchDelegate extends SearchDelegate<int?> {
-  final List<_VideoCard> videos;
+class _LoopSearchDelegate extends SearchDelegate<void> {
+  String? _lastSearchQuery;
+  Future<List<Map<String, dynamic>>>? _searchFuture;
 
-  _LoopSearchDelegate(this.videos);
+  _LoopSearchDelegate();
+
+  Future<List<Map<String, dynamic>>> _search(String term) {
+    if (_lastSearchQuery != term || _searchFuture == null) {
+      _lastSearchQuery = term;
+      _searchFuture = ApiService.buscarVideos(term);
+    }
+    return _searchFuture!;
+  }
 
   @override
-  String get searchFieldLabel => 'Buscar obras no Loop';
+  String get searchFieldLabel => 'Buscar vídeos no Loop';
 
   @override
   ThemeData appBarTheme(BuildContext context) => Theme.of(context).copyWith(
@@ -896,32 +1017,363 @@ class _LoopSearchDelegate extends SearchDelegate<int?> {
   Widget buildSuggestions(BuildContext context) => _buildMatches(context);
 
   Widget _buildMatches(BuildContext context) {
-    final term = query.trim().toLowerCase();
-    final matches = videos.indexed.where((entry) {
-      if (term.isEmpty) return true;
-      final video = entry.$2;
-      return '${video.titulo} ${video.tipo} ${video.genero}'
-          .toLowerCase()
-          .contains(term);
-    }).toList();
-
-    if (matches.isEmpty) {
-      return const Center(child: Text('Nenhuma obra encontrada.'));
+    final term = query.trim();
+    if (term.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Text(
+            'Busque por título, gênero ou tema. Ex.: “dorama colegial”.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppPalette.mutedText(context)),
+          ),
+        ),
+      );
     }
 
-    return ListView.builder(
-      itemCount: matches.length,
-      itemBuilder: (context, index) {
-        final video = matches[index].$2;
-        return ListTile(
-          leading: CircleAvatar(
-            backgroundColor: video.cor,
-            child: const Icon(Icons.movie_outlined, color: Colors.white),
-          ),
-          title: Text(video.titulo),
-          subtitle: Text('${video.tipo} · ${video.genero}'),
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _search(term),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'Não foi possível pesquisar: '
+                '${snapshot.error.toString().replaceFirst('Exception: ', '')}',
+                textAlign: TextAlign.center,
+              ),
+            ),
+          );
+        }
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final videos = snapshot.data!;
+        if (videos.isEmpty) {
+          return const Center(child: Text('Nenhum resultado encontrado.'));
+        }
+
+        return _VideoSearchGrid(
+          videos: videos,
+          onTap: (video) => _openSearchVideo(context, video),
         );
       },
+    );
+  }
+}
+
+List<String> _apiStringList(Object? value) =>
+    value is List ? value.whereType<String>().toList() : const [];
+
+String _searchVideoTitle(Map<String, dynamic> video) {
+  final obra = video['obra'];
+  final tituloObra = obra is Map ? obra['titulo'] : null;
+  final descricao = video['descricao'];
+  if (tituloObra is String && tituloObra.isNotEmpty) return tituloObra;
+  if (descricao is String && descricao.isNotEmpty) return descricao;
+  return 'Vídeo publicado';
+}
+
+String _searchVideoAsset(Map<String, dynamic> video) {
+  final obra = video['obra'];
+  final tipo = obra is Map ? obra['tipo'] : video['tipo_conteudo'];
+  return switch (tipo?.toString().toLowerCase()) {
+    'série' || 'serie' => 'assets/images/serie.png',
+    'livro' => 'assets/images/livro.png',
+    'anime' => 'assets/images/anime.png',
+    'dorama' || 'k-drama' => 'assets/images/dorama.png',
+    _ => 'assets/images/filme.png',
+  };
+}
+
+class _VideoSearchGrid extends StatelessWidget {
+  final List<Map<String, dynamic>> videos;
+  final ValueChanged<Map<String, dynamic>> onTap;
+  final bool shrinkWrap;
+
+  const _VideoSearchGrid({
+    required this.videos,
+    required this.onTap,
+    this.shrinkWrap = false,
+  });
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final columns = constraints.maxWidth >= 900
+          ? 5
+          : constraints.maxWidth >= 650
+          ? 4
+          : constraints.maxWidth >= 420
+          ? 3
+          : 2;
+      return GridView.builder(
+        shrinkWrap: shrinkWrap,
+        physics: shrinkWrap ? const NeverScrollableScrollPhysics() : null,
+        padding: const EdgeInsets.all(12),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: columns,
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
+          childAspectRatio: 0.72,
+        ),
+        itemCount: videos.length,
+        itemBuilder: (context, index) {
+          final video = videos[index];
+          return _VideoSearchTile(video: video, onTap: () => onTap(video));
+        },
+      );
+    },
+  );
+}
+
+class _VideoSearchTile extends StatelessWidget {
+  final Map<String, dynamic> video;
+  final VoidCallback onTap;
+
+  const _VideoSearchTile({required this.video, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final title = _searchVideoTitle(video);
+    final description = video['descricao'] as String? ?? '';
+    final author = video['autor'] as String? ?? '';
+    return Material(
+      color: AppPalette.raisedSurface(context),
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFFBB7575), Color(0xFF191416)],
+                ),
+              ),
+            ),
+            Image.asset(
+              _searchVideoAsset(video),
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) => ColoredBox(
+                color: AppPalette.button(context),
+                child: const Center(
+                  child: Icon(
+                    Icons.movie_creation_outlined,
+                    color: Colors.white70,
+                    size: 44,
+                  ),
+                ),
+              ),
+            ),
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.black12, Colors.transparent, Colors.black87],
+                  stops: [0, 0.35, 1],
+                ),
+              ),
+            ),
+            const Center(
+              child: Icon(
+                Icons.play_circle_fill_rounded,
+                color: Colors.white,
+                size: 44,
+                shadows: [Shadow(color: Colors.black54, blurRadius: 8)],
+              ),
+            ),
+            Positioned(
+              left: 10,
+              right: 10,
+              bottom: 10,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      shadows: [Shadow(color: Colors.black87, blurRadius: 5)],
+                    ),
+                  ),
+                  if (description.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        shadows: [Shadow(color: Colors.black87, blurRadius: 5)],
+                      ),
+                    ),
+                  ],
+                  if (author.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      author,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> _openSearchVideo(
+  BuildContext context,
+  Map<String, dynamic> video,
+) async {
+  try {
+    final id = video['id'];
+    if (id == null) throw Exception('O vídeo não possui um identificador.');
+    final token = await ApiService.tokenDaSessao();
+    if (token == null) throw Exception('Sua sessão expirou. Entre novamente.');
+    if (!context.mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            _SearchVideoPlayerScreen(video: video, id: id, token: token),
+      ),
+    );
+  } catch (error) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Não foi possível abrir o vídeo: '
+          '${error.toString().replaceFirst('Exception: ', '')}',
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> _promptReportVideo(BuildContext context, Object videoId) async {
+  const reasons = [
+    'Fora do propósito do LupTok',
+    'Assédio ou bullying',
+    'Conteúdo inadequado',
+    'Spam',
+    'Outro motivo',
+  ];
+  final descriptionController = TextEditingController();
+  String? selectedReason;
+  final report = await showDialog<(String, String)>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (context, setDialogState) => AlertDialog(
+        title: const Text('Denunciar vídeo'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Sua denúncia é privada e será encaminhada para análise.',
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: selectedReason,
+                decoration: const InputDecoration(labelText: 'Motivo'),
+                items: reasons
+                    .map(
+                      (reason) =>
+                          DropdownMenuItem(value: reason, child: Text(reason)),
+                    )
+                    .toList(),
+                onChanged: (value) =>
+                    setDialogState(() => selectedReason = value),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: descriptionController,
+                maxLength: 500,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Detalhes (opcional)',
+                  alignLabelWithHint: true,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: selectedReason == null
+                ? null
+                : () => Navigator.pop(dialogContext, (
+                    selectedReason!,
+                    descriptionController.text.trim(),
+                  )),
+            child: const Text('Continuar'),
+          ),
+        ],
+      ),
+    ),
+  );
+  descriptionController.dispose();
+  if (report == null || !context.mounted) return;
+
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Confirmar denúncia'),
+      content: const Text('Deseja enviar esta denúncia para análise?'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: const Text('Voltar'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: const Text('Enviar'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) return;
+
+  try {
+    await ApiService.denunciarVideo(
+      id: videoId,
+      motivo: report.$1,
+      descricao: report.$2,
+    );
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Denúncia enviada para análise.')),
+    );
+  } catch (error) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
     );
   }
 }
@@ -932,6 +1384,8 @@ class _LoopSearchDelegate extends SearchDelegate<int?> {
 
 class _VideoCard {
   final String titulo, tipo, genero, descricao, spoiler, autor;
+  final String? obraId, obraTitulo, obraTipo, obraDescricao;
+  final List<String> obraGeneros, obraPalavrasChave;
   final String? videoPath;
   final String? videoToken;
   final String? videoId;
@@ -939,6 +1393,7 @@ class _VideoCard {
   final String privacy;
   final int stars, comentarios;
   final Color cor;
+  final bool likedByMe;
   const _VideoCard({
     required this.titulo,
     required this.autor,
@@ -949,6 +1404,13 @@ class _VideoCard {
     required this.stars,
     required this.comentarios,
     required this.cor,
+    this.likedByMe = false,
+    this.obraId,
+    this.obraTitulo,
+    this.obraTipo,
+    this.obraDescricao,
+    this.obraGeneros = const [],
+    this.obraPalavrasChave = const [],
     this.videoPath,
     this.videoToken,
     this.videoId,
@@ -1072,6 +1534,77 @@ class _FeedVideoState extends State<_FeedVideo> {
   }
 }
 
+class _SearchVideoPlayerScreen extends StatelessWidget {
+  final Map<String, dynamic> video;
+  final Object id;
+  final String token;
+
+  const _SearchVideoPlayerScreen({
+    required this.video,
+    required this.id,
+    required this.token,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final title = _searchVideoTitle(video);
+    final description = video['descricao'] as String? ?? '';
+    final author = video['autor'] as String? ?? '';
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            tooltip: 'Denunciar vídeo',
+            onPressed: () => _promptReportVideo(context, id),
+            icon: const Icon(Icons.flag_outlined),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: _FeedVideo(
+              path: ApiService.urlArquivoVideo(id),
+              token: token,
+              videoId: id.toString(),
+            ),
+          ),
+          if (description.isNotEmpty || author.isNotEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(18, 12, 18, 20),
+              color: const Color(0xFF191416),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (author.isNotEmpty)
+                    Text(
+                      author,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  if (description.isNotEmpty) ...[
+                    if (author.isNotEmpty) const SizedBox(height: 5),
+                    Text(
+                      description,
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 // ══════════════════════════════════════════════════════════════════
 // TAB: LOOP
 // ══════════════════════════════════════════════════════════════════
@@ -1080,10 +1613,12 @@ class _LoopTab extends StatefulWidget {
   final List<_VideoCard> videos;
   final bool ocultarSpoilers;
   final List<String> profileInterests;
+  final String? currentUserId;
   const _LoopTab({
     required this.videos,
     required this.ocultarSpoilers,
     required this.profileInterests,
+    required this.currentUserId,
   });
 
   @override
@@ -1092,10 +1627,15 @@ class _LoopTab extends StatefulWidget {
 
 class _LoopTabState extends State<_LoopTab> {
   final PageController _pageCtrl = PageController();
-  final Set<int> _starred = {};
   final Set<int> _saved = {};
   final Set<String> _following = {};
   final Map<int, List<String>> _comentarios = {};
+  final Map<String, bool> _likeStates = {};
+  final Map<String, int> _likeCounts = {};
+  final Set<String> _pendingLikes = {};
+  final Set<String> _likeAnimations = {};
+  final Map<String, int> _likeAnimationVersions = {};
+  final Map<String, Timer> _likeAnimationTimers = {};
   bool _mostrandoSeguindo = false;
 
   @override
@@ -1144,9 +1684,23 @@ class _LoopTabState extends State<_LoopTab> {
             publicUsername: '@$username',
             publicName: account['nome'] as String,
             publicWorks: works,
-            availableVideos: widget.videos
-                .where((item) => item.ownerId == id)
-                .map((item) => item.titulo)
+            availableVideos: widget.videos.map((item) => item.titulo).toList(),
+            profileVideos: widget.videos
+                .where(
+                  (item) =>
+                      item.ownerId == id &&
+                      (isOwner || item.privacy == 'Público'),
+                )
+                .map(
+                  (item) => ProfileVideo(
+                    title: item.titulo,
+                    videoPath: item.videoPath,
+                    videoToken: item.videoToken,
+                    videoId: item.videoId,
+                    privacy: item.privacy,
+                    contentType: item.tipo,
+                  ),
+                )
                 .toList(),
           ),
         ),
@@ -1202,6 +1756,100 @@ class _LoopTabState extends State<_LoopTab> {
     );
   }
 
+  String _likeKey(_VideoCard video, int index) =>
+      video.videoId ?? 'local:$index';
+
+  bool _isLiked(_VideoCard video, int index) =>
+      _likeStates[_likeKey(video, index)] ?? video.likedByMe;
+
+  int _likeCount(_VideoCard video, int index) =>
+      _likeCounts[_likeKey(video, index)] ?? video.stars;
+
+  Future<void> _toggleLike(_VideoCard video, int index) async {
+    await _setLike(video, index, !_isLiked(video, index));
+  }
+
+  Future<void> _setLike(_VideoCard video, int index, bool shouldLike) async {
+    final key = _likeKey(video, index);
+    if (_pendingLikes.contains(key)) return;
+    final wasLiked = _isLiked(video, index);
+    if (wasLiked == shouldLike) return;
+    final previousCount = _likeCount(video, index);
+    setState(() {
+      _likeStates[key] = shouldLike;
+      _likeCounts[key] = (previousCount + (shouldLike ? 1 : -1)).clamp(
+        0,
+        0x7fffffff,
+      );
+      if (video.videoId != null) _pendingLikes.add(key);
+    });
+    final id = video.videoId;
+    if (id == null) return;
+
+    try {
+      final result = await ApiService.atualizarCurtidaVideo(
+        id: id,
+        curtido: shouldLike,
+      );
+      final count = result['curtidas'];
+      final state = result['curtido'];
+      final isOwner =
+          video.ownerId != null && video.ownerId == widget.currentUserId;
+      if (state is! bool || (isOwner && count is! num)) {
+        throw Exception('O servidor retornou uma curtida inválida.');
+      }
+      if (!mounted) return;
+      setState(() {
+        if (count is num) _likeCounts[key] = count.toInt();
+        _likeStates[key] = state;
+        _pendingLikes.remove(key);
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _likeCounts[key] = previousCount;
+        _likeStates[key] = wasLiked;
+        _pendingLikes.remove(key);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Não foi possível atualizar a curtida: '
+            '${error.toString().replaceFirst('Exception: ', '')}',
+          ),
+        ),
+      );
+    }
+  }
+
+  void _animateLike(String key) {
+    _likeAnimationTimers.remove(key)?.cancel();
+    setState(() {
+      _likeAnimations.add(key);
+      _likeAnimationVersions.update(
+        key,
+        (version) => version + 1,
+        ifAbsent: () => 1,
+      );
+    });
+    _likeAnimationTimers[key] = Timer(const Duration(milliseconds: 850), () {
+      if (!mounted) return;
+      setState(() => _likeAnimations.remove(key));
+      _likeAnimationTimers.remove(key);
+    });
+  }
+
+  Future<void> _reportVideo(_VideoCard video) async {
+    final id = video.videoId;
+    if (id == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Este vídeo não pode ser denunciado.')),
+      );
+      return;
+    }
+    await _promptReportVideo(context, id);
+  }
+
   Future<void> _abrirComentarios(int index) async {
     final comentarios = _comentarios.putIfAbsent(index, () => []);
     await showModalBottomSheet<void>(
@@ -1232,16 +1880,7 @@ class _LoopTabState extends State<_LoopTab> {
 
   Future<void> _pesquisar() async {
     setState(() => _mostrandoSeguindo = false);
-    final indice = await showSearch<int?>(
-      context: context,
-      delegate: _LoopSearchDelegate(widget.videos),
-    );
-    if (indice == null || !_pageCtrl.hasClients) return;
-    await _pageCtrl.animateToPage(
-      indice,
-      duration: const Duration(milliseconds: 350),
-      curve: Curves.easeOutCubic,
-    );
+    await showSearch<void>(context: context, delegate: _LoopSearchDelegate());
   }
 
   String _spoilerLabel(String s) {
@@ -1305,6 +1944,9 @@ class _LoopTabState extends State<_LoopTab> {
   void dispose() {
     followedUsernames.removeListener(_syncFollowedUsers);
     savedVideoIndices.removeListener(_syncSavedVideos);
+    for (final timer in _likeAnimationTimers.values) {
+      timer.cancel();
+    }
     _pageCtrl.dispose();
     super.dispose();
   }
@@ -1376,282 +2018,314 @@ class _LoopTabState extends State<_LoopTab> {
       itemBuilder: (context, i) {
         final v = feed[i];
         final videoIndex = widget.videos.indexOf(v);
-        final starrado = _starred.contains(videoIndex);
+        final likeKey = _likeKey(v, videoIndex);
+        final starrado = _isLiked(v, videoIndex);
+        final curtidas = _likeCount(v, videoIndex);
+        final isVideoOwner =
+            v.ownerId != null && v.ownerId == widget.currentUserId;
         final salvo = _saved.contains(videoIndex);
         final corAnel = switch (v.spoiler) {
           'muito' => const Color(0xFFD9273E),
           'leve' => const Color(0xFFFFC247),
           _ => const Color(0xFF4CAF68),
         };
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            // Fundo
-            if (v.videoPath == null)
-              Container(
-                color: AppPalette.isDark(context)
-                    ? AppPalette.darkBackground
-                    : v.cor,
-              )
-            else
-              _FeedVideo(
-                path: v.videoPath!,
-                token: v.videoToken,
-                videoId: v.videoId,
-              ),
-            Center(
-              child: Opacity(
-                opacity: 0.06,
-                child: Text(
-                  _tipoEmoji(v.tipo),
-                  style: const TextStyle(fontSize: 220),
+        return GestureDetector(
+          onDoubleTap: () {
+            _animateLike(likeKey);
+            unawaited(_setLike(v, videoIndex, true));
+          },
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Fundo
+              if (v.videoPath == null)
+                Container(
+                  color: AppPalette.isDark(context)
+                      ? AppPalette.darkBackground
+                      : v.cor,
+                )
+              else
+                _FeedVideo(
+                  path: v.videoPath!,
+                  token: v.videoToken,
+                  videoId: v.videoId,
+                ),
+              if (_likeAnimations.contains(likeKey))
+                Center(
+                  child: IgnorePointer(
+                    child: _LikeBurst(
+                      key: ValueKey(_likeAnimationVersions[likeKey]),
+                    ),
+                  ),
+                ),
+              Center(
+                child: Opacity(
+                  opacity: 0.06,
+                  child: Text(
+                    _tipoEmoji(v.tipo),
+                    style: const TextStyle(fontSize: 220),
+                  ),
                 ),
               ),
-            ),
-            // Info inferior esquerdo
-            Positioned(
-              left: 16,
-              right: 72,
-              bottom: 70,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _badge(
-                    _spoilerLabel(v.spoiler),
-                    _spoilerColor(v.spoiler).withOpacity(0.16),
-                    _spoilerColor(v.spoiler),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    v.titulo,
-                    style: TextStyle(
-                      color: AppPalette.isDark(context)
-                          ? Colors.white
-                          : const Color(0xFFBB7575),
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      shadows: [Shadow(color: Colors.black54, blurRadius: 8)],
+              // Info inferior esquerdo
+              Positioned(
+                left: 16,
+                right: 72,
+                bottom: 70,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _badge(
+                      _spoilerLabel(v.spoiler),
+                      _spoilerColor(v.spoiler).withOpacity(0.16),
+                      _spoilerColor(v.spoiler),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    v.descricao,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: AppPalette.isDark(context)
-                          ? Colors.white
-                          : const Color(0xFFFFE9E9),
-                      fontSize: 14,
-                      height: 1.35,
-                      shadows: const [
-                        Shadow(color: Colors.black87, blurRadius: 6),
-                      ],
+                    const SizedBox(height: 8),
+                    Text(
+                      v.titulo,
+                      style: TextStyle(
+                        color: AppPalette.isDark(context)
+                            ? Colors.white
+                            : const Color(0xFFBB7575),
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        shadows: [Shadow(color: Colors.black54, blurRadius: 8)],
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 8),
+                    Text(
+                      v.descricao,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppPalette.isDark(context)
+                            ? Colors.white
+                            : const Color(0xFFFFE9E9),
+                        fontSize: 14,
+                        height: 1.35,
+                        shadows: const [
+                          Shadow(color: Colors.black87, blurRadius: 6),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            Positioned(
-              top: 128,
-              left: 14,
-              right: 14,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () => _abrirPerfilAutor(v),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(2.5),
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: corAnel,
-                                          width: 2.5,
+              Positioned(
+                top: 128,
+                left: 14,
+                right: 14,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () => _abrirPerfilAutor(v),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(2.5),
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: corAnel,
+                                            width: 2.5,
+                                          ),
                                         ),
-                                      ),
-                                      child: CircleAvatar(
-                                        radius: 18,
-                                        backgroundColor: AppPalette.accent(
-                                          context,
-                                        ),
-                                        child: Text(
-                                          v.autor
-                                              .replaceFirst('@', '')
-                                              .substring(0, 1)
-                                              .toUpperCase(),
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
+                                        child: CircleAvatar(
+                                          radius: 18,
+                                          backgroundColor: AppPalette.accent(
+                                            context,
+                                          ),
+                                          child: Text(
+                                            v.autor
+                                                .replaceFirst('@', '')
+                                                .substring(0, 1)
+                                                .toUpperCase(),
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                            ),
                                           ),
                                         ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Flexible(
-                                      child: Text(
-                                        v.autor,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w700,
-                                          shadows: [
-                                            Shadow(
-                                              color: Colors.black87,
-                                              blurRadius: 6,
-                                            ),
-                                          ],
+                                      const SizedBox(width: 8),
+                                      Flexible(
+                                        child: Text(
+                                          v.autor,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                            shadows: [
+                                              Shadow(
+                                                color: Colors.black87,
+                                                blurRadius: 6,
+                                              ),
+                                            ],
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          OutlinedButton.icon(
+                            onPressed: () => _toggleFollow(v.autor),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.white,
+                              backgroundColor: AppPalette.button(
+                                context,
+                              ).withValues(alpha: 0.72),
+                              minimumSize: const Size(0, 30),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 9,
+                              ),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              side: BorderSide(
+                                color: Colors.white.withValues(alpha: 0.48),
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        OutlinedButton.icon(
-                          onPressed: () => _toggleFollow(v.autor),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            backgroundColor: AppPalette.button(
-                              context,
-                            ).withValues(alpha: 0.72),
-                            minimumSize: const Size(0, 30),
-                            padding: const EdgeInsets.symmetric(horizontal: 9),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            side: BorderSide(
-                              color: Colors.white.withValues(alpha: 0.48),
+                            icon: Icon(
+                              _following.contains(v.autor)
+                                  ? Icons.check_rounded
+                                  : Icons.person_add_alt_1_rounded,
+                              size: 14,
                             ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                            label: Text(
+                              _following.contains(v.autor)
+                                  ? 'Seguindo'
+                                  : 'Seguir',
+                              style: const TextStyle(fontSize: 12),
                             ),
                           ),
-                          icon: Icon(
-                            _following.contains(v.autor)
-                                ? Icons.check_rounded
-                                : Icons.person_add_alt_1_rounded,
-                            size: 14,
-                          ),
-                          label: Text(
-                            _following.contains(v.autor)
-                                ? 'Seguindo'
-                                : 'Seguir',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    constraints: const BoxConstraints(maxWidth: 104),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 9,
-                      vertical: 7,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppPalette.isDark(context)
-                          ? AppPalette.darkBackground.withValues(alpha: 0.92)
-                          : Colors.black.withOpacity(0.38),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: Colors.white24),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Image.asset(
-                          _tipoImagem(v.tipo),
-                          width: 22,
-                          height: 22,
-                          fit: BoxFit.contain,
-                          errorBuilder: (_, __, ___) => const Icon(
-                            Icons.movie_outlined,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                        ),
-                        const SizedBox(width: 5),
-                        Flexible(
-                          child: Text(
-                            v.tipo,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                    const SizedBox(width: 8),
+                    Container(
+                      constraints: const BoxConstraints(maxWidth: 104),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppPalette.isDark(context)
+                            ? AppPalette.darkBackground.withValues(alpha: 0.92)
+                            : Colors.black.withOpacity(0.38),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.white24),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Image.asset(
+                            _tipoImagem(v.tipo),
+                            width: 22,
+                            height: 22,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => const Icon(
+                              Icons.movie_outlined,
                               color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
+                              size: 20,
                             ),
+                          ),
+                          const SizedBox(width: 5),
+                          Flexible(
+                            child: Text(
+                              v.tipo,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Ações laterais
+              Positioned(
+                right: 12,
+                top: MediaQuery.sizeOf(context).height * 0.37,
+                child: Column(
+                  children: [
+                    _starAction(
+                      selected: starrado,
+                      count: isVideoOwner ? _fmt(curtidas) : null,
+                      onTap: () => _toggleLike(v, videoIndex),
+                    ),
+                    const SizedBox(height: 20),
+                    _acao(
+                      icon: Icons.chat_bubble_outline_rounded,
+                      imageAsset: 'assets/images/balao.png',
+                      label: _fmt(
+                        v.comentarios + (_comentarios[videoIndex]?.length ?? 0),
+                      ),
+                      cor: Colors.white,
+                      onTap: () => _abrirComentarios(videoIndex),
+                    ),
+                    const SizedBox(height: 20),
+                    _acao(
+                      icon: Icons.share_outlined,
+                      label: null,
+                      cor: Colors.white,
+                      onTap: () => _compartilhar(v),
+                    ),
+                    const SizedBox(height: 20),
+                    _acao(
+                      icon: salvo
+                          ? Icons.bookmark_rounded
+                          : Icons.bookmark_border_rounded,
+                      label: null,
+                      cor: Colors.white,
+                      onTap: () => _toggleSaved(videoIndex),
+                    ),
+                    const SizedBox(height: 16),
+                    PopupMenuButton<String>(
+                      tooltip: 'Mais ações',
+                      iconColor: Colors.white,
+                      color: AppPalette.raisedSurface(context),
+                      onSelected: (action) {
+                        if (action == 'report') _reportVideo(v);
+                      },
+                      itemBuilder: (context) => const [
+                        PopupMenuItem(
+                          value: 'report',
+                          child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.flag_outlined),
+                            title: Text('Denunciar vídeo'),
                           ),
                         ),
                       ],
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            // Ações laterais
-            Positioned(
-              right: 12,
-              top: MediaQuery.sizeOf(context).height * 0.37,
-              child: Column(
-                children: [
-                  _acao(
-                    icon: starrado
-                        ? Icons.star_rounded
-                        : Icons.star_outline_rounded,
-                    label: _fmt(v.stars + (starrado ? 1 : 0)),
-                    cor: starrado ? const Color(0xFFFFD54F) : Colors.white,
-                    onTap: () => setState(
-                      () => starrado
-                          ? _starred.remove(videoIndex)
-                          : _starred.add(videoIndex),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  _acao(
-                    icon: Icons.chat_bubble_outline_rounded,
-                    imageAsset: 'assets/images/balao.png',
-                    label: _fmt(
-                      v.comentarios + (_comentarios[videoIndex]?.length ?? 0),
-                    ),
-                    cor: Colors.white,
-                    onTap: () => _abrirComentarios(videoIndex),
-                  ),
-                  const SizedBox(height: 20),
-                  _acao(
-                    icon: Icons.share_outlined,
-                    label: null,
-                    cor: Colors.white,
-                    onTap: () => _compartilhar(v),
-                  ),
-                  const SizedBox(height: 20),
-                  _acao(
-                    icon: salvo
-                        ? Icons.bookmark_rounded
-                        : Icons.bookmark_border_rounded,
-                    label: null,
-                    cor: Colors.white,
-                    onTap: () => _toggleSaved(videoIndex),
-                  ),
-                ],
-              ),
-            ),
-            _buildTopBar(),
-          ],
+              _buildTopBar(),
+            ],
+          ),
         );
       },
     );
@@ -1796,6 +2470,76 @@ class _LoopTabState extends State<_LoopTab> {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _starAction({
+    required bool selected,
+    required String? count,
+    required VoidCallback onTap,
+  }) {
+    const gold = Color(0xFFFFD166);
+    return Semantics(
+      button: true,
+      label: selected ? 'Remover estrela' : 'Dar estrela',
+      child: GestureDetector(
+        onTap: onTap,
+        child: Column(
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: selected
+                    ? const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Color(0xFFFFE7A8), gold, Color(0xFFE99A34)],
+                      )
+                    : null,
+                color: selected ? null : Colors.black.withValues(alpha: 0.28),
+                border: Border.all(
+                  color: selected
+                      ? const Color(0xFFFFF2CB)
+                      : Colors.white.withValues(alpha: 0.72),
+                  width: selected ? 1.5 : 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: selected
+                        ? gold.withValues(alpha: 0.52)
+                        : Colors.black.withValues(alpha: 0.28),
+                    blurRadius: selected ? 18 : 8,
+                    spreadRadius: selected ? 1 : 0,
+                  ),
+                ],
+              ),
+              child: Icon(
+                selected ? Icons.star_rounded : Icons.star_border_rounded,
+                size: 31,
+                color: selected ? const Color(0xFF542F00) : Colors.white,
+                shadows: selected
+                    ? const [Shadow(color: Color(0x88FFFFFF), blurRadius: 5)]
+                    : const [Shadow(color: Colors.black54, blurRadius: 6)],
+              ),
+            ),
+            if (count != null) ...[
+              const SizedBox(height: 5),
+              Text(
+                count,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  shadows: [Shadow(color: Colors.black87, blurRadius: 5)],
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -2592,9 +3336,7 @@ class _Mensagem {
 // ══════════════════════════════════════════════════════════════════
 
 class _ExplorarTab extends StatefulWidget {
-  final List<_VideoCard> videos;
-
-  const _ExplorarTab({required this.videos});
+  const _ExplorarTab();
 
   @override
   State<_ExplorarTab> createState() => _ExplorarTabState();
@@ -2602,6 +3344,92 @@ class _ExplorarTab extends StatefulWidget {
 
 class _ExplorarTabState extends State<_ExplorarTab> {
   String _consulta = '';
+  final TextEditingController _searchController = TextEditingController();
+  Timer? _searchDebounce;
+  String? _searchedQuery;
+  Future<List<Map<String, dynamic>>>? _searchResults;
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _searchFor(String value, {bool immediate = false}) {
+    setState(() {
+      _consulta = value;
+      _searchedQuery = null;
+      _searchResults = null;
+    });
+    _searchDebounce?.cancel();
+    final term = value.trim();
+    if (term.isEmpty) return;
+    void startSearch() {
+      if (!mounted || _consulta.trim() != term) return;
+      setState(() {
+        _searchedQuery = term;
+        _searchResults = ApiService.buscarVideos(term);
+      });
+    }
+
+    if (immediate) {
+      startSearch();
+    } else {
+      _searchDebounce = Timer(const Duration(milliseconds: 300), startSearch);
+    }
+  }
+
+  void _selectCategory(String category) {
+    _searchController
+      ..text = category
+      ..selection = TextSelection.collapsed(offset: category.length);
+    _searchFor(category, immediate: true);
+  }
+
+  Widget _buildSearchResults() {
+    if (_searchedQuery != _consulta.trim() || _searchResults == null) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _searchResults,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Text(
+              'Não foi possível pesquisar: '
+              '${snapshot.error.toString().replaceFirst('Exception: ', '')}',
+            ),
+          );
+        }
+        if (!snapshot.hasData) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final videos = snapshot.data!;
+        if (videos.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Text(
+              'Nenhum vídeo encontrado. Tente outro título, gênero ou tema.',
+            ),
+          );
+        }
+
+        return _VideoSearchGrid(
+          videos: videos,
+          shrinkWrap: true,
+          onTap: (video) => _openSearchVideo(context, video),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2644,10 +3472,13 @@ class _ExplorarTabState extends State<_ExplorarTab> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: TextField(
-                        onChanged: (value) => setState(() => _consulta = value),
+                        controller: _searchController,
+                        onChanged: _searchFor,
+                        onSubmitted: (value) =>
+                            _searchFor(value, immediate: true),
                         textInputAction: TextInputAction.search,
                         decoration: InputDecoration(
-                          hintText: "Buscar obras...",
+                          hintText: 'Busque vídeos por obra, gênero ou tema...',
                           hintStyle: TextStyle(
                             color: const Color(0xFFBB7575).withOpacity(0.70),
                             fontSize: 15,
@@ -2657,6 +3488,16 @@ class _ExplorarTabState extends State<_ExplorarTab> {
                         ),
                       ),
                     ),
+                    if (_consulta.isNotEmpty)
+                      IconButton(
+                        tooltip: 'Limpar busca',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () {
+                          _searchController.clear();
+                          _searchFor('');
+                        },
+                        icon: const Icon(Icons.close_rounded),
+                      ),
                   ],
                 ),
               ),
@@ -2670,49 +3511,7 @@ class _ExplorarTabState extends State<_ExplorarTab> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                ...widget.videos
-                    .where((video) {
-                      final texto =
-                          '${video.titulo} ${video.tipo} ${video.genero}'
-                              .toLowerCase();
-                      return texto.contains(_consulta.trim().toLowerCase());
-                    })
-                    .map(
-                      (video) => ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: CircleAvatar(
-                          backgroundColor: video.cor,
-                          child: const Icon(
-                            Icons.movie_outlined,
-                            color: Colors.white,
-                          ),
-                        ),
-                        title: Text(video.titulo),
-                        subtitle: Text('${video.tipo} · ${video.genero}'),
-                        onTap: () => showDialog<void>(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: Text(video.titulo),
-                            content: Text('${video.tipo} · ${video.genero}'),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context),
-                                child: const Text('Fechar'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                if (!widget.videos.any((video) {
-                  final texto = '${video.titulo} ${video.tipo} ${video.genero}'
-                      .toLowerCase();
-                  return texto.contains(_consulta.trim().toLowerCase());
-                }))
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                    child: Text('Nenhuma obra encontrada no catálogo atual.'),
-                  ),
+                _buildSearchResults(),
               ],
               const SizedBox(height: 24),
               ShaderMask(
@@ -2745,31 +3544,42 @@ class _ExplorarTabState extends State<_ExplorarTab> {
                       ("🚀", "Ficção Científica"),
                     ].map((c) {
                       final (emoji, nome) = c;
-                      return Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFBB7575).withOpacity(0.10),
-                          borderRadius: BorderRadius.circular(50),
-                          border: Border.all(
-                            color: const Color(0xFFBB7575).withOpacity(0.25),
+                      return InkWell(
+                        borderRadius: BorderRadius.circular(50),
+                        onTap: () => _selectCategory(switch (nome) {
+                          'Filmes' => 'filme',
+                          'Séries' => 'série',
+                          'Livros' => 'livro',
+                          'K-Drama' => 'dorama',
+                          'Ficção Científica' => 'ficção científica',
+                          _ => nome,
+                        }),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
                           ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(emoji, style: const TextStyle(fontSize: 15)),
-                            const SizedBox(width: 7),
-                            Text(
-                              nome,
-                              style: const TextStyle(
-                                color: const Color(0xFFBB7575),
-                                fontSize: 13,
-                              ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFBB7575).withOpacity(0.10),
+                            borderRadius: BorderRadius.circular(50),
+                            border: Border.all(
+                              color: const Color(0xFFBB7575).withOpacity(0.25),
                             ),
-                          ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(emoji, style: const TextStyle(fontSize: 15)),
+                              const SizedBox(width: 7),
+                              Text(
+                                nome,
+                                style: const TextStyle(
+                                  color: Color(0xFFBB7575),
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       );
                     }).toList(),
