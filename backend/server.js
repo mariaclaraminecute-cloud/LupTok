@@ -18,6 +18,15 @@ fs.mkdirSync(uploadsDirectory, { recursive: true });
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
+app.use((req, res, next) => {
+  console.log(`📩 [REQUISIÇÃO] ${req.method} ${req.originalUrl}`);
+
+  res.on('finish', () => {
+    console.log(`📤 [RESPOSTA] ${req.method} ${req.originalUrl} - Status: ${res.statusCode}`);
+  });
+
+  next();
+});
 const db = mysql.createPool({
   host: process.env.DB_HOST,
   port: Number(process.env.DB_PORT) || 3306,
@@ -296,6 +305,213 @@ app.post('/api/auth/login', async (req, res) => {
       erro: 'Não foi possível realizar o login.',
     });
   }
+});
+
+const lupezInstrucoes =
+  'Você é Lupez, assistente do LupTok. Ajude com filmes, séries, livros e animes, incluindo recomendações. Responda em português brasileiro, de forma natural, acolhedora e útil. Se não tiver certeza sobre uma informação, diga isso claramente.';
+
+function extrairTextoGemini(dados) {
+  const partes = dados?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(partes)) return '';
+  return partes
+    .map((parte) =>
+      parte?.thought !== true && typeof parte?.text === 'string'
+        ? parte.text
+        : '',
+    )
+    .join('')
+    .trim();
+}
+
+
+async function consultarGemini({ apiKey, model, mensagem, historico }) {
+  const historicoRecente = historico.slice(-8);
+
+  const contents = [
+    ...historicoRecente.map(({ role, content }) => ({
+      role: role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: content }],
+    })),
+    {
+      role: 'user',
+      parts: [{ text: mensagem }],
+    },
+  ];
+
+  const endpoint =
+    'https://generativelanguage.googleapis.com/v1beta/models/' +
+    encodeURIComponent(model) +
+    ':generateContent';
+
+  const corpo = {
+    systemInstruction: {
+      parts: [{ text: lupezInstrucoes }],
+    },
+    contents,
+  };
+
+  let ultimoErro;
+
+  // Faz até duas tentativas quando o serviço estiver instável.
+  for (let tentativa = 1; tentativa <= 2; tentativa++) {
+    try {
+      const respostaApi = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'x-goog-api-key': apiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(corpo),
+        signal: AbortSignal.timeout(25000),
+      });
+
+      const bruto = await respostaApi.text();
+
+      let dados;
+
+      try {
+        dados = bruto ? JSON.parse(bruto) : {};
+      } catch {
+        throw new Error('A API Gemini retornou uma resposta inválida.');
+      }
+
+      if (!respostaApi.ok) {
+        const status = respostaApi.status;
+
+        const erro = new Error(
+          dados?.error?.message ||
+          `A API Gemini retornou HTTP ${status}.`
+        );
+
+        erro.status = status;
+        throw erro;
+      }
+
+      const texto = extrairTextoGemini(dados);
+
+      if (texto) {
+        return texto;
+      }
+
+      const motivo =
+        dados?.promptFeedback?.blockReason ||
+        dados?.candidates?.[0]?.finishReason;
+
+      throw new Error(
+        motivo
+          ? `A Gemini não retornou texto (${motivo}).`
+          : 'A Gemini não retornou texto.'
+      );
+
+    } catch (error) {
+      ultimoErro = error;
+
+      const status = error.status;
+      const timeout = error.name === 'TimeoutError';
+
+      const erroTemporario =
+        timeout ||
+        status === 429 ||
+        status === 500 ||
+        status === 502 ||
+        status === 503 ||
+        status === 504;
+
+      console.error(
+        `Falha na tentativa ${tentativa}/2 da Lupez:`,
+        error.message
+      );
+
+      if (!erroTemporario || tentativa === 2) {
+        const erroFinal = new Error(
+          timeout
+            ? 'O Gemini demorou demais para responder. Tente novamente.'
+            : status === 503
+              ? 'O Gemini está temporariamente sobrecarregado. Tente novamente em instantes.'
+              : error.message
+        );
+
+        erroFinal.status = timeout
+          ? 504
+          : status === 503 || status === 429
+            ? 503
+            : status || 502;
+
+        throw erroFinal;
+      }
+
+      // Espera um pouco antes de tentar novamente.
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  }
+
+  throw ultimoErro;
+}
+
+
+app.post('/api/lupez/chat', autenticar, async (req, res) => {
+  console.info('Requisição recebida: POST /api/lupez/chat');
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+    return res.status(400).json({ erro: 'Envie os dados da conversa.' });
+  }
+
+  const { mensagem, historico } = req.body;
+
+  if (
+    typeof mensagem !== 'string' ||
+    !mensagem.trim() ||
+    mensagem.length > 4000 ||
+    !Array.isArray(historico) ||
+    historico.length > 20
+  ) {
+    return res.status(400).json({
+      erro: 'Envie uma mensagem válida e até 20 mensagens de histórico.',
+    });
+  }
+
+  const mensagensValidas = historico.every(
+    (item) =>
+      item &&
+      typeof item === 'object' &&
+      !Array.isArray(item) &&
+      ['user', 'assistant'].includes(item.role) &&
+      typeof item.content === 'string' &&
+      item.content.trim() &&
+      item.content.length <= 4000,
+  );
+  if (!mensagensValidas) {
+    return res.status(400).json({ erro: 'O histórico da conversa é inválido.' });
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  const model = process.env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash';
+  if (!apiKey) {
+    return res.status(503).json({
+      erro: 'A Lupez precisa da variável GEMINI_API_KEY no backend/.env.',
+    });
+  }
+
+  try {
+    const resposta = await consultarGemini({
+      apiKey,
+      model,
+      mensagem: mensagem.trim(),
+      historico,
+    });
+    return res.json({ resposta });
+  } catch (error) {
+    console.error('Falha ao consultar a API Gemini:', error);
+    return res.status(error.status || 502).json({
+      erro: error.message || 'Não foi possível obter uma resposta da Lupez agora.',
+    });
+  }
+});
+
+app.all('/api/lupez/chat', (req, res) => {
+  res.set('Allow', 'POST');
+  return res.status(405).json({
+    erro: 'Use POST em /api/lupez/chat com Authorization Bearer.',
+  });
 });
 
 const tiposDeObra = [
@@ -893,6 +1109,7 @@ app.get('/api/users/:id', autenticar, async (req, res) => {
 
 app.get('/api/videos', autenticar, async (req, res) => {
   const busca = req.query.q ?? '';
+  const idObraFiltro = req.query.id_obra ?? null;
   if (typeof busca !== 'string' || busca.length > 120) {
     return res.status(400).json({ erro: 'A busca deve ter até 120 caracteres.' });
   }
@@ -901,6 +1118,38 @@ app.get('/api/videos', autenticar, async (req, res) => {
 
   try {
     const buscaSql = clausulaBuscaVideos(termos);
+    const condicoes = ["(v.privacidade = 'Público' OR v.id_usuario = ?)"];
+    const params = [req.usuario.id_usuario, req.usuario.id_usuario];
+
+    if (idObraFiltro && /^\d+$/.test(String(idObraFiltro))) {
+      condicoes.push('v.id_obra = ?');
+      params.push(Number(idObraFiltro));
+    }
+
+    if (buscaSql.sql) {
+      condicoes.push(buscaSql.sql);
+      params.push(...buscaSql.params);
+    }
+
+    let orderByClause = 'ORDER BY v.criado_em DESC';
+    if (busca.trim()) {
+      const buscaNorm = busca
+        .trim()
+        .normalize('NFD')
+        .replace(/\p{Diacritic}/gu, '')
+        .toLowerCase();
+      const buscaExata = busca.trim().toLowerCase();
+      orderByClause = `ORDER BY 
+        CASE 
+          WHEN LOWER(o.titulo_normalizado) = ? THEN 0
+          WHEN LOWER(o.titulo) = ? THEN 1
+          WHEN LOWER(o.titulo_normalizado) LIKE ? THEN 2
+          WHEN LOWER(o.titulo) LIKE ? THEN 3
+          ELSE 4
+        END, v.criado_em DESC`;
+      params.push(buscaNorm, buscaExata, `%${buscaNorm}%`, `%${buscaExata}%`);
+    }
+
     const [videos] = await db.execute(
       `SELECT v.id_video, v.id_usuario, u.nome_usuario, v.descricao,
               v.tipo_conteudo, v.spoiler, v.privacidade, v.criado_em,
@@ -918,11 +1167,10 @@ app.get('/api/videos', autenticar, async (req, res) => {
        FROM video_post v
        JOIN usuario u ON u.id_usuario = v.id_usuario
        LEFT JOIN obra o ON o.id_obra = v.id_obra
-       WHERE (v.privacidade = 'Público' OR v.id_usuario = ?)
-       ${buscaSql.sql ? `AND ${buscaSql.sql}` : ''}
-       ORDER BY v.criado_em DESC
+       WHERE ${condicoes.join(' AND ')}
+       ${orderByClause}
        LIMIT 200`,
-      [req.usuario.id_usuario, req.usuario.id_usuario, ...buscaSql.params],
+      params,
     );
     const metadata = await obterMetadadosObras(
       videos.map((video) => video.id_obra).filter((id) => id !== null),
@@ -941,9 +1189,7 @@ app.get('/api/videos', autenticar, async (req, res) => {
           tipo_conteudo: video.tipo_conteudo,
           spoiler: video.spoiler,
           privacidade: video.privacidade,
-          ...(String(video.id_usuario) === String(req.usuario.id_usuario)
-            ? { curtidas: Number(video.curtidas) }
-            : {}),
+          curtidas: Number(video.curtidas),
           curtida_usuario: Boolean(video.curtida_usuario),
           obra: video.id_obra === null
             ? null
@@ -1005,20 +1251,14 @@ app.put('/api/videos/:id/like', autenticar, async (req, res) => {
         [req.usuario.id_usuario, req.params.id],
       );
     }
-    const isOwner =
-      String(videos[0].id_usuario) === String(req.usuario.id_usuario);
-    let curtidas;
-    if (isOwner) {
-      const [[count]] = await conexao.execute(
-        'SELECT COUNT(*) AS curtidas FROM video_post_curtida WHERE id_video = ?',
-        [req.params.id],
-      );
-      curtidas = Number(count.curtidas);
-    }
+    const [[count]] = await conexao.execute(
+      'SELECT COUNT(*) AS curtidas FROM video_post_curtida WHERE id_video = ?',
+      [req.params.id],
+    );
     await conexao.commit();
     return res.json({
       curtido,
-      ...(curtidas === undefined ? {} : { curtidas }),
+      curtidas: Number(count.curtidas),
     });
   } catch (error) {
     if (conexao) await conexao.rollback();
@@ -1260,6 +1500,239 @@ app.get(
   }
 );
 
+// ══════════════════════════════════════════════════════════════════
+// CHAT ENTRE USUÁRIOS
+// ══════════════════════════════════════════════════════════════════
+
+app.get('/api/conversas', autenticar, async (req, res) => {
+  try {
+    const idUsuario = req.usuario.id_usuario;
+    const [conversas] = await db.execute(
+      `SELECT c.id_conversa, c.tipo, c.nome, c.foto_url, c.data_criacao,
+              u_outro.id_usuario AS outro_id,
+              u_outro.nome AS outro_nome,
+              u_outro.nome_usuario AS outro_usuario,
+              u_outro.foto_url AS outro_foto,
+              (SELECT m.texto FROM mensagem m WHERE m.id_conversa = c.id_conversa ORDER BY m.data_envio DESC, m.id_mensagem DESC LIMIT 1) AS ultima_mensagem,
+              (SELECT m.data_envio FROM mensagem m WHERE m.id_conversa = c.id_conversa ORDER BY m.data_envio DESC, m.id_mensagem DESC LIMIT 1) AS ultima_data,
+              (SELECT m.id_remetente FROM mensagem m WHERE m.id_conversa = c.id_conversa ORDER BY m.data_envio DESC, m.id_mensagem DESC LIMIT 1) AS ultimo_remetente
+       FROM conversa c
+       JOIN conversa_membro cm ON cm.id_conversa = c.id_conversa AND cm.id_usuario = ?
+       LEFT JOIN conversa_membro m_outro ON m_outro.id_conversa = c.id_conversa AND m_outro.id_usuario != ?
+       LEFT JOIN usuario u_outro ON u_outro.id_usuario = m_outro.id_usuario
+       ORDER BY COALESCE(ultima_data, c.data_criacao) DESC`,
+      [idUsuario, idUsuario]
+    );
+
+    return res.json({
+      conversas: conversas.map((c) => ({
+        id_conversa: c.id_conversa,
+        tipo: c.tipo,
+        nome: c.tipo === 'direta' ? (c.outro_nome || c.outro_usuario || 'Usuário') : (c.nome || 'Conversa'),
+        nome_usuario: c.tipo === 'direta' ? c.outro_usuario : null,
+        outro_id: c.outro_id,
+        foto_url: c.tipo === 'direta' ? c.outro_foto : c.foto_url,
+        data_criacao: c.data_criacao,
+        ultima_mensagem: c.ultima_mensagem || '',
+        ultima_data: c.ultima_data || c.data_criacao,
+        ultimo_remetente: c.ultimo_remetente,
+      })),
+    });
+  } catch (error) {
+    console.error('Erro ao listar conversas:', error.message);
+    return res.status(500).json({ erro: 'Não foi possível carregar as conversas.' });
+  }
+});
+
+app.post('/api/conversas', autenticar, async (req, res) => {
+  const { id_destinatario } = req.body ?? {};
+  if (!id_destinatario || !/^\d+$/.test(String(id_destinatario))) {
+    return res.status(400).json({ erro: 'Informe um destinatário válido.' });
+  }
+
+  const idUsuario = req.usuario.id_usuario;
+  const idDestinatarioNum = Number(id_destinatario);
+
+  if (Number(idUsuario) === idDestinatarioNum) {
+    return res.status(400).json({ erro: 'Você não pode iniciar uma conversa consigo mesmo.' });
+  }
+
+  let conexao;
+  try {
+    conexao = await db.getConnection();
+    const [usuarios] = await conexao.execute(
+      'SELECT id_usuario, nome, nome_usuario, foto_url FROM usuario WHERE id_usuario = ? AND ativo = 1 LIMIT 1',
+      [idDestinatarioNum]
+    );
+    if (usuarios.length === 0) {
+      return res.status(404).json({ erro: 'Usuário não encontrado.' });
+    }
+    const destinatario = usuarios[0];
+
+    const [existentes] = await conexao.execute(
+      `SELECT c.id_conversa
+       FROM conversa c
+       JOIN conversa_membro cm1 ON cm1.id_conversa = c.id_conversa AND cm1.id_usuario = ?
+       JOIN conversa_membro cm2 ON cm2.id_conversa = c.id_conversa AND cm2.id_usuario = ?
+       WHERE c.tipo = 'direta'
+       LIMIT 1`,
+      [idUsuario, idDestinatarioNum]
+    );
+
+    if (existentes.length > 0) {
+      return res.json({
+        id_conversa: existentes[0].id_conversa,
+        destinatario: {
+          id: destinatario.id_usuario,
+          nome: destinatario.nome,
+          nome_usuario: destinatario.nome_usuario,
+          foto_url: destinatario.foto_url,
+        },
+      });
+    }
+
+    await conexao.beginTransaction();
+    const [resConversa] = await conexao.execute(
+      `INSERT INTO conversa (tipo, id_criador, data_criacao) VALUES ('direta', ?, NOW())`,
+      [idUsuario]
+    );
+    const idConversa = resConversa.insertId;
+
+    await conexao.execute(
+      `INSERT INTO conversa_membro (id_conversa, id_usuario, data_entrada) VALUES (?, ?, NOW()), (?, ?, NOW())`,
+      [idConversa, idUsuario, idConversa, idDestinatarioNum]
+    );
+
+    await conexao.commit();
+
+    return res.status(201).json({
+      id_conversa: idConversa,
+      destinatario: {
+        id: destinatario.id_usuario,
+        nome: destinatario.nome,
+        nome_usuario: destinatario.nome_usuario,
+        foto_url: destinatario.foto_url,
+      },
+    });
+  } catch (error) {
+    if (conexao) await conexao.rollback();
+    console.error('Erro ao iniciar conversa:', error.message);
+    return res.status(500).json({ erro: 'Não foi possível iniciar a conversa.' });
+  } finally {
+    if (conexao) conexao.release();
+  }
+});
+
+app.get('/api/conversas/:id/mensagens', autenticar, async (req, res) => {
+  if (!/^\d+$/.test(req.params.id)) {
+    return res.status(400).json({ erro: 'ID de conversa inválido.' });
+  }
+
+  const idConversa = Number(req.params.id);
+  const idUsuario = req.usuario.id_usuario;
+
+  try {
+    const [membros] = await db.execute(
+      'SELECT 1 FROM conversa_membro WHERE id_conversa = ? AND id_usuario = ? LIMIT 1',
+      [idConversa, idUsuario]
+    );
+    if (membros.length === 0) {
+      return res.status(403).json({ erro: 'Você não tem acesso a esta conversa.' });
+    }
+
+    const [mensagens] = await db.execute(
+      `SELECT m.id_mensagem, m.id_conversa, m.id_remetente,
+              u.nome, u.nome_usuario, u.foto_url,
+              m.texto, m.tipo, m.arquivo_url, m.data_envio
+       FROM mensagem m
+       JOIN usuario u ON u.id_usuario = m.id_remetente
+       WHERE m.id_conversa = ?
+       ORDER BY m.data_envio ASC, m.id_mensagem ASC
+       LIMIT 300`,
+      [idConversa]
+    );
+
+    return res.json({
+      mensagens: mensagens.map((m) => ({
+        id_mensagem: m.id_mensagem,
+        id_conversa: m.id_conversa,
+        id_remetente: m.id_remetente,
+        nome: m.nome,
+        nome_usuario: m.nome_usuario,
+        foto_url: m.foto_url,
+        texto: m.texto,
+        tipo: m.tipo,
+        arquivo_url: m.arquivo_url,
+        data_envio: m.data_envio,
+        enviado_por_mim: Number(m.id_remetente) === Number(idUsuario),
+      })),
+    });
+  } catch (error) {
+    console.error('Erro ao listar mensagens:', error.message);
+    return res.status(500).json({ erro: 'Não foi possível carregar as mensagens.' });
+  }
+});
+
+app.post('/api/conversas/:id/mensagens', autenticar, async (req, res) => {
+  if (!/^\d+$/.test(req.params.id)) {
+    return res.status(400).json({ erro: 'ID de conversa inválido.' });
+  }
+
+  const { texto } = req.body ?? {};
+  if (typeof texto !== 'string' || !texto.trim() || texto.trim().length > 2000) {
+    return res.status(400).json({ erro: 'A mensagem deve ter entre 1 e 2000 caracteres.' });
+  }
+
+  const idConversa = Number(req.params.id);
+  const idUsuario = req.usuario.id_usuario;
+
+  try {
+    const [membros] = await db.execute(
+      'SELECT 1 FROM conversa_membro WHERE id_conversa = ? AND id_usuario = ? LIMIT 1',
+      [idConversa, idUsuario]
+    );
+    if (membros.length === 0) {
+      return res.status(403).json({ erro: 'Você não tem permissão para enviar mensagens nesta conversa.' });
+    }
+
+    const [resultado] = await db.execute(
+      `INSERT INTO mensagem (id_conversa, id_remetente, texto, tipo, data_envio)
+       VALUES (?, ?, ?, 'texto', NOW())`,
+      [idConversa, idUsuario, texto.trim()]
+    );
+
+    const [linhas] = await db.execute(
+      `SELECT m.id_mensagem, m.id_conversa, m.id_remetente,
+              u.nome, u.nome_usuario, u.foto_url,
+              m.texto, m.tipo, m.arquivo_url, m.data_envio
+       FROM mensagem m
+       JOIN usuario u ON u.id_usuario = m.id_remetente
+       WHERE m.id_mensagem = ? LIMIT 1`,
+      [resultado.insertId]
+    );
+
+    const m = linhas[0];
+    return res.status(201).json({
+      mensagem: {
+        id_mensagem: m.id_mensagem,
+        id_conversa: m.id_conversa,
+        id_remetente: m.id_remetente,
+        nome: m.nome,
+        nome_usuario: m.nome_usuario,
+        foto_url: m.foto_url,
+        texto: m.texto,
+        tipo: m.tipo,
+        arquivo_url: m.arquivo_url,
+        data_envio: m.data_envio,
+        enviado_por_mim: true,
+      },
+    });
+  } catch (error) {
+    console.error('Erro ao enviar mensagem:', error.message);
+    return res.status(500).json({ erro: 'Não foi possível enviar a mensagem.' });
+  }
+});
+
 // INICIALIZAÇÃO DO SERVIDOR
 async function iniciarServidor() {
   try {
@@ -1280,6 +1753,15 @@ async function iniciarServidor() {
          INDEX idx_video_post_feed (privacidade, criado_em),
          INDEX idx_video_post_usuario (id_usuario, criado_em),
          INDEX idx_video_post_obra (id_obra)
+       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
+    );
+    await db.execute(
+      `CREATE TABLE IF NOT EXISTS video_post_curtida (
+         id_usuario BIGINT UNSIGNED NOT NULL,
+         id_video BIGINT UNSIGNED NOT NULL,
+         criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+         PRIMARY KEY (id_usuario, id_video),
+         INDEX idx_video_post_curtida_video (id_video)
        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
     );
     await db.execute(
@@ -1374,6 +1856,13 @@ async function iniciarServidor() {
     }
 
     conexao.release();
+
+    app.use((req, res) => {
+      console.error('Rota não encontrada:', req.method, req.originalUrl);
+      return res.status(404).json({
+        erro: `Rota ${req.method} ${req.originalUrl} não encontrada.`,
+      });
+    });
 
     const porta = Number(process.env.PORT) || 3000;
 

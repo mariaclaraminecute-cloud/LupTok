@@ -5,7 +5,9 @@ Aplicativo Flutter do LupTok com API em Node.js, Express e MySQL.
 ## API e autenticação
 
 O backend usa as variáveis `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`,
-`DB_NAME`, `JWT_SECRET` e, opcionalmente, `PORT` no arquivo `backend/.env`.
+`DB_NAME`, `JWT_SECRET`, `GEMINI_API_KEY` e, opcionalmente, `PORT` e
+`GEMINI_MODEL` no arquivo `backend/.env`. A Lupez usa `gemini-2.5-flash` por
+padrão; a chave da Gemini deve permanecer somente no backend.
 Inicie a API dentro de `backend/` com `npm install` e `node server.js`.
 As contas são autenticadas por JWT; a tabela de publicações de vídeo é criada
 automaticamente no banco na inicialização do backend.

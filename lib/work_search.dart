@@ -408,3 +408,6 @@ List<SearchableWork> searchWorks(String query) {
   ranked.sort((first, second) => second.score.compareTo(first.score));
   return ranked.map((result) => result.work).toList();
 }
+
+String normalizeInterest(String value) => normalizeSearchText(value);
+

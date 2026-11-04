@@ -1,5 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
-
+import 'package:flutter/cupertino.dart';
 import 'app_preferences.dart';
 import 'package:flutter/material.dart';
 import 'splash_screen.dart';
@@ -45,6 +45,7 @@ class LupTokApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           themeMode: themeMode,
           theme: ThemeData(
+            useMaterial3: true,
             scaffoldBackgroundColor: const Color(0xFFFFE9E9),
             colorScheme:
                 ColorScheme.fromSeed(
@@ -61,6 +62,38 @@ class LupTokApp extends StatelessWidget {
             appBarTheme: const AppBarTheme(
               backgroundColor: Color(0xFFFFE9E9),
               foregroundColor: Color(0xFF7D171D),
+              elevation: 0,
+              centerTitle: false,
+              titleTextStyle: TextStyle(
+                color: Color(0xFF7D171D),
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            cardTheme: CardThemeData(
+              color: Colors.white,
+              elevation: 0,
+              surfaceTintColor: Colors.transparent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+            ),
+            filledButtonTheme: FilledButtonThemeData(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFB8787C),
+                foregroundColor: Colors.white,
+                minimumSize: const Size(48, 48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
+            pageTransitionsTheme: const PageTransitionsTheme(
+              builders: {
+                TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
+                TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+                TargetPlatform.windows: FadeUpwardsPageTransitionsBuilder(),
+              },
             ),
           ),
           darkTheme: ThemeData(
@@ -81,6 +114,17 @@ class LupTokApp extends StatelessWidget {
             appBarTheme: const AppBarTheme(
               backgroundColor: AppPalette.darkBackground,
               foregroundColor: Colors.white,
+              elevation: 0,
+            ),
+            filledButtonTheme: FilledButtonThemeData(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppPalette.darkButton,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(48, 48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
             ),
             cardTheme: const CardThemeData(
               color: Color(0xFF451717),

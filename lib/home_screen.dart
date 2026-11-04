@@ -6,13 +6,63 @@ import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
+
+import 'api_service.dart';
 import 'app_preferences.dart';
+import 'chat_screen.dart';
 import 'groups_screen.dart' show GroupsScreen;
-import 'interest_utils.dart';
 import 'profile_screen.dart';
 import 'settings_screen.dart';
 import 'video_recorder_screen.dart';
-import 'api_service.dart';
+
+const Color _kStarGold = Color(0xFFFFD166);
+const Color _kVideoBackdrop = Color(0xFF191416);
+
+// ══════════════════════════════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════════════════════════════
+
+List<String> _apiStringList(Object? value) =>
+    value is List ? value.whereType<String>().toList() : const [];
+
+String _cap(String s) =>
+    s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+
+String _shorten(String s, [int max = 40]) {
+  final t = s.trim();
+  return t.length <= max ? t : '${t.substring(0, max - 1).trimRight()}…';
+}
+
+String _tipoAsset(String tipo) {
+  final arquivo = switch (tipo.toLowerCase()) {
+    'filme' => 'filme',
+    'série' || 'serie' => 'serie',
+    'livro' => 'livro',
+    'anime' => 'anime',
+    'k-drama' || 'dorama' => 'dorama',
+    _ => 'filme',
+  };
+  return 'assets/images/$arquivo.png';
+}
+
+String _searchVideoTitle(Map<String, dynamic> video) {
+  final obra = video['obra'];
+  final tituloObra = obra is Map ? obra['titulo'] : null;
+  final descricao = video['descricao'];
+  if (tituloObra is String && tituloObra.isNotEmpty) return tituloObra;
+  if (descricao is String && descricao.isNotEmpty) return _shorten(descricao);
+  return 'Recomendação';
+}
+
+String _searchVideoAsset(Map<String, dynamic> video) {
+  final obra = video['obra'];
+  final tipo = obra is Map ? obra['tipo'] : video['tipo_conteudo'];
+  return _tipoAsset(tipo?.toString() ?? '');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// HOME
+// ══════════════════════════════════════════════════════════════════
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,82 +71,29 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _LikeBurst extends StatelessWidget {
-  const _LikeBurst({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 720),
-      curve: Curves.easeOutCubic,
-      builder: (context, progress, _) {
-        final scale = Curves.easeOutBack.transform(progress);
-        final opacity = (1 - Curves.easeIn.transform(progress)).clamp(0.0, 1.0);
-        return Opacity(
-          opacity: opacity,
-          child: Transform.scale(
-            scale: 0.55 + scale * 0.55,
-            child: SizedBox(
-              width: 148,
-              height: 148,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Container(
-                    width: 112 + progress * 24,
-                    height: 112 + progress * 24,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.white.withValues(
-                          alpha: 0.38 * (1 - progress),
-                        ),
-                        width: 2,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(
-                            0xFFFFD166,
-                          ).withValues(alpha: 0.28 * (1 - progress)),
-                          blurRadius: 24,
-                          spreadRadius: 2,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Icon(
-                    Icons.star_rounded,
-                    color: Color(0xFFFFD166),
-                    size: 96,
-                    shadows: [
-                      Shadow(
-                        color: Colors.black38,
-                        blurRadius: 18,
-                        offset: Offset(0, 5),
-                      ),
-                      Shadow(color: Color(0x99FFD166), blurRadius: 28),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   int _tabAtual = 0;
 
   bool _mostrarBemVindo = true;
-  bool _mostrarHumor = false;
   bool _ocultarSpoilers = false;
   List<String> _gostosPerfil = [];
-  String? _humorSelecionado;
   String? _idUsuarioAtual;
+
+  bool _mostrarAvisoPublicado = false;
+  String _tituloAvisoPublicado = '';
+  Timer? _avisoPublicadoTimer;
+
+  void _exibirAvisoPublicacao(String obra) {
+    setState(() {
+      _mostrarAvisoPublicado = true;
+      _tituloAvisoPublicado = obra;
+    });
+    _avisoPublicadoTimer?.cancel();
+    _avisoPublicadoTimer = Timer(const Duration(seconds: 4), () {
+      if (!mounted) return;
+      setState(() => _mostrarAvisoPublicado = false);
+    });
+  }
 
   late AnimationController _bemVindoCtrl;
   late Animation<double> _bemVindoOpacity;
@@ -178,15 +175,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     _bemVindoCtrl.forward().then((_) {
       if (!mounted) return;
-      setState(() {
-        _mostrarBemVindo = false;
-        _mostrarHumor = false;
-      });
+      setState(() => _mostrarBemVindo = false);
     });
   }
 
   @override
   void dispose() {
+    _avisoPublicadoTimer?.cancel();
     _bemVindoCtrl.dispose();
     _glowCtrl.dispose();
     super.dispose();
@@ -227,15 +222,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       _videos.insert(
         0,
         _VideoCard(
-          titulo: publicado.description.isEmpty
-              ? 'Meu vídeo'
-              : 'Minha recomendação',
+          titulo:
+              publicado.workTitle ??
+              (publicado.description.isEmpty
+                  ? 'Meu vídeo'
+                  : _shorten(publicado.description)),
           autor: nomeUsuario,
           tipo: publicado.contentType,
           genero: 'Vídeo de ${publicado.contentType.toLowerCase()}',
-          descricao: publicado.description.isEmpty
-              ? 'Confira minha recomendação de ${publicado.contentType.toLowerCase()}.'
-              : publicado.description,
+          descricao: publicado.description,
           spoiler: publicado.spoiler,
           obraId: publicado.workId,
           obraTitulo: publicado.workTitle,
@@ -245,7 +240,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           obraPalavrasChave: publicado.workKeywords,
           stars: 0,
           comentarios: 0,
-          cor: const Color(0xFF191416),
+          cor: _kVideoBackdrop,
           videoPath: publicado.videoPath,
           videoToken: publicado.videoToken,
           videoId: publicado.videoId,
@@ -254,6 +249,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ),
       );
     });
+    _exibirAvisoPublicacao(
+      publicado.workTitle?.trim().isNotEmpty == true
+          ? publicado.workTitle!
+          : (publicado.description.trim().isNotEmpty
+              ? _shorten(publicado.description, 28)
+              : 'Recomendação'),
+    );
   }
 
   Future<void> _carregarVideosApi() async {
@@ -291,10 +293,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             : null;
         final generos = _apiStringList(obra?['generos']);
         final palavrasChave = _apiStringList(obra?['palavras_chave']);
+        final tituloObra = obra?['titulo'] as String?;
         return _VideoCard(
           titulo:
-              obra?['titulo'] as String? ??
-              (descricao.isEmpty ? 'Vídeo publicado' : 'Minha recomendação'),
+              tituloObra ??
+              (descricao.isEmpty
+                  ? 'Vídeo de ${tipo.toLowerCase()}'
+                  : _shorten(descricao)),
           autor: autor,
           tipo: obra?['tipo'] as String? ?? tipo,
           genero: generos.isEmpty
@@ -303,14 +308,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           descricao: descricao,
           spoiler: spoiler,
           obraId: obra?['id']?.toString(),
-          obraTitulo: obra?['titulo'] as String?,
+          obraTitulo: tituloObra,
           obraTipo: obra?['tipo'] as String?,
           obraDescricao: obra?['descricao'] as String?,
           obraGeneros: generos,
           obraPalavrasChave: palavrasChave,
           stars: curtidas is num ? curtidas.toInt() : 0,
           comentarios: 0,
-          cor: const Color(0xFF191416),
+          cor: _kVideoBackdrop,
           likedByMe: curtidaUsuario,
           videoPath: ApiService.urlArquivoVideo(id),
           videoToken: token,
@@ -320,8 +325,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         );
       }).toList();
       if (!mounted) return;
+      final idsServidor = publicados.map((v) => v.videoId).toSet();
       setState(() {
-        _videos.removeWhere((video) => video.videoToken != null);
+        _videos.removeWhere((video) => idsServidor.contains(video.videoId));
         _videos.insertAll(0, publicados);
       });
     } catch (e) {
@@ -336,6 +342,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       );
     }
   }
+
+  ProfileVideo _toProfileVideo(_VideoCard video) => ProfileVideo(
+    title: video.titulo,
+    videoPath: video.videoPath,
+    videoToken: video.videoToken,
+    videoId: video.videoId,
+    privacy: video.privacy,
+    contentType: video.tipo,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -356,8 +371,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       ocultarSpoilers: _ocultarSpoilers,
                       profileInterests: _gostosPerfil,
                       currentUserId: _idUsuarioAtual,
+                      isVisible: _tabAtual == 0,
                     ),
-                    const GroupsScreen(),
+                    GroupsScreen(),
                     ProfileScreen(
                       onOpenSettings: _abrirConfiguracoes,
                       availableVideos: _videos
@@ -390,35 +406,111 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   ],
                 ),
               ),
-              if (!_mostrarBemVindo && !_mostrarHumor && _tabAtual != 3)
-                _buildBottomNav(),
+              if (!_mostrarBemVindo && _tabAtual != 3) _buildBottomNav(),
             ],
           ),
-
           if (_mostrarBemVindo) _buildBemVindoOverlay(),
-
-          if (_mostrarHumor) _buildHumorOverlay(),
+          if (_mostrarAvisoPublicado) _buildPublicacaoToast(),
         ],
       ),
     );
   }
 
-  ProfileVideo _toProfileVideo(_VideoCard video) => ProfileVideo(
-    title: video.titulo,
-    videoPath: video.videoPath,
-    videoToken: video.videoToken,
-    videoId: video.videoId,
-    privacy: video.privacy,
-    contentType: video.tipo,
-  );
+  Widget _buildPublicacaoToast() {
+    return Positioned(
+      top: 50,
+      left: 18,
+      right: 18,
+      child: Material(
+        color: Colors.transparent,
+        child: AnimatedSlide(
+          offset: _mostrarAvisoPublicado ? Offset.zero : const Offset(0, -1.2),
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeOutBack,
+          child: AnimatedOpacity(
+            opacity: _mostrarAvisoPublicado ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 300),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF7D171D), Color(0xFF451717)],
+                ),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: const Color(0xFFFFD166).withValues(alpha: 0.7),
+                  width: 1.2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    blurRadius: 18,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFFD166),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.check_rounded,
+                      color: Color(0xFF7D171D),
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'Vídeo publicado!',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontFamily: 'IMFellFrenchCanon',
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _tituloAvisoPublicado.isNotEmpty
+                              ? 'Sua recomendação de "$_tituloAvisoPublicado" já está no feed.'
+                              : 'Sua recomendação já está visível para a comunidade.',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _buildBemVindoOverlay() {
+    final dark = AppPalette.isDark(context);
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: AppPalette.isDark(context)
+          colors: dark
               ? [
                   AppPalette.darkBackground,
                   const Color(0xFF54242B),
@@ -447,7 +539,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
             ),
           ),
-
           Positioned(
             bottom: -60,
             left: -50,
@@ -465,7 +556,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
             ),
           ),
-
           AnimatedBuilder(
             animation: _bemVindoCtrl,
             builder: (_, child) => Opacity(
@@ -490,7 +580,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         borderRadius: BorderRadius.circular(24),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFFBB7575).withOpacity(v),
+                            color: const Color(0xFFBB7575).withValues(alpha: v),
                             blurRadius: 60,
                             spreadRadius: 4,
                           ),
@@ -500,13 +590,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     ),
                     child: Image.asset(AppPalette.logo(context), height: 100),
                   ),
-
                   const SizedBox(height: 30),
-
                   Text(
-                    "Bem-vindo!",
+                    'Bem-vindo!',
                     style: TextStyle(
-                      color: AppPalette.isDark(context)
+                      color: dark
                           ? const Color(0xFFFFE9E9)
                           : const Color(0xFF7D343E),
                       fontFamily: 'IMFellFrenchCanon',
@@ -524,9 +612,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 14),
-
                   Container(
                     width: 56,
                     height: 3,
@@ -537,9 +623,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-
                   const SizedBox(height: 32),
-
                   Container(
                     margin: const EdgeInsets.symmetric(horizontal: 32),
                     padding: const EdgeInsets.symmetric(
@@ -547,7 +631,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       vertical: 14,
                     ),
                     decoration: BoxDecoration(
-                      color: AppPalette.isDark(context)
+                      color: dark
                           ? Colors.white.withValues(alpha: 0.08)
                           : Colors.white.withValues(alpha: 0.58),
                       borderRadius: BorderRadius.circular(14),
@@ -558,10 +642,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       ),
                     ),
                     child: Text(
-                      "Seu universo de entretenimento começa aqui",
+                      'Seu universo de entretenimento começa aqui',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: AppPalette.isDark(context)
+                        color: dark
                             ? const Color(0xFFFFE9E9)
                             : const Color(0xFF70494D),
                         fontSize: 15,
@@ -574,231 +658,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildHumorOverlay() {
-    final humores = [
-      ("😊", "Feliz", const Color(0xFFFFD700)),
-      ("😢", "Triste", const Color(0xFF4A90D9)),
-      ("😤", "Ansioso", const Color(0xFFFF6B35)),
-      ("😴", "Sonolento", const Color(0xFF9B59B6)),
-      ("🔥", "Animado", const Color(0xFFB8787C)),
-      ("🤔", "Pensativo", const Color(0xFF95A5A6)),
-      ("💕", "Romântico", const Color(0xFFBB7575)),
-      ("😱", "Suspense", const Color(0xFF2C3E50)),
-    ];
-
-    return GestureDetector(
-      onTap: () => setState(() => _mostrarHumor = false),
-      child: Container(
-        color: AppPalette.background(context).withValues(alpha: 0.94),
-        child: Center(
-          child: GestureDetector(
-            onTap: () {},
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 24),
-              padding: const EdgeInsets.all(32),
-              decoration: BoxDecoration(
-                color: AppPalette.surface(context),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(
-                  color: const Color.fromARGB(
-                    255,
-                    221,
-                    155,
-                    159,
-                  ).withOpacity(0.18),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFFB8787C).withOpacity(0.1),
-                    blurRadius: 30,
-                    spreadRadius: 5,
-                  ),
-                  BoxShadow(
-                    color: const Color(0xFFBB7575).withOpacity(0.18),
-                    blurRadius: 40,
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFFBB7575), Color(0xFFD59EA1)],
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFFBB7575).withOpacity(0.3),
-                          blurRadius: 20,
-                          spreadRadius: 2,
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.mood_rounded,
-                      color: Color(0xFFFFE9E9),
-                      size: 30,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  const Text(
-                    "Como você está se sentindo?",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Color(0xFFBB7575),
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      height: 1.3,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    "Vamos personalizar suas recomendações",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: AppPalette.mutedText(context),
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 28),
-                  GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          childAspectRatio: 2.5,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                        ),
-                    itemCount: humores.length,
-                    itemBuilder: (context, index) {
-                      final (emoji, nome, cor) = humores[index];
-                      final sel = _humorSelecionado == nome;
-                      return GestureDetector(
-                        onTap: () => setState(() => _humorSelecionado = nome),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          decoration: BoxDecoration(
-                            gradient: sel
-                                ? LinearGradient(
-                                    colors: [
-                                      cor.withOpacity(0.3),
-                                      cor.withOpacity(0.1),
-                                    ],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  )
-                                : null,
-                            color: sel
-                                ? null
-                                : AppPalette.raisedSurface(context),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: sel
-                                  ? cor.withOpacity(0.6)
-                                  : AppPalette.border(context),
-                              width: sel ? 2 : 1,
-                            ),
-                            boxShadow: sel
-                                ? [
-                                    BoxShadow(
-                                      color: cor.withOpacity(0.2),
-                                      blurRadius: 12,
-                                      spreadRadius: 1,
-                                    ),
-                                  ]
-                                : [],
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(emoji, style: const TextStyle(fontSize: 20)),
-                              const SizedBox(width: 8),
-                              Text(
-                                nome,
-                                style: TextStyle(
-                                  color: sel
-                                      ? Colors.white
-                                      : AppPalette.primaryText(context),
-                                  fontSize: 14,
-                                  fontWeight: sel
-                                      ? FontWeight.w600
-                                      : FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-
-                  const SizedBox(height: 28),
-
-                  // Botão confirmar
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppPalette.button(context),
-                        shadowColor: Colors.transparent,
-                        padding: EdgeInsets.zero,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      onPressed: () => setState(() => _mostrarHumor = false),
-                      child: Ink(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              AppPalette.button(context),
-                              AppPalette.darkButton,
-                            ],
-                            begin: Alignment.centerLeft,
-                            end: Alignment.centerRight,
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFFB8787C).withOpacity(0.35),
-                              blurRadius: 20,
-                              offset: const Offset(0, 6),
-                            ),
-                          ],
-                        ),
-                        child: Center(
-                          child: Text(
-                            _humorSelecionado != null
-                                ? "Continuar  ✨"
-                                : "Pular por hoje",
-                            style: const TextStyle(
-                              color: Color(0xFFFFE9E9),
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -850,7 +709,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           width: 24,
                           height: 24,
                           fit: BoxFit.contain,
-                          errorBuilder: (_, __, ___) => const Icon(
+                          errorBuilder: (_, _, _) => const Icon(
                             Icons.add_rounded,
                             color: Colors.white,
                             size: 26,
@@ -897,7 +756,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 child: Image.asset(
                   image,
                   fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => Icon(
+                  errorBuilder: (_, _, _) => Icon(
                     fallback ?? Icons.circle_outlined,
                     color: active
                         ? AppPalette.primaryText(context)
@@ -964,22 +823,303 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 }
 
+// ══════════════════════════════════════════════════════════════════
+// MODEL
+// ══════════════════════════════════════════════════════════════════
+
+class _VideoCard {
+  final String titulo, tipo, genero, descricao, spoiler, autor;
+  final String? obraId, obraTitulo, obraTipo, obraDescricao;
+  final List<String> obraGeneros, obraPalavrasChave;
+  final String? videoPath;
+  final String? videoToken;
+  final String? videoId;
+  final String? ownerId;
+  final String privacy;
+  final int stars, comentarios;
+  final Color cor;
+  final bool likedByMe;
+  const _VideoCard({
+    required this.titulo,
+    required this.autor,
+    required this.tipo,
+    required this.genero,
+    required this.descricao,
+    required this.spoiler,
+    required this.stars,
+    required this.comentarios,
+    required this.cor,
+    this.likedByMe = false,
+    this.obraId,
+    this.obraTitulo,
+    this.obraTipo,
+    this.obraDescricao,
+    this.obraGeneros = const [],
+    this.obraPalavrasChave = const [],
+    this.videoPath,
+    this.videoToken,
+    this.videoId,
+    this.ownerId,
+    this.privacy = 'Público',
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ANIMAÇÃO DA ESTRELA (duplo toque)
+// ══════════════════════════════════════════════════════════════════
+
+class _LikeBurst extends StatelessWidget {
+  const _LikeBurst({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 720),
+      curve: Curves.easeOutCubic,
+      builder: (context, progress, _) {
+        final scale = Curves.easeOutBack.transform(progress);
+        final opacity = (1 - Curves.easeIn.transform(progress)).clamp(0.0, 1.0);
+        return Opacity(
+          opacity: opacity,
+          child: Transform.scale(
+            scale: 0.55 + scale * 0.55,
+            child: SizedBox(
+              width: 148,
+              height: 148,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    width: 112 + progress * 24,
+                    height: 112 + progress * 24,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.white.withValues(
+                          alpha: 0.38 * (1 - progress),
+                        ),
+                        width: 2,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _kStarGold.withValues(
+                            alpha: 0.28 * (1 - progress),
+                          ),
+                          blurRadius: 24,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    Icons.star_rounded,
+                    color: _kStarGold,
+                    size: 96,
+                    shadows: [
+                      Shadow(
+                        color: Colors.black38,
+                        blurRadius: 18,
+                        offset: Offset(0, 5),
+                      ),
+                      Shadow(color: Color(0x99FFD166), blurRadius: 28),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// PLAYER
+// ══════════════════════════════════════════════════════════════════
+
+class _FeedVideo extends StatefulWidget {
+  final String path;
+  final String? token;
+  final String? videoId;
+  final bool isActive;
+  final bool userPaused;
+
+  const _FeedVideo({
+    required this.path,
+    this.token,
+    this.videoId,
+    this.isActive = true,
+    this.userPaused = false,
+  });
+
+  @override
+  State<_FeedVideo> createState() => _FeedVideoState();
+}
+
+class _FeedVideoState extends State<_FeedVideo> {
+  VideoPlayerController? _controller;
+  late final Future<void> _initialize;
+  bool _muted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initialize = _initializeVideo();
+  }
+
+  Future<void> _initializeVideo() async {
+    final parsedUri = Uri.tryParse(widget.path);
+    final isNetworkUri =
+        parsedUri != null &&
+        (parsedUri.scheme == 'http' || parsedUri.scheme == 'https');
+    final uri = kIsWeb && widget.videoId != null
+        ? Uri.parse(await ApiService.urlArquivoVideoWeb(widget.videoId!))
+        : isNetworkUri
+        ? parsedUri
+        : kIsWeb
+        ? Uri.parse(widget.path)
+        : Uri.file(widget.path);
+    if (!mounted) return;
+    final controller = VideoPlayerController.networkUrl(
+      uri,
+      httpHeaders: kIsWeb || widget.token == null
+          ? const {}
+          : {'Authorization': 'Bearer ${widget.token}'},
+    );
+    _controller = controller;
+    await controller.initialize();
+    await controller.setLooping(true);
+    await _syncPlayback();
+  }
+
+  @override
+  void didUpdateWidget(covariant _FeedVideo oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isActive != widget.isActive ||
+        oldWidget.userPaused != widget.userPaused) {
+      unawaited(_syncPlayback());
+    }
+  }
+
+  Future<void> _syncPlayback() async {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) return;
+    if (widget.isActive && !widget.userPaused) {
+      await controller.play();
+    } else {
+      await controller.pause();
+    }
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _toggleMute() async {
+    final controller = _controller;
+    if (controller == null) return;
+    final muted = !_muted;
+    await controller.setVolume(muted ? 0 : 1);
+    if (mounted) setState(() => _muted = muted);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<void>(
+      future: _initialize,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) return const ColoredBox(color: Colors.black);
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const ColoredBox(
+            color: Colors.black,
+            child: Center(
+              child: CircularProgressIndicator(color: Color(0xFFFF4D67)),
+            ),
+          );
+        }
+        final controller = _controller!;
+        final value = controller.value;
+        final aspectRatio = value.aspectRatio;
+        final displayAspectRatio = value.rotationCorrection % 180 == 0
+            ? aspectRatio
+            : 1 / aspectRatio;
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            ColoredBox(
+              color: Colors.black,
+              child: Center(
+                child: AspectRatio(
+                  aspectRatio: displayAspectRatio == 0
+                      ? 9 / 16
+                      : displayAspectRatio,
+                  child: VideoPlayer(controller),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 12,
+              right: 12,
+              child: Material(
+                color: Colors.black.withValues(alpha: 0.38),
+                shape: const CircleBorder(),
+                child: IconButton(
+                  tooltip: _muted ? 'Ativar som' : 'Silenciar vídeo',
+                  onPressed: _toggleMute,
+                  color: Colors.white,
+                  iconSize: 20,
+                  icon: Icon(
+                    _muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// BUSCA INTELIGENTE DE OBRAS E VÍDEOS
+// ══════════════════════════════════════════════════════════════════
+
+class _SearchBundle {
+  final List<Map<String, dynamic>> obras;
+  final List<Map<String, dynamic>> videos;
+  const _SearchBundle({required this.obras, required this.videos});
+}
+
 class _LoopSearchDelegate extends SearchDelegate<void> {
   String? _lastSearchQuery;
-  Future<List<Map<String, dynamic>>>? _searchFuture;
+  Future<_SearchBundle>? _searchFuture;
 
   _LoopSearchDelegate();
 
-  Future<List<Map<String, dynamic>>> _search(String term) {
+  Future<_SearchBundle> _search(String term) {
     if (_lastSearchQuery != term || _searchFuture == null) {
       _lastSearchQuery = term;
-      _searchFuture = ApiService.buscarVideos(term);
+      _searchFuture = Future.wait([
+        ApiService.buscarObras(term),
+        ApiService.buscarVideos(term),
+      ]).then(
+        (results) => _SearchBundle(
+          obras: results[0],
+          videos: results[1],
+        ),
+      );
     }
     return _searchFuture!;
   }
 
   @override
-  String get searchFieldLabel => 'Buscar vídeos no Loop';
+  String get searchFieldLabel => 'Buscar no Loop (ex: dorama colegial, True Beauty)';
 
   @override
   ThemeData appBarTheme(BuildContext context) => Theme.of(context).copyWith(
@@ -987,9 +1127,14 @@ class _LoopSearchDelegate extends SearchDelegate<void> {
     appBarTheme: AppBarTheme(
       backgroundColor: AppPalette.background(context),
       foregroundColor: AppPalette.primaryText(context),
+      elevation: 0,
     ),
     inputDecorationTheme: InputDecorationTheme(
-      hintStyle: TextStyle(color: AppPalette.mutedText(context)),
+      hintStyle: TextStyle(
+        color: AppPalette.mutedText(context).withValues(alpha: 0.6),
+        fontSize: 14,
+      ),
+      border: InputBorder.none,
     ),
   );
 
@@ -1022,16 +1167,41 @@ class _LoopSearchDelegate extends SearchDelegate<void> {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(28),
-          child: Text(
-            'Busque por título, gênero ou tema. Ex.: “dorama colegial”.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppPalette.mutedText(context)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.search_rounded,
+                size: 46,
+                color: AppPalette.mutedText(context).withValues(alpha: 0.5),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Pesquisa inteligente no LupTok',
+                style: TextStyle(
+                  color: AppPalette.primaryText(context),
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'IMFellFrenchCanon',
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Busque por características (ex: "dorama colegial", "romance escolar") ou diretamente pelo nome de uma obra (ex: "True Beauty").',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: AppPalette.mutedText(context),
+                  fontSize: 13.5,
+                  height: 1.4,
+                ),
+              ),
+            ],
           ),
         ),
       );
     }
 
-    return FutureBuilder<List<Map<String, dynamic>>>(
+    return FutureBuilder<_SearchBundle>(
       future: _search(term),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
@@ -1049,42 +1219,207 @@ class _LoopSearchDelegate extends SearchDelegate<void> {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
-        final videos = snapshot.data!;
-        if (videos.isEmpty) {
-          return const Center(child: Text('Nenhum resultado encontrado.'));
+
+        final bundle = snapshot.data!;
+        final obras = bundle.obras;
+        final videos = bundle.videos;
+
+        if (obras.isEmpty && videos.isEmpty) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.search_off_rounded,
+                    size: 44,
+                    color: AppPalette.mutedText(context),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Nenhum resultado encontrado para "$term"',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: AppPalette.primaryText(context),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Tente outros termos como gêneros (romance, ação, suspense) ou características da história.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: AppPalette.mutedText(context),
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
         }
 
-        return _VideoSearchGrid(
-          videos: videos,
-          onTap: (video) => _openSearchVideo(context, video),
+        return ListView(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          children: [
+            // 1. Obras encontradas e recomendadas
+            if (obras.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.auto_awesome_rounded,
+                      size: 18,
+                      color: AppPalette.button(context),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Obras recomendadas (${obras.length})',
+                      style: TextStyle(
+                        color: AppPalette.primaryText(context),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 110,
+                child: ListView.separated(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  scrollDirection: Axis.horizontal,
+                  itemCount: obras.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 10),
+                  itemBuilder: (context, index) {
+                    final obra = obras[index];
+                    final titulo = obra['titulo'] as String? ?? 'Obra';
+                    final tipo = obra['tipo'] as String? ?? '';
+                    final generos = _apiStringList(obra['generos']);
+                    final palavras = _apiStringList(obra['palavras_chave']);
+                    final tags = [...generos, ...palavras].take(2).join(' · ');
+
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: () {
+                        query = titulo;
+                      },
+                      child: Container(
+                        width: 200,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppPalette.raisedSurface(context),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: AppPalette.border(context).withValues(alpha: 0.25),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.05),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppPalette.button(context)
+                                        .withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    tipo,
+                                    style: TextStyle(
+                                      color: AppPalette.primaryText(context),
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              titulo,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: AppPalette.primaryText(context),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            if (tags.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                tags,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: AppPalette.mutedText(context),
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 18),
+            ],
+
+            // 2. Vídeos relacionados encontrados
+            if (videos.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.play_circle_outline_rounded,
+                      size: 18,
+                      color: AppPalette.button(context),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Vídeos relacionados (${videos.length})',
+                      style: TextStyle(
+                        color: AppPalette.primaryText(context),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              _VideoSearchGrid(
+                videos: videos,
+                shrinkWrap: true,
+                onTap: (video) => _openSearchVideo(context, video),
+              ),
+            ],
+          ],
         );
       },
     );
   }
-}
-
-List<String> _apiStringList(Object? value) =>
-    value is List ? value.whereType<String>().toList() : const [];
-
-String _searchVideoTitle(Map<String, dynamic> video) {
-  final obra = video['obra'];
-  final tituloObra = obra is Map ? obra['titulo'] : null;
-  final descricao = video['descricao'];
-  if (tituloObra is String && tituloObra.isNotEmpty) return tituloObra;
-  if (descricao is String && descricao.isNotEmpty) return descricao;
-  return 'Vídeo publicado';
-}
-
-String _searchVideoAsset(Map<String, dynamic> video) {
-  final obra = video['obra'];
-  final tipo = obra is Map ? obra['tipo'] : video['tipo_conteudo'];
-  return switch (tipo?.toString().toLowerCase()) {
-    'série' || 'serie' => 'assets/images/serie.png',
-    'livro' => 'assets/images/livro.png',
-    'anime' => 'assets/images/anime.png',
-    'dorama' || 'k-drama' => 'assets/images/dorama.png',
-    _ => 'assets/images/filme.png',
-  };
 }
 
 class _VideoSearchGrid extends StatelessWidget {
@@ -1141,7 +1476,7 @@ class _VideoSearchTile extends StatelessWidget {
     final author = video['autor'] as String? ?? '';
     return Material(
       color: AppPalette.raisedSurface(context),
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(14),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
@@ -1157,12 +1492,12 @@ class _VideoSearchTile extends StatelessWidget {
                 ),
               ),
             ),
-            Image.asset(
-              _searchVideoAsset(video),
-              fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) => ColoredBox(
-                color: AppPalette.button(context),
-                child: const Center(
+            Padding(
+              padding: const EdgeInsets.all(28),
+              child: Image.asset(
+                _searchVideoAsset(video),
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) => const Center(
                   child: Icon(
                     Icons.movie_creation_outlined,
                     color: Colors.white70,
@@ -1176,16 +1511,18 @@ class _VideoSearchTile extends StatelessWidget {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [Colors.black12, Colors.transparent, Colors.black87],
-                  stops: [0, 0.35, 1],
+                  colors: [Colors.transparent, Colors.transparent, Colors.black87],
+                  stops: [0, 0.4, 1],
                 ),
               ),
             ),
-            const Center(
+            const Positioned(
+              top: 8,
+              right: 8,
               child: Icon(
                 Icons.play_circle_fill_rounded,
                 color: Colors.white,
-                size: 44,
+                size: 26,
                 shadows: [Shadow(color: Colors.black54, blurRadius: 8)],
               ),
             ),
@@ -1204,10 +1541,11 @@ class _VideoSearchTile extends StatelessWidget {
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
+                      fontSize: 13,
                       shadows: [Shadow(color: Colors.black87, blurRadius: 5)],
                     ),
                   ),
-                  if (description.isNotEmpty) ...[
+                  if (description.isNotEmpty && description != title) ...[
                     const SizedBox(height: 3),
                     Text(
                       description,
@@ -1266,6 +1604,77 @@ Future<void> _openSearchVideo(
           'Não foi possível abrir o vídeo: '
           '${error.toString().replaceFirst('Exception: ', '')}',
         ),
+      ),
+    );
+  }
+}
+
+class _SearchVideoPlayerScreen extends StatelessWidget {
+  final Map<String, dynamic> video;
+  final Object id;
+  final String token;
+
+  const _SearchVideoPlayerScreen({
+    required this.video,
+    required this.id,
+    required this.token,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final title = _searchVideoTitle(video);
+    final description = video['descricao'] as String? ?? '';
+    final author = video['autor'] as String? ?? '';
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            tooltip: 'Denunciar vídeo',
+            onPressed: () => _promptReportVideo(context, id),
+            icon: const Icon(Icons.flag_outlined),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: _FeedVideo(
+              path: ApiService.urlArquivoVideo(id),
+              token: token,
+              videoId: id.toString(),
+            ),
+          ),
+          if (description.isNotEmpty || author.isNotEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(18, 12, 18, 20),
+              color: _kVideoBackdrop,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (author.isNotEmpty)
+                    Text(
+                      author,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  if (description.isNotEmpty) ...[
+                    if (author.isNotEmpty) const SizedBox(height: 5),
+                    Text(
+                      description,
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -1379,234 +1788,7 @@ Future<void> _promptReportVideo(BuildContext context, Object videoId) async {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// MODEL
-// ══════════════════════════════════════════════════════════════════
-
-class _VideoCard {
-  final String titulo, tipo, genero, descricao, spoiler, autor;
-  final String? obraId, obraTitulo, obraTipo, obraDescricao;
-  final List<String> obraGeneros, obraPalavrasChave;
-  final String? videoPath;
-  final String? videoToken;
-  final String? videoId;
-  final String? ownerId;
-  final String privacy;
-  final int stars, comentarios;
-  final Color cor;
-  final bool likedByMe;
-  const _VideoCard({
-    required this.titulo,
-    required this.autor,
-    required this.tipo,
-    required this.genero,
-    required this.descricao,
-    required this.spoiler,
-    required this.stars,
-    required this.comentarios,
-    required this.cor,
-    this.likedByMe = false,
-    this.obraId,
-    this.obraTitulo,
-    this.obraTipo,
-    this.obraDescricao,
-    this.obraGeneros = const [],
-    this.obraPalavrasChave = const [],
-    this.videoPath,
-    this.videoToken,
-    this.videoId,
-    this.ownerId,
-    this.privacy = 'Público',
-  });
-}
-
-class _FeedVideo extends StatefulWidget {
-  final String path;
-  final String? token;
-  final String? videoId;
-
-  const _FeedVideo({required this.path, this.token, this.videoId});
-
-  @override
-  State<_FeedVideo> createState() => _FeedVideoState();
-}
-
-class _FeedVideoState extends State<_FeedVideo> {
-  VideoPlayerController? _controller;
-  late final Future<void> _initialize;
-  bool _muted = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _initialize = _initializeVideo();
-  }
-
-  Future<void> _initializeVideo() async {
-    final parsedUri = Uri.tryParse(widget.path);
-    final isNetworkUri =
-        parsedUri != null &&
-        (parsedUri.scheme == 'http' || parsedUri.scheme == 'https');
-    final uri = kIsWeb && widget.videoId != null
-        ? Uri.parse(await ApiService.urlArquivoVideoWeb(widget.videoId!))
-        : isNetworkUri
-        ? parsedUri
-        : kIsWeb
-        ? Uri.parse(widget.path)
-        : Uri.file(widget.path);
-    if (!mounted) return;
-    final controller = VideoPlayerController.networkUrl(
-      uri,
-      httpHeaders: kIsWeb || widget.token == null
-          ? const {}
-          : {'Authorization': 'Bearer ${widget.token}'},
-    );
-    _controller = controller;
-    await controller.initialize();
-    await controller.setLooping(true);
-    await controller.play();
-  }
-
-  @override
-  void dispose() {
-    _controller?.dispose();
-    super.dispose();
-  }
-
-  Future<void> _toggleMute() async {
-    final muted = !_muted;
-    await _controller!.setVolume(muted ? 0 : 1);
-    if (mounted) setState(() => _muted = muted);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<void>(
-      future: _initialize,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) return const ColoredBox(color: Colors.black);
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const ColoredBox(
-            color: Colors.black,
-            child: Center(
-              child: CircularProgressIndicator(color: Color(0xFFFF4D67)),
-            ),
-          );
-        }
-        final controller = _controller!;
-        final value = controller.value;
-        final aspectRatio = value.aspectRatio;
-        final displayAspectRatio = value.rotationCorrection % 180 == 0
-            ? aspectRatio
-            : 1 / aspectRatio;
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            ClipRect(
-              child: FittedBox(
-                fit: BoxFit.cover,
-                child: SizedBox(
-                  width: 1000 * displayAspectRatio,
-                  height: 1000,
-                  child: VideoPlayer(controller),
-                ),
-              ),
-            ),
-            Positioned(
-              top: 70,
-              right: 12,
-              child: Material(
-                color: Colors.black.withValues(alpha: 0.42),
-                borderRadius: BorderRadius.circular(10),
-                child: IconButton(
-                  tooltip: _muted ? 'Ativar som' : 'Silenciar vídeo',
-                  onPressed: _toggleMute,
-                  color: Colors.white,
-                  icon: Icon(
-                    _muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _SearchVideoPlayerScreen extends StatelessWidget {
-  final Map<String, dynamic> video;
-  final Object id;
-  final String token;
-
-  const _SearchVideoPlayerScreen({
-    required this.video,
-    required this.id,
-    required this.token,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final title = _searchVideoTitle(video);
-    final description = video['descricao'] as String? ?? '';
-    final author = video['autor'] as String? ?? '';
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            tooltip: 'Denunciar vídeo',
-            onPressed: () => _promptReportVideo(context, id),
-            icon: const Icon(Icons.flag_outlined),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: _FeedVideo(
-              path: ApiService.urlArquivoVideo(id),
-              token: token,
-              videoId: id.toString(),
-            ),
-          ),
-          if (description.isNotEmpty || author.isNotEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(18, 12, 18, 20),
-              color: const Color(0xFF191416),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (author.isNotEmpty)
-                    Text(
-                      author,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  if (description.isNotEmpty) ...[
-                    if (author.isNotEmpty) const SizedBox(height: 5),
-                    Text(
-                      description,
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-// ══════════════════════════════════════════════════════════════════
-// TAB: LOOP
+// TAB: LOOP (FEED)
 // ══════════════════════════════════════════════════════════════════
 
 class _LoopTab extends StatefulWidget {
@@ -1614,11 +1796,13 @@ class _LoopTab extends StatefulWidget {
   final bool ocultarSpoilers;
   final List<String> profileInterests;
   final String? currentUserId;
+  final bool isVisible;
   const _LoopTab({
     required this.videos,
     required this.ocultarSpoilers,
     required this.profileInterests,
     required this.currentUserId,
+    this.isVisible = true,
   });
 
   @override
@@ -1637,6 +1821,25 @@ class _LoopTabState extends State<_LoopTab> {
   final Map<String, int> _likeAnimationVersions = {};
   final Map<String, Timer> _likeAnimationTimers = {};
   bool _mostrandoSeguindo = false;
+  int _pageIndex = 0;
+  bool _userPaused = false;
+
+  Timer? _pauseIndicatorTimer;
+  bool _showPauseIndicator = false;
+  bool _indicatorIsPause = true;
+
+  void _aoTocarSimples() {
+    setState(() {
+      _userPaused = !_userPaused;
+      _showPauseIndicator = true;
+      _indicatorIsPause = _userPaused;
+    });
+    _pauseIndicatorTimer?.cancel();
+    _pauseIndicatorTimer = Timer(const Duration(milliseconds: 700), () {
+      if (!mounted) return;
+      setState(() => _showPauseIndicator = false);
+    });
+  }
 
   @override
   void initState() {
@@ -1646,6 +1849,28 @@ class _LoopTabState extends State<_LoopTab> {
     followedUsernames.addListener(_syncFollowedUsers);
     savedVideoIndices.addListener(_syncSavedVideos);
     _carregarInteracoes();
+  }
+
+  @override
+  void didUpdateWidget(covariant _LoopTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isVisible && !widget.isVisible && !_userPaused) {
+      setState(() => _userPaused = true);
+    } else if (!oldWidget.isVisible && widget.isVisible && _userPaused) {
+      setState(() => _userPaused = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _pauseIndicatorTimer?.cancel();
+    followedUsernames.removeListener(_syncFollowedUsers);
+    savedVideoIndices.removeListener(_syncSavedVideos);
+    for (final timer in _likeAnimationTimers.values) {
+      timer.cancel();
+    }
+    _pageCtrl.dispose();
+    super.dispose();
   }
 
   void _syncFollowedUsers() {
@@ -1676,7 +1901,7 @@ class _LoopTabState extends State<_LoopTab> {
       final isOwner =
           preferences.getString('perfil_id') == account['id'].toString();
       final username = account['nome_usuario'] as String;
-      final works = account['obras'] as List<Map<String, dynamic>>;
+      final works = (account['obras'] as List).cast<Map<String, dynamic>>();
       await Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
           builder: (_) => ProfileScreen(
@@ -1756,6 +1981,8 @@ class _LoopTabState extends State<_LoopTab> {
     );
   }
 
+  // ── Curtidas (estrela) ──────────────────────────────────────────
+
   String _likeKey(_VideoCard video, int index) =>
       video.videoId ?? 'local:$index';
 
@@ -1765,8 +1992,12 @@ class _LoopTabState extends State<_LoopTab> {
   int _likeCount(_VideoCard video, int index) =>
       _likeCounts[_likeKey(video, index)] ?? video.stars;
 
-  Future<void> _toggleLike(_VideoCard video, int index) async {
-    await _setLike(video, index, !_isLiked(video, index));
+  void _aoDarDoisToques(_VideoCard video, int index) {
+    final key = _likeKey(video, index);
+    if (_pendingLikes.contains(key)) return;
+    final vaCurtir = !_isLiked(video, index);
+    if (vaCurtir) _animateLike(key);
+    unawaited(_setLike(video, index, vaCurtir));
   }
 
   Future<void> _setLike(_VideoCard video, int index, bool shouldLike) async {
@@ -1793,14 +2024,12 @@ class _LoopTabState extends State<_LoopTab> {
       );
       final count = result['curtidas'];
       final state = result['curtido'];
-      final isOwner =
-          video.ownerId != null && video.ownerId == widget.currentUserId;
-      if (state is! bool || (isOwner && count is! num)) {
+      if (state is! bool || count is! num) {
         throw Exception('O servidor retornou uma curtida inválida.');
       }
       if (!mounted) return;
       setState(() {
-        if (count is num) _likeCounts[key] = count.toInt();
+        _likeCounts[key] = count.toInt();
         _likeStates[key] = state;
         _pendingLikes.remove(key);
       });
@@ -1839,6 +2068,8 @@ class _LoopTabState extends State<_LoopTab> {
     });
   }
 
+  // ── Ações ───────────────────────────────────────────────────────
+
   Future<void> _reportVideo(_VideoCard video) async {
     final id = video.videoId;
     if (id == null) {
@@ -1855,7 +2086,7 @@ class _LoopTabState extends State<_LoopTab> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFFFFF7F7),
+      backgroundColor: AppPalette.raisedSurface(context),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -1868,20 +2099,35 @@ class _LoopTabState extends State<_LoopTab> {
   }
 
   Future<void> _compartilhar(_VideoCard video) async {
+    final obra = video.obraTitulo ?? video.titulo;
     await SharePlus.instance.share(
       ShareParams(
-        subject: 'Luptok: ${video.titulo}',
+        subject: 'LupTok: $obra',
         text:
-            '${video.titulo} - ${video.tipo} de ${video.genero}. '
-            'Recomendado por @anna.beatriz no Luptok.',
+            '$obra (${video.tipo}). '
+            'Recomendado por ${video.autor} no LupTok.',
       ),
     );
   }
 
   Future<void> _pesquisar() async {
-    setState(() => _mostrandoSeguindo = false);
+    _trocarFeed(false);
     await showSearch<void>(context: context, delegate: _LoopSearchDelegate());
   }
+
+  void _trocarFeed(bool seguindo) {
+    if (_mostrandoSeguindo == seguindo) return;
+    setState(() {
+      _mostrandoSeguindo = seguindo;
+      _pageIndex = 0;
+      _userPaused = false;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_pageCtrl.hasClients) _pageCtrl.jumpToPage(0);
+    });
+  }
+
+  // ── Textos e cores ─────────────────────────────────────────────
 
   String _spoilerLabel(String s) {
     if (widget.ocultarSpoilers && s != 'nenhum') return 'Spoiler oculto';
@@ -1895,64 +2141,25 @@ class _LoopTabState extends State<_LoopTab> {
     }
   }
 
-  String _tipoImagem(String tipo) {
-    final arquivo = switch (tipo.toLowerCase()) {
-      'filme' => 'filme',
-      'série' || 'serie' => 'serie',
-      'livro' => 'livro',
-      'anime' => 'anime',
-      'k-drama' || 'dorama' => 'dorama',
-      _ => 'filme',
-    };
-    return 'assets/images/$arquivo.png';
-  }
-
   Color _spoilerColor(String s) {
-    if (widget.ocultarSpoilers && s != 'nenhum') {
-      return Colors.white70;
-    }
+    if (widget.ocultarSpoilers && s != 'nenhum') return Colors.white70;
     switch (s) {
       case 'leve':
-        return const Color(0xFFFFA726);
+        return const Color(0xFFFFB74D);
       case 'muito':
-        return const Color(0xFFBB7575);
+        return const Color(0xFFFF6B7A);
       default:
-        return const Color(0xFF4CAF50);
-    }
-  }
-
-  String _tipoEmoji(String t) {
-    switch (t) {
-      case 'Filme':
-        return '🎬';
-      case 'Série':
-        return '📺';
-      case 'Livro':
-        return '📖';
-      case 'Anime':
-        return '🎌';
-      case 'K-Drama':
-        return '🇰🇷';
-      default:
-        return '🎬';
+        return const Color(0xFF66D17A);
     }
   }
 
   String _fmt(int n) => n >= 1000 ? '${(n / 1000).toStringAsFixed(1)}k' : '$n';
 
-  @override
-  void dispose() {
-    followedUsernames.removeListener(_syncFollowedUsers);
-    savedVideoIndices.removeListener(_syncSavedVideos);
-    for (final timer in _likeAnimationTimers.values) {
-      timer.cancel();
-    }
-    _pageCtrl.dispose();
-    super.dispose();
-  }
+  // ── Build ───────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
+    final dark = AppPalette.isDark(context);
     final publicVideos = widget.videos
         .where((video) => video.privacy == 'Público')
         .toList();
@@ -1961,429 +2168,112 @@ class _LoopTabState extends State<_LoopTab> {
               .where((video) => _following.contains(video.autor))
               .toList()
         : publicVideos;
-    if (feed.isEmpty) {
-      return Stack(
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+      child: Stack(
         fit: StackFit.expand,
         children: [
-          ColoredBox(
-            color: AppPalette.isDark(context)
-                ? AppPalette.darkBackground
-                : const Color(0xFF191416),
-          ),
-          _buildTopBar(),
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.all(36),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.people_outline_rounded,
-                    color: Colors.white70,
-                    size: 42,
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Seu feed Seguindo começa aqui',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Siga criadores no Loop para ver as publicações deles nesta aba.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                  const SizedBox(height: 16),
-                  TextButton.icon(
-                    onPressed: () => setState(() => _mostrandoSeguindo = false),
-                    icon: const Icon(Icons.explore_outlined),
-                    label: const Text('Ver Looping'),
-                  ),
-                ],
-              ),
-            ),
+          // 1. O feed de vídeos ocupa a tela inteira e rola verticalmente
+          feed.isEmpty ? _buildEmpty() : _buildFeed(feed),
+
+          // 2. A barra superior fica FIXA no topo, nunca se move ou duplica com os vídeos
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: _buildTopBar(),
           ),
         ],
-      );
-    }
-    return PageView.builder(
-      controller: _pageCtrl,
-      scrollDirection: Axis.vertical,
-      itemCount: feed.length,
-      itemBuilder: (context, i) {
-        final v = feed[i];
-        final videoIndex = widget.videos.indexOf(v);
-        final likeKey = _likeKey(v, videoIndex);
-        final starrado = _isLiked(v, videoIndex);
-        final curtidas = _likeCount(v, videoIndex);
-        final isVideoOwner =
-            v.ownerId != null && v.ownerId == widget.currentUserId;
-        final salvo = _saved.contains(videoIndex);
-        final corAnel = switch (v.spoiler) {
-          'muito' => const Color(0xFFD9273E),
-          'leve' => const Color(0xFFFFC247),
-          _ => const Color(0xFF4CAF68),
-        };
-        return GestureDetector(
-          onDoubleTap: () {
-            _animateLike(likeKey);
-            unawaited(_setLike(v, videoIndex, true));
-          },
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // Fundo
-              if (v.videoPath == null)
-                Container(
-                  color: AppPalette.isDark(context)
-                      ? AppPalette.darkBackground
-                      : v.cor,
-                )
-              else
-                _FeedVideo(
-                  path: v.videoPath!,
-                  token: v.videoToken,
-                  videoId: v.videoId,
-                ),
-              if (_likeAnimations.contains(likeKey))
-                Center(
-                  child: IgnorePointer(
-                    child: _LikeBurst(
-                      key: ValueKey(_likeAnimationVersions[likeKey]),
-                    ),
-                  ),
-                ),
-              Center(
-                child: Opacity(
-                  opacity: 0.06,
-                  child: Text(
-                    _tipoEmoji(v.tipo),
-                    style: const TextStyle(fontSize: 220),
-                  ),
-                ),
-              ),
-              // Info inferior esquerdo
-              Positioned(
-                left: 16,
-                right: 72,
-                bottom: 70,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _badge(
-                      _spoilerLabel(v.spoiler),
-                      _spoilerColor(v.spoiler).withOpacity(0.16),
-                      _spoilerColor(v.spoiler),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      v.titulo,
-                      style: TextStyle(
-                        color: AppPalette.isDark(context)
-                            ? Colors.white
-                            : const Color(0xFFBB7575),
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        shadows: [Shadow(color: Colors.black54, blurRadius: 8)],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      v.descricao,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: AppPalette.isDark(context)
-                            ? Colors.white
-                            : const Color(0xFFFFE9E9),
-                        fontSize: 14,
-                        height: 1.35,
-                        shadows: const [
-                          Shadow(color: Colors.black87, blurRadius: 6),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Positioned(
-                top: 128,
-                left: 14,
-                right: 14,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Expanded(
-                                child: GestureDetector(
-                                  onTap: () => _abrirPerfilAutor(v),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(2.5),
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          border: Border.all(
-                                            color: corAnel,
-                                            width: 2.5,
-                                          ),
-                                        ),
-                                        child: CircleAvatar(
-                                          radius: 18,
-                                          backgroundColor: AppPalette.accent(
-                                            context,
-                                          ),
-                                          child: Text(
-                                            v.autor
-                                                .replaceFirst('@', '')
-                                                .substring(0, 1)
-                                                .toUpperCase(),
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Flexible(
-                                        child: Text(
-                                          v.autor,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w700,
-                                            shadows: [
-                                              Shadow(
-                                                color: Colors.black87,
-                                                blurRadius: 6,
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          OutlinedButton.icon(
-                            onPressed: () => _toggleFollow(v.autor),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.white,
-                              backgroundColor: AppPalette.button(
-                                context,
-                              ).withValues(alpha: 0.72),
-                              minimumSize: const Size(0, 30),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 9,
-                              ),
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              side: BorderSide(
-                                color: Colors.white.withValues(alpha: 0.48),
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            icon: Icon(
-                              _following.contains(v.autor)
-                                  ? Icons.check_rounded
-                                  : Icons.person_add_alt_1_rounded,
-                              size: 14,
-                            ),
-                            label: Text(
-                              _following.contains(v.autor)
-                                  ? 'Seguindo'
-                                  : 'Seguir',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      constraints: const BoxConstraints(maxWidth: 104),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 7,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppPalette.isDark(context)
-                            ? AppPalette.darkBackground.withValues(alpha: 0.92)
-                            : Colors.black.withOpacity(0.38),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.white24),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Image.asset(
-                            _tipoImagem(v.tipo),
-                            width: 22,
-                            height: 22,
-                            fit: BoxFit.contain,
-                            errorBuilder: (_, __, ___) => const Icon(
-                              Icons.movie_outlined,
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                          ),
-                          const SizedBox(width: 5),
-                          Flexible(
-                            child: Text(
-                              v.tipo,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // Ações laterais
-              Positioned(
-                right: 12,
-                top: MediaQuery.sizeOf(context).height * 0.37,
-                child: Column(
-                  children: [
-                    _starAction(
-                      selected: starrado,
-                      count: isVideoOwner ? _fmt(curtidas) : null,
-                      onTap: () => _toggleLike(v, videoIndex),
-                    ),
-                    const SizedBox(height: 20),
-                    _acao(
-                      icon: Icons.chat_bubble_outline_rounded,
-                      imageAsset: 'assets/images/balao.png',
-                      label: _fmt(
-                        v.comentarios + (_comentarios[videoIndex]?.length ?? 0),
-                      ),
-                      cor: Colors.white,
-                      onTap: () => _abrirComentarios(videoIndex),
-                    ),
-                    const SizedBox(height: 20),
-                    _acao(
-                      icon: Icons.share_outlined,
-                      label: null,
-                      cor: Colors.white,
-                      onTap: () => _compartilhar(v),
-                    ),
-                    const SizedBox(height: 20),
-                    _acao(
-                      icon: salvo
-                          ? Icons.bookmark_rounded
-                          : Icons.bookmark_border_rounded,
-                      label: null,
-                      cor: Colors.white,
-                      onTap: () => _toggleSaved(videoIndex),
-                    ),
-                    const SizedBox(height: 16),
-                    PopupMenuButton<String>(
-                      tooltip: 'Mais ações',
-                      iconColor: Colors.white,
-                      color: AppPalette.raisedSurface(context),
-                      onSelected: (action) {
-                        if (action == 'report') _reportVideo(v);
-                      },
-                      itemBuilder: (context) => const [
-                        PopupMenuItem(
-                          value: 'report',
-                          child: ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: Icon(Icons.flag_outlined),
-                            title: Text('Denunciar vídeo'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              _buildTopBar(),
-            ],
-          ),
-        );
-      },
+      ),
     );
   }
 
+  /// Barra superior FIXA fora do PageView (não acompanha a rolagem dos vídeos).
   Widget _buildTopBar() {
-    return Positioned(
-      top: 0,
-      left: 0,
-      right: 0,
-      child: Container(
-        color: AppPalette.background(context),
-        padding: const EdgeInsets.fromLTRB(12, 4, 10, 8),
-        child: SafeArea(
-          bottom: false,
-          child: Row(
-            children: [
-              Image.asset(
-                AppPalette.logo(context),
-                width: 38,
-                height: 38,
-                fit: BoxFit.contain,
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.black.withValues(alpha: 0.65),
+            Colors.transparent,
+          ],
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(14, 6, 8, 14),
+      child: SafeArea(
+        bottom: false,
+        child: Row(
+          children: [
+            Image.asset(
+              AppPalette.logo(context),
+              width: 32,
+              height: 32,
+              fit: BoxFit.contain,
+              errorBuilder: (_, _, _) => const Icon(
+                Icons.play_circle_filled_rounded,
+                color: Color(0xFFFFD166),
+                size: 28,
               ),
-              const SizedBox(width: 8),
-              Expanded(
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Center(
                 child: Container(
                   height: 38,
+                  constraints: const BoxConstraints(maxWidth: 196),
                   padding: const EdgeInsets.all(3),
                   decoration: BoxDecoration(
-                    color: AppPalette.button(context).withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(10),
+                    color: Colors.black.withValues(alpha: 0.38),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.2),
+                    ),
                   ),
                   child: Row(
                     children: [
                       _feedTab(
                         'Looping',
                         active: !_mostrandoSeguindo,
-                        onTap: () => setState(() => _mostrandoSeguindo = false),
+                        onTap: () => _trocarFeed(false),
                       ),
                       _feedTab(
                         'Seguindo',
                         active: _mostrandoSeguindo,
-                        onTap: () => setState(() => _mostrandoSeguindo = true),
+                        onTap: () => _trocarFeed(true),
                       ),
                     ],
                   ),
                 ),
               ),
-              IconButton(
-                tooltip: 'Pesquisar',
-                onPressed: _pesquisar,
-                icon: Icon(
-                  Icons.search_rounded,
-                  color: AppPalette.primaryText(context),
-                ),
+            ),
+            IconButton(
+              tooltip: 'Pesquisar obras e vídeos',
+              onPressed: _pesquisar,
+              icon: const Icon(
+                Icons.search_rounded,
+                color: Colors.white,
+                size: 24,
               ),
-            ],
-          ),
+            ),
+            IconButton(
+              tooltip: 'Mensagens',
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const ConversationsScreen(),
+                  ),
+                );
+              },
+              icon: const Icon(
+                Icons.chat_bubble_outline_rounded,
+                color: Colors.white,
+                size: 22,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -2395,21 +2285,21 @@ class _LoopTabState extends State<_LoopTab> {
     required VoidCallback onTap,
   }) {
     return Expanded(
-      child: InkWell(
+      child: GestureDetector(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
+        behavior: HitTestBehavior.opaque,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: active ? AppPalette.button(context) : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(16),
           ),
           child: Text(
             label,
             style: TextStyle(
-              color: active ? Colors.white : AppPalette.primaryText(context),
-              fontSize: 13,
+              color: Colors.white,
+              fontSize: 12.5,
               fontWeight: active ? FontWeight.w700 : FontWeight.w500,
             ),
           ),
@@ -2418,54 +2308,539 @@ class _LoopTabState extends State<_LoopTab> {
     );
   }
 
-  Widget _badge(String text, Color bg, Color textColor) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: textColor.withOpacity(0.3)),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: textColor,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
+  Widget _buildEmpty() {
+    final seguindo = _mostrandoSeguindo;
+    return ColoredBox(
+      color: AppPalette.isDark(context)
+          ? AppPalette.darkBackground
+          : _kVideoBackdrop,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(36),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                seguindo
+                    ? Icons.people_outline_rounded
+                    : Icons.video_library_outlined,
+                color: Colors.white70,
+                size: 44,
+              ),
+              const SizedBox(height: 14),
+              Text(
+                seguindo
+                    ? 'Seu feed Seguindo começa aqui'
+                    : 'Ainda não há vídeos por aqui',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                seguindo
+                    ? 'Siga criadores no Looping para ver as publicações deles aqui.'
+                    : 'Grave o primeiro vídeo recomendando um filme, série ou livro.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70, height: 1.4),
+              ),
+              if (seguindo) ...[
+                const SizedBox(height: 16),
+                TextButton.icon(
+                  onPressed: () => _trocarFeed(false),
+                  icon: const Icon(Icons.explore_outlined),
+                  label: const Text('Ver Looping'),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );
   }
 
+  Widget _buildFeed(List<_VideoCard> feed) {
+    return PageView.builder(
+      controller: _pageCtrl,
+      scrollDirection: Axis.vertical,
+      physics: const ClampingScrollPhysics(),
+      onPageChanged: (index) {
+        setState(() {
+          _pageIndex = index;
+          _userPaused = false;
+          _showPauseIndicator = false;
+        });
+        _pauseIndicatorTimer?.cancel();
+      },
+      itemCount: feed.length,
+      itemBuilder: (context, i) => _buildPage(feed[i], i),
+    );
+  }
+
+  Widget _buildPage(_VideoCard v, int i) {
+    final videoIndex = widget.videos.indexOf(v);
+    final likeKey = _likeKey(v, videoIndex);
+    final liked = _isLiked(v, videoIndex);
+    final likes = _likeCount(v, videoIndex);
+    final isOwner = v.ownerId != null && v.ownerId == widget.currentUserId;
+    final saved = _saved.contains(videoIndex);
+    final active = widget.isVisible && i == _pageIndex;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      // Toque simples = pausa/retoma com feedback temporário
+      // Dois toques = curte/descurte com estrela e animação
+      onTap: _aoTocarSimples,
+      onDoubleTap: () => _aoDarDoisToques(v, videoIndex),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // 1. Fundo ou vídeo em reprodução
+          if (v.videoPath == null)
+            ColoredBox(
+              color: AppPalette.isDark(context)
+                  ? AppPalette.darkBackground
+                  : v.cor,
+            )
+          else
+            _FeedVideo(
+              path: v.videoPath!,
+              token: v.videoToken,
+              videoId: v.videoId,
+              isActive: active,
+              userPaused: _userPaused,
+            ),
+
+          // 2. Degradê inferior suave para dar leitura excelente aos textos
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: 320,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.35),
+                      Colors.black.withValues(alpha: 0.84),
+                    ],
+                    stops: const [0.0, 0.45, 1.0],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // 3. Animação da estrela no centro (ao curtir)
+          if (_likeAnimations.contains(likeKey))
+            Center(
+              child: IgnorePointer(
+                child: _LikeBurst(
+                  key: ValueKey(_likeAnimationVersions[likeKey]),
+                ),
+              ),
+            ),
+
+          // 4. Indicador temporário de pausa / play: aparece por instantes e some sozinho
+          Center(
+            child: IgnorePointer(
+              child: AnimatedOpacity(
+                opacity: _showPauseIndicator ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 200),
+                child: AnimatedScale(
+                  scale: _showPauseIndicator ? 1.0 : 0.65,
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOutBack,
+                  child: Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      _indicatorIsPause
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
+                      color: Colors.white,
+                      size: 46,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // 5. Estrela discreta no canto superior esquerdo (aparece se curtiu, some ao descurtir)
+          Positioned(
+            top: 76,
+            left: 14,
+            child: IgnorePointer(
+              child: AnimatedOpacity(
+                opacity: liked ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 250),
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.42),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.star_rounded,
+                    color: _kStarGold,
+                    size: 19,
+                    shadows: [
+                      Shadow(color: Color(0x99FFD166), blurRadius: 8),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // 6. Coluna vertical de interação lateral (lado direito)
+          Positioned(
+            right: 10,
+            bottom: 24,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Controle de estrela (curtir e descurtir)
+                _acao(
+                  icon: liked ? Icons.star_rounded : Icons.star_outline_rounded,
+                  iconColor: liked ? _kStarGold : Colors.white,
+                  label: isOwner ? _fmt(likes) : null,
+                  onTap: () {
+                    final key = _likeKey(v, videoIndex);
+                    if (_pendingLikes.contains(key)) return;
+                    final vaCurtir = !liked;
+                    if (vaCurtir) _animateLike(key);
+                    unawaited(_setLike(v, videoIndex, vaCurtir));
+                  },
+                ),
+                const SizedBox(height: 14),
+
+                // Comentários
+                _acao(
+                  icon: Icons.chat_bubble_outline_rounded,
+                  imageAsset: 'assets/images/balao.png',
+                  label: _fmt(
+                    v.comentarios + (_comentarios[videoIndex]?.length ?? 0),
+                  ),
+                  onTap: () => _abrirComentarios(videoIndex),
+                ),
+                const SizedBox(height: 14),
+
+                // Compartilhar
+                _acao(
+                  icon: Icons.share_outlined,
+                  onTap: () => _compartilhar(v),
+                ),
+                const SizedBox(height: 14),
+
+                // Salvar publicação
+                _acao(
+                  icon: saved
+                      ? Icons.bookmark_rounded
+                      : Icons.bookmark_border_rounded,
+                  iconColor: saved ? _kStarGold : Colors.white,
+                  onTap: () => _toggleSaved(videoIndex),
+                ),
+                const SizedBox(height: 14),
+
+                // Mais opções / Denunciar
+                PopupMenuButton<String>(
+                  tooltip: 'Mais ações',
+                  color: AppPalette.raisedSurface(context),
+                  onSelected: (action) {
+                    if (action == 'report') _reportVideo(v);
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(
+                      value: 'report',
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.flag_outlined),
+                        title: Text('Denunciar vídeo'),
+                      ),
+                    ),
+                  ],
+                  child: _botaoRedondo(
+                    const Icon(
+                      Icons.more_horiz_rounded,
+                      color: Colors.white,
+                      size: 24,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // 7. Informações inferiores reorganizadas: Obra, Autor, Descrição e Spoiler
+          Positioned(
+            left: 16,
+            right: 76,
+            bottom: 24,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Identificação elegante da obra à qual o vídeo está relacionado
+                _obraBadge(v),
+                const SizedBox(height: 10),
+
+                // Linha do autor com avatar, nome de usuário e botão de seguir
+                _autorRow(v, isOwner),
+
+                // Descrição da publicação
+                if (v.descricao.trim().isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    v.descricao.trim(),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      height: 1.35,
+                      shadows: [
+                        Shadow(color: Colors.black87, blurRadius: 6),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 8),
+
+                // Nível de spoiler
+                _spoilerBadge(v.spoiler),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Peças da interface do feed ──────────────────────────────────
+
+  Widget _obraBadge(_VideoCard v) {
+    final titulo = v.obraTitulo ?? (v.titulo.isNotEmpty ? v.titulo : 'Obra');
+    final tipo = v.obraTipo ?? v.tipo;
+    final generos = v.obraGeneros.take(2).map(_cap).join(' · ');
+
+    final iconData = switch (tipo.toLowerCase()) {
+      'filme' => Icons.movie_rounded,
+      'série' || 'serie' => Icons.tv_rounded,
+      'livro' => Icons.menu_book_rounded,
+      'anime' => Icons.animation_rounded,
+      'dorama' || 'k-drama' => Icons.theater_comedy_rounded,
+      _ => Icons.movie_filter_rounded,
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.22),
+          width: 0.8,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            iconData,
+            size: 14,
+            color: const Color(0xFFFFD166),
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              '$titulo${tipo.isNotEmpty ? ' · $tipo' : ''}${generos.isNotEmpty ? ' ($generos)' : ''}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _autorRow(_VideoCard v, bool isOwner) {
+    final nome = v.autor.replaceFirst('@', '');
+    final inicial = nome.isEmpty ? '?' : nome.substring(0, 1).toUpperCase();
+    final following = _following.contains(v.autor);
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GestureDetector(
+          onTap: () => _abrirPerfilAutor(v),
+          behavior: HitTestBehavior.opaque,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [
+                      AppPalette.button(context),
+                      AppPalette.accent(context),
+                    ],
+                  ),
+                  border: Border.all(color: Colors.white, width: 1.2),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  inicial,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                v.autor,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w700,
+                  shadows: [Shadow(color: Colors.black87, blurRadius: 6)],
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (!isOwner) ...[
+          const SizedBox(width: 10),
+          GestureDetector(
+            onTap: () => _toggleFollow(v.autor),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3.5),
+              decoration: BoxDecoration(
+                color: following
+                    ? Colors.white.withValues(alpha: 0.18)
+                    : AppPalette.button(context),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: following ? Colors.white38 : Colors.transparent,
+                ),
+              ),
+              child: Text(
+                following ? 'Seguindo' : 'Seguir',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _spoilerBadge(String spoiler) {
+    final cor = _spoilerColor(spoiler);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cor.withValues(alpha: 0.7)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6.5,
+            height: 6.5,
+            decoration: BoxDecoration(color: cor, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            _spoilerLabel(spoiler),
+            style: TextStyle(
+              color: cor,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _botaoRedondo(Widget child) {
+    return Container(
+      width: 44,
+      height: 44,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.black.withValues(alpha: 0.35),
+      ),
+      child: child,
+    );
+  }
+
   Widget _acao({
     required IconData icon,
-    required String? label,
-    required Color cor,
     required VoidCallback onTap,
+    String? label,
+    Color? iconColor,
     String? imageAsset,
   }) {
     return GestureDetector(
       onTap: onTap,
+      behavior: HitTestBehavior.opaque,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          if (imageAsset == null)
-            Icon(
-              icon,
-              color: cor,
-              size: 32,
-              shadows: const [Shadow(color: Colors.black54, blurRadius: 6)],
-            )
-          else
-            Image.asset(imageAsset, width: 32, height: 32, fit: BoxFit.contain),
+          _botaoRedondo(
+            imageAsset == null
+                ? Icon(icon, color: iconColor ?? Colors.white, size: 24)
+                : Image.asset(
+                    imageAsset,
+                    width: 24,
+                    height: 24,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, _, _) =>
+                        Icon(icon, color: iconColor ?? Colors.white, size: 24),
+                  ),
+          ),
           if (label != null) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: 3),
             Text(
               label,
-              style: TextStyle(
-                color: cor,
+              style: const TextStyle(
+                color: Colors.white,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                shadows: const [Shadow(color: Colors.black54, blurRadius: 4)],
+                shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
               ),
             ),
           ],
@@ -2473,77 +2848,11 @@ class _LoopTabState extends State<_LoopTab> {
       ),
     );
   }
-
-  Widget _starAction({
-    required bool selected,
-    required String? count,
-    required VoidCallback onTap,
-  }) {
-    const gold = Color(0xFFFFD166);
-    return Semantics(
-      button: true,
-      label: selected ? 'Remover estrela' : 'Dar estrela',
-      child: GestureDetector(
-        onTap: onTap,
-        child: Column(
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: selected
-                    ? const LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [Color(0xFFFFE7A8), gold, Color(0xFFE99A34)],
-                      )
-                    : null,
-                color: selected ? null : Colors.black.withValues(alpha: 0.28),
-                border: Border.all(
-                  color: selected
-                      ? const Color(0xFFFFF2CB)
-                      : Colors.white.withValues(alpha: 0.72),
-                  width: selected ? 1.5 : 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: selected
-                        ? gold.withValues(alpha: 0.52)
-                        : Colors.black.withValues(alpha: 0.28),
-                    blurRadius: selected ? 18 : 8,
-                    spreadRadius: selected ? 1 : 0,
-                  ),
-                ],
-              ),
-              child: Icon(
-                selected ? Icons.star_rounded : Icons.star_border_rounded,
-                size: 31,
-                color: selected ? const Color(0xFF542F00) : Colors.white,
-                shadows: selected
-                    ? const [Shadow(color: Color(0x88FFFFFF), blurRadius: 5)]
-                    : const [Shadow(color: Colors.black54, blurRadius: 6)],
-              ),
-            ),
-            if (count != null) ...[
-              const SizedBox(height: 5),
-              Text(
-                count,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  shadows: [Shadow(color: Colors.black87, blurRadius: 5)],
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
 }
+
+// ══════════════════════════════════════════════════════════════════
+// COMENTÁRIOS
+// ══════════════════════════════════════════════════════════════════
 
 class _CommentsSheet extends StatefulWidget {
   final String titulo;
@@ -2597,7 +2906,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                   width: 36,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFBB7575).withOpacity(0.35),
+                    color: AppPalette.border(context).withValues(alpha: 0.6),
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -2616,8 +2925,13 @@ class _CommentsSheetState extends State<_CommentsSheet> {
               const SizedBox(height: 12),
               Expanded(
                 child: widget.comentarios.isEmpty
-                    ? const Center(
-                        child: Text('Seja a primeira pessoa a comentar.'),
+                    ? Center(
+                        child: Text(
+                          'Seja a primeira pessoa a comentar.',
+                          style: TextStyle(
+                            color: AppPalette.mutedText(context),
+                          ),
+                        ),
                       )
                     : ListView.builder(
                         itemCount: widget.comentarios.length,
@@ -2625,15 +2939,22 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                           contentPadding: EdgeInsets.zero,
                           leading: CircleAvatar(
                             backgroundColor: AppPalette.surface(context),
-                            child: Text(
-                              'A',
-                              style: TextStyle(
-                                color: AppPalette.primaryText(context),
-                              ),
+                            child: Icon(
+                              Icons.person_rounded,
+                              size: 20,
+                              color: AppPalette.primaryText(context),
                             ),
                           ),
-                          title: const Text('@anna.beatriz'),
-                          subtitle: Text(widget.comentarios[index]),
+                          title: Text(
+                            'Você',
+                            style: TextStyle(color: AppPalette.text(context)),
+                          ),
+                          subtitle: Text(
+                            widget.comentarios[index],
+                            style: TextStyle(
+                              color: AppPalette.mutedText(context),
+                            ),
+                          ),
                         ),
                       ),
               ),
@@ -2648,9 +2969,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                       decoration: InputDecoration(
                         hintText: 'Escreva um comentário',
                         filled: true,
-                        fillColor: AppPalette.isDark(context)
-                            ? const Color(0xFF55232A)
-                            : const Color(0xFFFFF0F1),
+                        fillColor: AppPalette.surface(context),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide.none,
@@ -2678,7 +2997,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// LUPEZ OVERLAY (chat dentro do home)
+// LUPEZ (chat)
 // ══════════════════════════════════════════════════════════════════
 
 class _LupezOverlay extends StatefulWidget {
@@ -2705,15 +3024,16 @@ class _LupezOverlayState extends State<_LupezOverlay>
   final ScrollController _scrollCtrl = ScrollController();
   final List<_Mensagem> _msgs = [];
   bool _digitando = false;
+  int _respostasPendentes = 0;
 
   late AnimationController _dotCtrl;
 
   final _sugestoes = [
-    "Me recomenda um suspense 🔍",
-    "Quero chorar muito 😢",
-    "Anime pra iniciante?",
-    "K-drama curto ❤️",
-    "Ficção científica épica 🚀",
+    'Me recomenda um suspense 🔍',
+    'Quero chorar muito 😢',
+    'Anime pra iniciante?',
+    'K-drama curto ❤️',
+    'Ficção científica épica 🚀',
   ];
 
   @override
@@ -2730,7 +3050,7 @@ class _LupezOverlayState extends State<_LupezOverlay>
         _msgs.add(
           const _Mensagem(
             texto:
-                "Oi! Sou a **Lupez** 🎬✨\nComo posso te ajudar hoje? Posso recomendar filmes, séries, livros, animes e K-dramas!",
+                'Oi! Sou a **Lupez** 🎬✨\nComo posso te ajudar hoje? Posso recomendar filmes, séries, livros, animes e K-dramas!',
             deLupez: true,
           ),
         );
@@ -2749,112 +3069,59 @@ class _LupezOverlayState extends State<_LupezOverlay>
   void _enviar([String? texto]) {
     final msg = texto ?? _inputCtrl.text.trim();
     if (msg.isEmpty) return;
+    final historico = _msgs
+        .map(
+          (mensagem) => {
+            'role': mensagem.deLupez ? 'assistant' : 'user',
+            'content': mensagem.texto,
+          },
+        )
+        .toList()
+        .reversed
+        .take(20)
+        .toList()
+        .reversed
+        .toList();
+    final mensagemEnviada = _Mensagem(texto: msg, deLupez: false);
     setState(() {
-      _msgs.add(_Mensagem(texto: msg, deLupez: false));
+      _msgs.add(mensagemEnviada);
       _inputCtrl.clear();
+      _respostasPendentes++;
       _digitando = true;
     });
     _rolar();
 
-    Future.delayed(const Duration(milliseconds: 1500), () {
-      if (!mounted) return;
-      final resposta = _gerarResposta(msg);
-
-      setState(() {
-        _digitando = false;
-        _msgs.add(_Mensagem(texto: resposta, deLupez: true));
-      });
-      _rolar();
-    });
+    _responder(msg, historico, mensagemEnviada);
   }
 
-  String _gerarResposta(String prompt) {
-    final pergunta = normalizeInterest(prompt);
-    final termos = <String>[];
-    if (pergunta.contains('suspense') || pergunta.contains('thriller')) {
-      termos.add('suspense');
-    }
-    if (pergunta.contains('anime')) termos.add('anime');
-    if (pergunta.contains('livro') || pergunta.contains('leitura')) {
-      termos.add('livro');
-    }
-    if (pergunta.contains('dorama') ||
-        pergunta.contains('k-drama') ||
-        pergunta.contains('coreano')) {
-      termos.add('dorama');
-    }
-    if (pergunta.contains('romance') || pergunta.contains('romântico')) {
-      termos.add('romance');
-    }
-    if (pergunta.contains('ficcao') || pergunta.contains('sci-fi')) {
-      termos.add('ficcao');
-    }
-    if (pergunta.contains('terror')) termos.add('terror');
-    if (pergunta.contains('fantasia')) termos.add('fantasia');
-    if (pergunta.contains('triste') || pergunta.contains('chorar')) {
-      termos.add('drama');
+  Future<void> _responder(
+    String mensagem,
+    List<Map<String, String>> historico,
+    _Mensagem mensagemEnviada,
+  ) async {
+    String resposta;
+    try {
+      resposta = await ApiService.conversarComLupez(
+        mensagem: mensagem,
+        historico: historico,
+      );
+    } catch (error, stackTrace) {
+      debugPrint('Erro ao conversar com a Lupez: $error\n$stackTrace');
+      resposta = 'Não consegui responder: $error';
     }
 
-    final tituloMencionado = widget.videos.where(
-      (video) => pergunta.contains(video.titulo.toLowerCase()),
-    );
-    List<_VideoCard> resultados;
-    if (tituloMencionado.isNotEmpty) {
-      resultados = tituloMencionado.toList();
-    } else if (termos.isNotEmpty) {
-      resultados = widget.videos.where((video) {
-        final dados = [
-          video.titulo,
-          video.genero,
-          video.tipo,
-        ].map(normalizeInterest).toList();
-        return termos
-            .map(normalizeInterest)
-            .any((termo) => dados.any((campo) => campo.contains(termo)));
-      }).toList();
-    } else {
-      final preferidos = widget.interests.map(normalizeInterest).toList();
-      resultados = widget.videos.where((video) {
-        final dados = [
-          video.titulo,
-          video.genero,
-          video.tipo,
-        ].map(normalizeInterest).toList();
-        return preferidos.any(
-          (interest) =>
-              interest.isNotEmpty &&
-              dados.any((campo) => campo.contains(interest)),
-        );
-      }).toList();
-      if (resultados.isEmpty) resultados = widget.videos;
-    }
-
-    if (resultados.isEmpty) {
-      return 'Não encontrei uma obra desse tipo no catálogo deste aparelho. Tente buscar por filme, série, livro ou por um gênero que aparece no Loop.';
-    }
-
-    final recomendacoes = resultados
-        .take(2)
-        .map((video) {
-          final interesseEmComum = widget.interests.firstWhere(
-            (interest) => [video.genero, video.tipo]
-                .map(normalizeInterest)
-                .any((campo) => campo.contains(normalizeInterest(interest))),
-            orElse: () => '',
-          );
-          final contexto = interesseEmComum.isEmpty
-              ? '${video.tipo} de ${video.genero}'
-              : 'combina com seu gosto por $interesseEmComum';
-          final aviso = video.spoiler == 'muito'
-              ? ' Tem aviso de muito spoiler.'
-              : video.spoiler == 'leve'
-              ? ' Tem aviso de spoiler parcial.'
-              : '';
-          return '**${video.titulo}** ($contexto).$aviso';
-        })
-        .join('\n');
-
-    return 'Separei do catálogo do LupTok:\n$recomendacoes\n\nQuer filtrar por outro gênero ou tipo?';
+    if (!mounted) return;
+    final indiceMensagem = _msgs.indexOf(mensagemEnviada);
+    if (indiceMensagem < 0) return;
+    setState(() {
+      _msgs.insert(
+        indiceMensagem + 1,
+        _Mensagem(texto: resposta, deLupez: true),
+      );
+      _respostasPendentes--;
+      _digitando = _respostasPendentes > 0;
+    });
+    _rolar();
   }
 
   void _rolar() {
@@ -2874,7 +3141,7 @@ class _LupezOverlayState extends State<_LupezOverlay>
     return Container(
       color: widget.fullScreen
           ? AppPalette.background(context)
-          : Colors.black.withOpacity(0.65),
+          : Colors.black.withValues(alpha: 0.65),
       child: SafeArea(
         child: Align(
           alignment: Alignment.bottomCenter,
@@ -2890,7 +3157,6 @@ class _LupezOverlayState extends State<_LupezOverlay>
             ),
             child: Column(
               children: [
-                // Handle
                 if (!widget.fullScreen)
                   Container(
                     margin: const EdgeInsets.only(top: 12, bottom: 4),
@@ -2936,7 +3202,7 @@ class _LupezOverlayState extends State<_LupezOverlay>
                         ),
                         child: const Center(
                           child: Text(
-                            "L",
+                            'L',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 18,
@@ -2957,7 +3223,7 @@ class _LupezOverlayState extends State<_LupezOverlay>
                               ],
                             ).createShader(b),
                             child: const Text(
-                              "Lupez",
+                              'Lupez',
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 16,
@@ -2977,7 +3243,7 @@ class _LupezOverlayState extends State<_LupezOverlay>
                               ),
                               const SizedBox(width: 5),
                               Text(
-                                "IA de entretenimento",
+                                'IA de entretenimento',
                                 style: TextStyle(
                                   color: AppPalette.mutedText(context),
                                   fontSize: 11,
@@ -3098,7 +3364,7 @@ class _LupezOverlayState extends State<_LupezOverlay>
                               fontSize: 13,
                             ),
                             decoration: InputDecoration(
-                              hintText: "Pergunte à Lupez...",
+                              hintText: 'Pergunte à Lupez...',
                               hintStyle: TextStyle(
                                 color: AppPalette.mutedText(
                                   context,
@@ -3185,7 +3451,7 @@ class _LupezOverlayState extends State<_LupezOverlay>
               ),
               child: const Center(
                 child: Text(
-                  "L",
+                  'L',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 12,
@@ -3270,7 +3536,7 @@ class _LupezOverlayState extends State<_LupezOverlay>
             ),
             child: const Center(
               child: Text(
-                "L",
+                'L',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 12,
@@ -3295,7 +3561,7 @@ class _LupezOverlayState extends State<_LupezOverlay>
             ),
             child: AnimatedBuilder(
               animation: _dotCtrl,
-              builder: (_, __) => Row(
+              builder: (_, _) => Row(
                 mainAxisSize: MainAxisSize.min,
                 children: List.generate(3, (i) {
                   final delay = i / 3;
@@ -3329,747 +3595,4 @@ class _Mensagem {
   final String texto;
   final bool deLupez;
   const _Mensagem({required this.texto, required this.deLupez});
-}
-
-// ══════════════════════════════════════════════════════════════════
-// TAB: EXPLORAR
-// ══════════════════════════════════════════════════════════════════
-
-class _ExplorarTab extends StatefulWidget {
-  const _ExplorarTab();
-
-  @override
-  State<_ExplorarTab> createState() => _ExplorarTabState();
-}
-
-class _ExplorarTabState extends State<_ExplorarTab> {
-  String _consulta = '';
-  final TextEditingController _searchController = TextEditingController();
-  Timer? _searchDebounce;
-  String? _searchedQuery;
-  Future<List<Map<String, dynamic>>>? _searchResults;
-
-  @override
-  void dispose() {
-    _searchDebounce?.cancel();
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  void _searchFor(String value, {bool immediate = false}) {
-    setState(() {
-      _consulta = value;
-      _searchedQuery = null;
-      _searchResults = null;
-    });
-    _searchDebounce?.cancel();
-    final term = value.trim();
-    if (term.isEmpty) return;
-    void startSearch() {
-      if (!mounted || _consulta.trim() != term) return;
-      setState(() {
-        _searchedQuery = term;
-        _searchResults = ApiService.buscarVideos(term);
-      });
-    }
-
-    if (immediate) {
-      startSearch();
-    } else {
-      _searchDebounce = Timer(const Duration(milliseconds: 300), startSearch);
-    }
-  }
-
-  void _selectCategory(String category) {
-    _searchController
-      ..text = category
-      ..selection = TextSelection.collapsed(offset: category.length);
-    _searchFor(category, immediate: true);
-  }
-
-  Widget _buildSearchResults() {
-    if (_searchedQuery != _consulta.trim() || _searchResults == null) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 16),
-        child: Center(child: CircularProgressIndicator()),
-      );
-    }
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: _searchResults,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text(
-              'Não foi possível pesquisar: '
-              '${snapshot.error.toString().replaceFirst('Exception: ', '')}',
-            ),
-          );
-        }
-        if (!snapshot.hasData) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
-            child: Center(child: CircularProgressIndicator()),
-          );
-        }
-        final videos = snapshot.data!;
-        if (videos.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Text(
-              'Nenhum vídeo encontrado. Tente outro título, gênero ou tema.',
-            ),
-          );
-        }
-
-        return _VideoSearchGrid(
-          videos: videos,
-          shrinkWrap: true,
-          onTap: (video) => _openSearchVideo(context, video),
-        );
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFFE9E9),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                "Explorar",
-                style: TextStyle(
-                  color: Color(0xFFBB7575),
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 14,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFBB7575).withOpacity(0.10),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: const Color(0xFFBB7575).withOpacity(0.25),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.search_rounded,
-                      color: const Color(0xFFBB7575).withOpacity(0.65),
-                      size: 20,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TextField(
-                        controller: _searchController,
-                        onChanged: _searchFor,
-                        onSubmitted: (value) =>
-                            _searchFor(value, immediate: true),
-                        textInputAction: TextInputAction.search,
-                        decoration: InputDecoration(
-                          hintText: 'Busque vídeos por obra, gênero ou tema...',
-                          hintStyle: TextStyle(
-                            color: const Color(0xFFBB7575).withOpacity(0.70),
-                            fontSize: 15,
-                          ),
-                          isDense: true,
-                          border: InputBorder.none,
-                        ),
-                      ),
-                    ),
-                    if (_consulta.isNotEmpty)
-                      IconButton(
-                        tooltip: 'Limpar busca',
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () {
-                          _searchController.clear();
-                          _searchFor('');
-                        },
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-                  ],
-                ),
-              ),
-              if (_consulta.trim().isNotEmpty) ...[
-                const SizedBox(height: 18),
-                Text(
-                  'Resultados',
-                  style: const TextStyle(
-                    color: Color(0xFF7D171D),
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                _buildSearchResults(),
-              ],
-              const SizedBox(height: 24),
-              ShaderMask(
-                shaderCallback: (b) => const LinearGradient(
-                  colors: [Color(0xFFBB7575), Color(0xFF7D171D)],
-                ).createShader(b),
-                child: const Text(
-                  "🎭  Por categoria",
-                  style: TextStyle(
-                    color: Color(0xFFBB7575),
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children:
-                    [
-                      ("🎬", "Filmes"),
-                      ("📺", "Séries"),
-                      ("📖", "Livros"),
-                      ("🎌", "Anime"),
-                      ("🇰🇷", "K-Drama"),
-                      ("❤️", "Romance"),
-                      ("👻", "Terror"),
-                      ("🔍", "Suspense"),
-                      ("🚀", "Ficção Científica"),
-                    ].map((c) {
-                      final (emoji, nome) = c;
-                      return InkWell(
-                        borderRadius: BorderRadius.circular(50),
-                        onTap: () => _selectCategory(switch (nome) {
-                          'Filmes' => 'filme',
-                          'Séries' => 'série',
-                          'Livros' => 'livro',
-                          'K-Drama' => 'dorama',
-                          'Ficção Científica' => 'ficção científica',
-                          _ => nome,
-                        }),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFBB7575).withOpacity(0.10),
-                            borderRadius: BorderRadius.circular(50),
-                            border: Border.all(
-                              color: const Color(0xFFBB7575).withOpacity(0.25),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(emoji, style: const TextStyle(fontSize: 15)),
-                              const SizedBox(width: 7),
-                              Text(
-                                nome,
-                                style: const TextStyle(
-                                  color: Color(0xFFBB7575),
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }).toList(),
-              ),
-              const SizedBox(height: 80),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ══════════════════════════════════════════════════════════════════
-// TAB: PERFIL
-// ══════════════════════════════════════════════════════════════════
-
-class _PerfilTab extends StatefulWidget {
-  final VoidCallback onAbrirConfiguracoes;
-
-  const _PerfilTab({required this.onAbrirConfiguracoes});
-
-  @override
-  State<_PerfilTab> createState() => _PerfilTabState();
-}
-
-class _PerfilTabState extends State<_PerfilTab>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabCtrl;
-  String _nomePerfil = '';
-  String _usuarioPerfil = '';
-  String _bioPerfil = '';
-
-  @override
-  void initState() {
-    super.initState();
-    _tabCtrl = TabController(length: 4, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _editarPerfil() async {
-    final nomeController = TextEditingController(text: _nomePerfil);
-    final usuarioController = TextEditingController(
-      text: _usuarioPerfil.replaceFirst('@', ''),
-    );
-    final bioController = TextEditingController(text: _bioPerfil);
-    final formKey = GlobalKey<FormState>();
-
-    final dados = await showModalBottomSheet<(String, String, String)>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFFFFF7F7),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            20,
-            20,
-            20 + MediaQuery.viewInsetsOf(sheetContext).bottom,
-          ),
-          child: Form(
-            key: formKey,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Editar perfil',
-                    style: TextStyle(
-                      color: Color(0xFF7D171D),
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  TextFormField(
-                    controller: nomeController,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: const InputDecoration(labelText: 'Nome'),
-                    validator: (value) => value == null || value.trim().isEmpty
-                        ? 'Informe seu nome.'
-                        : null,
-                  ),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: usuarioController,
-                    decoration: const InputDecoration(
-                      labelText: 'Nome de usuário',
-                      prefixText: '@',
-                    ),
-                    validator: (value) =>
-                        value == null ||
-                            value
-                                .trim()
-                                .replaceFirst(RegExp(r'^@+'), '')
-                                .isEmpty
-                        ? 'Informe seu nome de usuário.'
-                        : null,
-                  ),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: bioController,
-                    minLines: 2,
-                    maxLines: 4,
-                    maxLength: 160,
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: const InputDecoration(labelText: 'Bio'),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: () {
-                        if (!formKey.currentState!.validate()) return;
-                        final usuario = usuarioController.text
-                            .trim()
-                            .replaceFirst(RegExp(r'^@+'), '');
-                        Navigator.of(sheetContext).pop((
-                          nomeController.text.trim(),
-                          '@$usuario',
-                          bioController.text.trim(),
-                        ));
-                      },
-                      icon: const Icon(Icons.check_rounded),
-                      label: const Text('Salvar alterações'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFFBB7575),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-
-    nomeController.dispose();
-    usuarioController.dispose();
-    bioController.dispose();
-    if (dados == null || !mounted) return;
-
-    setState(() {
-      _nomePerfil = dados.$1;
-      _usuarioPerfil = dados.$2;
-      _bioPerfil = dados.$3;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFFE9E9),
-      body: NestedScrollView(
-        headerSliverBuilder: (_, __) => [
-          SliverToBoxAdapter(child: _buildHeader()),
-        ],
-        body: Column(
-          children: [
-            Container(
-              color: const Color(0xFFFFD6D8),
-              child: TabBar(
-                controller: _tabCtrl,
-                labelColor: const Color(0xFFBB7575),
-                unselectedLabelColor: const Color(0xFFB8787C),
-                indicatorColor: const Color(0xFFB8787C),
-                indicatorSize: TabBarIndicatorSize.label,
-                isScrollable: true,
-                tabAlignment: TabAlignment.start,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                tabs: const [
-                  Tab(text: "Vídeos"),
-                  Tab(text: "Assistidos"),
-                  Tab(text: "Reviews"),
-                  Tab(text: "Salvos"),
-                ],
-              ),
-            ),
-            Expanded(
-              child: TabBarView(
-                controller: _tabCtrl,
-                children: [
-                  _vazio("🎥", "Nenhum vídeo postado ainda"),
-                  _vazio("✅", "Sua lista de assistidos aparece aqui"),
-                  _vazio("⭐", "Suas reviews aparecem aqui"),
-                  _vazio("🔒", "Só você pode ver seus salvos"),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Capa
-        SizedBox(
-          height: 230,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: Container(
-                  height: 150,
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Color(0xFFBB7575),
-                        Color(0xFFBB7575),
-                        Color(0xFFFFD6D8),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                  ),
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Positioned(
-                        right: -30,
-                        top: -30,
-                        child: Container(
-                          width: 180,
-                          height: 180,
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Color(0x08FFFFFF),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              // Foto de perfil
-              Positioned(
-                top: 108,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: Container(
-                    width: 88,
-                    height: 88,
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: const Color(0xFFFFE9E9),
-                        width: 4,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFFB8787C).withOpacity(0.3),
-                          blurRadius: 18,
-                        ),
-                      ],
-                    ),
-                    child: const CircleAvatar(
-                      radius: 40,
-                      backgroundColor: Color(0xFFB8787C),
-                      child: Text(
-                        "A",
-                        style: TextStyle(
-                          color: Color(0xFFFFE9E9),
-                          fontSize: 30,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              // Status
-              Positioned(
-                top: 198,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFE9E9),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: const Color(0xFFBB7575).withOpacity(0.45),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Color(0xFF4CAF50),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        const Text(
-                          "Assistindo: Dark",
-                          style: TextStyle(
-                            color: Color(0xFFBB7575),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              // Botão editar
-              Positioned(
-                top: 48,
-                right: 12,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton.filledTonal(
-                      tooltip: 'Configurações',
-                      onPressed: widget.onAbrirConfiguracoes,
-                      style: IconButton.styleFrom(
-                        foregroundColor: const Color(0xFFFFE9E9),
-                        backgroundColor: const Color(0xFFBB7575),
-                        fixedSize: const Size(38, 38),
-                      ),
-                      icon: const Icon(Icons.settings_outlined, size: 19),
-                    ),
-                    const SizedBox(width: 6),
-                    TextButton.icon(
-                      onPressed: _editarPerfil,
-                      icon: const Icon(Icons.edit_outlined, size: 15),
-                      label: const Text('Editar perfil'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xFFFFE9E9),
-                        backgroundColor: const Color(0xFFBB7575),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 7,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 10),
-
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _nomePerfil,
-                        style: TextStyle(
-                          color: Color(0xFF7D171D),
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      SizedBox(height: 2),
-                      Text(
-                        _usuarioPerfil,
-                        style: TextStyle(
-                          color: Color(0xFF7D171D),
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Spacer(),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Text(
-                _bioPerfil,
-                style: TextStyle(
-                  color: const Color(0xFFBB7575).withOpacity(0.70),
-                  fontSize: 13,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 14),
-              // Botão seguir
-              SizedBox(
-                width: double.infinity,
-                height: 44,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    padding: EdgeInsets.zero,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  onPressed: () {},
-                  child: Ink(
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFFBB7575), Color(0xFFBB7575)],
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color.fromARGB(
-                            255,
-                            207,
-                            132,
-                            136,
-                          ).withOpacity(0.28),
-                          blurRadius: 14,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: const Center(
-                      child: Text(
-                        "Seguir",
-                        style: TextStyle(
-                          color: Color(0xFFFFE9E9),
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _vazio(String emoji, String msg) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(emoji, style: const TextStyle(fontSize: 44)),
-          const SizedBox(height: 12),
-          Text(
-            msg,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: const Color(0xFF7D171D).withOpacity(0.62),
-              fontSize: 14,
-              height: 1.5,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }

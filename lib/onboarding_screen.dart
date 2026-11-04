@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-import 'api_service.dart';
 import 'app_preferences.dart';
-import 'home_screen.dart';
-import 'interest_utils.dart';
+import 'universe_preparing_screen.dart';
 import 'work_search.dart';
 
 class _ObraCatalogo {
@@ -263,75 +260,30 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   Future<void> _finalizarOnboarding() async {
     if (_salvando) return;
     setState(() => _salvando = true);
-    try {
-      final selecionadas = _catalogoObras
-          .where((obra) => _obrasSelecionadas.contains(obra.titulo))
-          .toList();
-
-      for (final obra in selecionadas) {
-        final metadata = obra.metadata;
-        await ApiService.adicionarObra(
-          titulo: obra.titulo,
-          tipo: obra.tipo,
-          descricao: metadata.description,
-          generos: metadata.genres,
-          palavrasChave: metadata.keywords,
-        );
-      }
-
-      final obrasSalvas = await ApiService.listarObras();
-      for (final selecionada in selecionadas) {
-        Map<String, dynamic>? obraSalva;
-        for (final obra in obrasSalvas) {
-          if (normalizeInterest(obra['titulo']?.toString() ?? '') ==
-                  normalizeInterest(selecionada.titulo) &&
-              normalizeInterest(obra['tipo']?.toString() ?? '') ==
-                  normalizeInterest(selecionada.tipo)) {
-            obraSalva = obra;
-            break;
-          }
-        }
-        if (obraSalva == null || obraSalva['id'] == null) {
-          throw Exception(
-            'Não foi possível encontrar "${selecionada.titulo}" no catálogo.',
-          );
-        }
-        await ApiService.avaliarObra(id: obraSalva['id'], souFa: true);
-      }
-
-      final preferencias = await SharedPreferences.getInstance();
-      await preferencias.setStringList(
-        'perfil_tipos',
-        _tiposSelecionados.toList(),
-      );
-      await preferencias.setStringList(
-        'perfil_generos',
-        _generosEntretenimento.toList(),
-      );
-      await preferencias.setBool('onboarding_completed', true);
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        PageRouteBuilder(
-          pageBuilder: (_, __, ___) => const HomeScreen(),
-          transitionDuration: const Duration(milliseconds: 800),
-          transitionsBuilder: (_, animation, __, child) =>
-              FadeTransition(opacity: animation, child: child),
+    final selecionadas = _catalogoObras
+        .where((obra) => _obrasSelecionadas.contains(obra.titulo))
+        .map((obra) {
+          final metadata = obra.metadata;
+          return {
+            'titulo': obra.titulo,
+            'tipo': obra.tipo,
+            'descricao': metadata.description,
+            'generos': metadata.genres,
+            'palavras_chave': metadata.keywords,
+          };
+        })
+        .toList();
+    if (!mounted) return;
+    await Navigator.pushReplacement(
+      context,
+      luptokFadeRoute(
+        UniversePreparingScreen(
+          obras: selecionadas,
+          tipos: _tiposSelecionados.toList(),
+          generos: _generosEntretenimento.toList(),
         ),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Não foi possível salvar suas escolhas: '
-            '${error.toString().replaceFirst('Exception: ', '')}',
-          ),
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _salvando = false);
-    }
+      ),
+    );
   }
 
   void _voltar() async {
@@ -1022,3 +974,4 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
   }
 }
+String normalizeInterest(String value) => normalizeSearchText(value);

@@ -45,4 +45,71 @@ abstract final class AppPalette {
   static String logo(BuildContext context) => isDark(context)
       ? 'assets/images/logobranca.png'
       : 'assets/images/logo.png';
+
+  static const gold = Color(0xFFFFD166);
+  static const wine = Color(0xFF7D171D);
+  static const blush = Color(0xFFFFE9E9);
+
+  static List<BoxShadow> softShadow(BuildContext context) => [
+    BoxShadow(
+      color: Colors.black.withValues(alpha: isDark(context) ? 0.28 : 0.08),
+      blurRadius: 18,
+      offset: const Offset(0, 8),
+    ),
+  ];
+
+  static BorderRadius radius = BorderRadius.circular(18);
+
+  static InputDecoration fieldDecoration(
+    BuildContext context, {
+    String? hint,
+    String? label,
+    Widget? prefixIcon,
+  }) {
+    return InputDecoration(
+      hintText: hint,
+      labelText: label,
+      prefixIcon: prefixIcon,
+      filled: true,
+      fillColor: input(context),
+      hintStyle: TextStyle(color: mutedText(context)),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: border(context).withValues(alpha: 0.35)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: border(context).withValues(alpha: 0.28)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: accent(context), width: 1.4),
+      ),
+    );
+  }
+}
+
+Route<T> luptokFadeRoute<T extends Object?>(Widget page) {
+  return PageRouteBuilder<T>(
+    pageBuilder: (_, _, _) => page,
+    transitionDuration: const Duration(milliseconds: 420),
+    reverseTransitionDuration: const Duration(milliseconds: 280),
+    transitionsBuilder: (_, animation, _, child) {
+      final curved = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+      );
+      return FadeTransition(
+        opacity: curved,
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0, 0.035),
+            end: Offset.zero,
+          ).animate(curved),
+          child: child,
+        ),
+      );
+    },
+  );
 }

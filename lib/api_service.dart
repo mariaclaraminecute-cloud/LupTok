@@ -49,17 +49,57 @@ class ApiService {
     return preferencias.getString('session_token');
   }
 
+  static Future<String> conversarComLupez({
+    required String mensagem,
+    required List<Map<String, String>> historico,
+  }) async {
+    final token = await tokenDaSessao();
+
+    if (token == null) {
+      throw Exception('Faça login para conversar com o Lupez.');
+    }
+
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/api/lupez/chat'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({'mensagem': mensagem, 'historico': historico}),
+        )
+        .timeout(const Duration(seconds: 60));
+
+    final data = _decodeResponse(response);
+    final resposta = data['resposta'];
+
+    if (resposta is! String || resposta.trim().isEmpty) {
+      throw Exception('O servidor retornou uma resposta inválida do Lupez.');
+    }
+
+    return resposta.trim();
+  }
+
   static Future<List<Map<String, dynamic>>> listarVideos({
     String? query,
+    Object? idObra,
   }) async {
     final token = await tokenDaSessao();
     if (token == null) {
       throw Exception('Faça login para carregar o feed.');
     }
 
+    final queryParams = <String, String>{};
+    if (query != null && query.trim().isNotEmpty) {
+      queryParams['q'] = query.trim();
+    }
+    if (idObra != null && idObra.toString().trim().isNotEmpty) {
+      queryParams['id_obra'] = idObra.toString().trim();
+    }
+
     final uri = Uri.parse(
       '$baseUrl/api/videos',
-    ).replace(queryParameters: query == null ? null : {'q': query});
+    ).replace(queryParameters: queryParams.isEmpty ? null : queryParams);
 
     final response = await http
         .get(uri, headers: {'Authorization': 'Bearer $token'})
@@ -82,6 +122,48 @@ class ApiService {
 
   static Future<List<Map<String, dynamic>>> buscarVideos(String query) =>
       listarVideos(query: query);
+
+  static Future<List<Map<String, dynamic>>> buscarObras(String query) =>
+      listarObras(query: query);
+
+  // ── Chat entre usuários ──────────────────────────────────────────
+
+  static Future<List<Map<String, dynamic>>> listarConversas() async {
+    final data = await _authenticatedGet('/api/conversas');
+    final conversas = data['conversas'];
+    if (conversas is! List) {
+      throw Exception('O servidor retornou uma lista de conversas inválida.');
+    }
+    return conversas.map(_mapResponseItem).toList();
+  }
+
+  static Future<Map<String, dynamic>> iniciarConversa({
+    required Object idDestinatario,
+  }) async {
+    return _authenticatedPost('/api/conversas', {
+      'id_destinatario': idDestinatario,
+    });
+  }
+
+  static Future<List<Map<String, dynamic>>> listarMensagens({
+    required Object idConversa,
+  }) async {
+    final data = await _authenticatedGet('/api/conversas/$idConversa/mensagens');
+    final mensagens = data['mensagens'];
+    if (mensagens is! List) {
+      throw Exception('O servidor retornou mensagens inválidas.');
+    }
+    return mensagens.map(_mapResponseItem).toList();
+  }
+
+  static Future<Map<String, dynamic>> enviarMensagem({
+    required Object idConversa,
+    required String texto,
+  }) async {
+    return _authenticatedPost('/api/conversas/$idConversa/mensagens', {
+      'texto': texto,
+    });
+  }
 
   // Curtir ou descurtir um vídeo.
   static Future<Map<String, dynamic>> atualizarCurtidaVideo({
@@ -516,6 +598,30 @@ class ApiService {
         .get(
           Uri.parse('$baseUrl$endpoint'),
           headers: {'Authorization': 'Bearer $token'},
+        )
+        .timeout(const Duration(seconds: 20));
+
+    return _decodeResponse(response);
+  }
+
+  static Future<Map<String, dynamic>> _authenticatedPost(
+    String endpoint,
+    Map<String, dynamic> body,
+  ) async {
+    final token = await tokenDaSessao();
+
+    if (token == null) {
+      throw Exception('Faça login para continuar.');
+    }
+
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl$endpoint'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode(body),
         )
         .timeout(const Duration(seconds: 20));
 
