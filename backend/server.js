@@ -1734,6 +1734,41 @@ app.post('/api/conversas/:id/mensagens', autenticar, async (req, res) => {
 });
 
 // INICIALIZAÇÃO DO SERVIDOR
+
+// Avaliações persistentes por vídeo (nota de 1 a 5).
+app.get('/api/videos/:id/reviews', autenticar, async (req, res) => {
+  if (!/^\d+$/.test(req.params.id)) return res.status(400).json({ erro: 'Vídeo inválido.' });
+  try {
+    const [videos] = await db.execute('SELECT id_video FROM video_post WHERE id_video = ? AND (privacidade = ? OR id_usuario = ?) LIMIT 1', [req.params.id, 'Público', req.usuario.id_usuario]);
+    if (!videos.length) return res.status(404).json({ erro: 'Vídeo não encontrado.' });
+    const [avaliacoes] = await db.execute(`SELECT a.id_avaliacao AS id, a.id_usuario, u.nome_usuario, a.nota, a.texto, a.criado_em
+      FROM video_avaliacao a JOIN usuario u ON u.id_usuario = a.id_usuario
+      WHERE a.id_video = ? ORDER BY a.criado_em DESC, a.id_avaliacao DESC LIMIT 200`, [req.params.id]);
+    return res.json({ avaliacoes });
+  } catch (e) { console.error('Erro avaliações:', e); return res.status(500).json({ erro: 'Não foi possível carregar avaliações.' }); }
+});
+
+app.post('/api/videos/:id/reviews', autenticar, async (req, res) => {
+  const { texto, nota } = req.body ?? {};
+  if (!/^\d+$/.test(req.params.id) || typeof texto !== 'string' || !texto.trim() || texto.trim().length > 2000 || !Number.isInteger(nota) || nota < 1 || nota > 5)
+    return res.status(400).json({ erro: 'Escreva uma opinião (até 2000 caracteres) e escolha de 1 a 5 estrelas.' });
+  try {
+    const [videos] = await db.execute('SELECT id_video FROM video_post WHERE id_video = ? AND (privacidade = ? OR id_usuario = ?) LIMIT 1', [req.params.id, 'Público', req.usuario.id_usuario]);
+    if (!videos.length) return res.status(404).json({ erro: 'Vídeo não encontrado.' });
+    const [result] = await db.execute('INSERT INTO video_avaliacao (id_video, id_usuario, nota, texto) VALUES (?, ?, ?, ?)', [req.params.id, req.usuario.id_usuario, nota, texto.trim()]);
+    return res.status(201).json({ id: result.insertId, mensagem: 'Avaliação publicada!' });
+  } catch (e) { console.error('Erro ao avaliar:', e); return res.status(500).json({ erro: 'Não foi possível salvar a avaliação.' }); }
+});
+
+app.delete('/api/videos/:id/reviews/:reviewId', autenticar, async (req, res) => {
+  if (!/^\d+$/.test(req.params.id) || !/^\d+$/.test(req.params.reviewId)) return res.status(400).json({ erro: 'Identificador inválido.' });
+  try {
+    const [result] = await db.execute('DELETE FROM video_avaliacao WHERE id_avaliacao = ? AND id_video = ? AND id_usuario = ?', [req.params.reviewId, req.params.id, req.usuario.id_usuario]);
+    if (!result.affectedRows) return res.status(404).json({ erro: 'Avaliação não encontrada ou sem permissão.' });
+    return res.json({ mensagem: 'Avaliação excluída.' });
+  } catch (e) { console.error('Erro ao excluir avaliação:', e); return res.status(500).json({ erro: 'Não foi possível excluir avaliação.' }); }
+});
+
 async function iniciarServidor() {
   try {
     const conexao = await db.getConnection();
@@ -1826,6 +1861,19 @@ async function iniciarServidor() {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
     );
 
+    await db.execute(`CREATE TABLE IF NOT EXISTS video_avaliacao (
+      id_avaliacao BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      id_video BIGINT UNSIGNED NOT NULL,
+      id_usuario BIGINT UNSIGNED NOT NULL,
+      nota TINYINT UNSIGNED NOT NULL,
+      texto VARCHAR(2000) NOT NULL,
+      criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_avaliacao_video (id_video, criado_em),
+      INDEX idx_avaliacao_usuario (id_usuario),
+      CONSTRAINT fk_avaliacao_video FOREIGN KEY (id_video) REFERENCES video_post(id_video) ON DELETE CASCADE,
+      CONSTRAINT fk_avaliacao_usuario FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario) ON DELETE CASCADE,
+      CONSTRAINT chk_avaliacao_nota CHECK (nota BETWEEN 1 AND 5)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
     for (const [table, column, parentTable, parentColumn, constraint, onDelete] of [
       ['obra_genero', 'id_obra', 'obra', 'id_obra', 'fk_obra_genero_obra', 'CASCADE'],
       ['obra_genero', 'id_genero', 'genero', 'id_genero', 'fk_obra_genero_genero', 'CASCADE'],

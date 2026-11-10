@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 
 import 'api_service.dart';
+import 'review_service.dart';
 import 'app_preferences.dart';
 import 'groups_screen.dart' show GroupsScreen;
 import 'profile_screen.dart';
@@ -2476,7 +2477,7 @@ class _LoopTabState extends State<_LoopTab> {
   final PageController _pageCtrl = PageController();
   final Set<int> _saved = {};
   final Set<String> _following = {};
-  final Map<int, List<String>> _comentarios = {};
+  final Map<String, int> _reviewCounts = {};
   final Map<String, bool> _likeStates = {};
   final Map<String, int> _likeCounts = {};
   final Set<String> _pendingLikes = {};
@@ -2767,19 +2768,19 @@ class _LoopTabState extends State<_LoopTab> {
   }
 
   Future<void> _abrirComentarios(int index) async {
-    final comentarios = _comentarios.putIfAbsent(index, () => []);
+    final videoId = widget.videos[index].videoId;
+    if (videoId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Vídeo ainda não sincronizado.')));
+      return;
+    }
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppPalette.raisedSurface(context),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => _CommentsSheet(
-        titulo: widget.videos[index].titulo,
-        comentarios: comentarios,
-        onCommentAdded: () => setState(() {}),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => _CommentsSheet(videoId: videoId, onChanged: (count) {
+        if (mounted) setState(() => _reviewCounts[videoId] = count);
+      }),
     );
   }
 
@@ -3199,7 +3200,7 @@ class _LoopTabState extends State<_LoopTab> {
                 _acao(
                   icon: Icons.chat_bubble_outline_rounded,
                   label: _fmt(
-                    v.comentarios + (_comentarios[videoIndex]?.length ?? 0),
+                    _reviewCounts[v.videoId] ?? v.comentarios,
                   ),
                   onTap: () => _abrirComentarios(videoIndex),
                 ),
@@ -3520,144 +3521,101 @@ class _LoopTabState extends State<_LoopTab> {
 // ══════════════════════════════════════════════════════════════════
 
 class _CommentsSheet extends StatefulWidget {
-  final String titulo;
-  final List<String> comentarios;
-  final VoidCallback onCommentAdded;
-
-  const _CommentsSheet({
-    required this.titulo,
-    required this.comentarios,
-    required this.onCommentAdded,
-  });
-
+  final String videoId;
+  final ValueChanged<int> onChanged;
+  const _CommentsSheet({required this.videoId, required this.onChanged});
   @override
   State<_CommentsSheet> createState() => _CommentsSheetState();
 }
 
 class _CommentsSheetState extends State<_CommentsSheet> {
   final TextEditingController _controller = TextEditingController();
+  List<Map<String, dynamic>> _reviews = [];
+  int _nota = 0;
+  bool _loading = true;
+  bool _sending = false;
+  String? _error;
+  String? _myId;
 
   @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
+  void initState() { super.initState(); _load(); }
+  @override
+  void dispose() { _controller.dispose(); super.dispose(); }
+
+  Future<void> _load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final reviews = await ReviewService.listar(widget.videoId);
+      if (!mounted) return;
+      setState(() { _reviews = reviews; _myId = prefs.getString('perfil_id'); _loading = false; _error = null; });
+      widget.onChanged(reviews.length);
+    } catch (e) {
+      if (mounted) setState(() { _loading = false; _error = e.toString().replaceFirst('Exception: ', ''); });
+    }
   }
 
-  void _enviarComentario() {
+  Future<void> _send() async {
     final texto = _controller.text.trim();
-    if (texto.isEmpty) return;
-    setState(() => widget.comentarios.add(texto));
-    widget.onCommentAdded();
-    _controller.clear();
+    if (_sending || texto.isEmpty || _nota == 0) return;
+    setState(() => _sending = true);
+    try {
+      await ReviewService.enviar(widget.videoId, texto, _nota);
+      _controller.clear();
+      if (!mounted) return;
+      setState(() => _nota = 0);
+      await _load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))));
+    } finally { if (mounted) setState(() => _sending = false); }
+  }
+
+  Future<void> _delete(Object id) async {
+    try { await ReviewService.excluir(widget.videoId, id); await _load(); }
+    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()))); }
   }
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * 0.72,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            12,
-            20,
-            12 + MediaQuery.viewInsetsOf(context).bottom,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppPalette.border(context).withValues(alpha: 0.6),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Comentários · ${widget.titulo}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: AppPalette.text(context),
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: widget.comentarios.isEmpty
-                    ? Center(
-                        child: Text(
-                          'Seja a primeira pessoa a comentar.',
-                          style: TextStyle(
-                            color: AppPalette.mutedText(context),
-                          ),
-                        ),
-                      )
-                    : ListView.builder(
-                        itemCount: widget.comentarios.length,
-                        itemBuilder: (context, index) => ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: CircleAvatar(
-                            backgroundColor: AppPalette.surface(context),
-                            child: Icon(
-                              Icons.person_rounded,
-                              size: 20,
-                              color: AppPalette.primaryText(context),
-                            ),
-                          ),
-                          title: Text(
-                            'Você',
-                            style: TextStyle(color: AppPalette.text(context)),
-                          ),
-                          subtitle: Text(
-                            widget.comentarios[index],
-                            style: TextStyle(
-                              color: AppPalette.mutedText(context),
-                            ),
-                          ),
-                        ),
-                      ),
-              ),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _controller,
-                      textCapitalization: TextCapitalization.sentences,
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: (_) => _enviarComentario(),
-                      decoration: InputDecoration(
-                        hintText: 'Escreva um comentário',
-                        filled: true,
-                        fillColor: AppPalette.surface(context),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.filled(
-                    tooltip: 'Enviar comentário',
-                    onPressed: _enviarComentario,
-                    style: IconButton.styleFrom(
-                      backgroundColor: AppPalette.button(context),
-                    ),
-                    icon: const Icon(Icons.send_rounded),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
+    final foreground = AppPalette.text(context);
+    return SafeArea(child: SizedBox(
+      height: MediaQuery.sizeOf(context).height * 0.75,
+      child: Padding(padding: EdgeInsets.fromLTRB(16, 12, 16, 12 + MediaQuery.viewInsetsOf(context).bottom),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: AppPalette.border(context), borderRadius: BorderRadius.circular(4)))),
+          const SizedBox(height: 14),
+          Text('Comentários', style: TextStyle(color: foreground, fontSize: 19, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          Expanded(child: _loading ? const Center(child: CircularProgressIndicator()) :
+            _error != null ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Text(_error!, style: TextStyle(color: foreground), textAlign: TextAlign.center), TextButton(onPressed: () { setState(() => _loading = true); _load(); }, child: const Text('Tentar novamente'))])) :
+            _reviews.isEmpty ? Center(child: Text('Seja a primeira pessoa a avaliar.', style: TextStyle(color: foreground))) :
+            ListView.builder(itemCount: _reviews.length, itemBuilder: (context, i) {
+              final review = _reviews[i];
+              final nota = (review['nota'] as num).toInt();
+              final own = _myId != null && review['id_usuario'].toString() == _myId;
+              return ListTile(contentPadding: EdgeInsets.zero,
+                leading: CircleAvatar(child: Text((review['nome_usuario']?.toString() ?? 'U').substring(0, 1).toUpperCase())),
+                title: Row(children: [Expanded(child: Text('@${review['nome_usuario']}', style: TextStyle(color: foreground, fontWeight: FontWeight.w600))), if (own) IconButton(icon: const Icon(Icons.delete_outline), tooltip: 'Excluir avaliação', onPressed: () => _delete(review['id']))]),
+                subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: List.generate(5, (s) => Icon(s < nota ? Icons.star_rounded : Icons.star_border_rounded, size: 18, color: _kStarGold))),
+                  const SizedBox(height: 4),
+                  Text(review['texto']?.toString() ?? '', style: TextStyle(color: AppPalette.mutedText(context))),
+                ]),
+              );
+            })),
+          const SizedBox(height: 8),
+          Text('Sua nota', style: TextStyle(color: foreground, fontWeight: FontWeight.w600)),
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: List.generate(5, (i) => IconButton(
+            onPressed: _sending ? null : () => setState(() => _nota = i + 1),
+            icon: Icon(i < _nota ? Icons.star_rounded : Icons.star_border_rounded, color: _kStarGold, size: 30),
+          ))),
+          Row(children: [Expanded(child: TextField(controller: _controller, maxLength: 2000, minLines: 1, maxLines: 3,
+            style: TextStyle(color: foreground), decoration: InputDecoration(hintText: 'Sua opinião sobre a obra...', filled: true, fillColor: AppPalette.surface(context), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)))),
+            const SizedBox(width: 6),
+            IconButton.filled(onPressed: _sending || _nota == 0 ? null : _send, icon: _sending ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.send_rounded)),
+          ]),
+        ]),
       ),
-    );
+    ));
   }
 }
 
