@@ -80,7 +80,6 @@ function autenticar(req, res, next) {
 }
 
 function autenticarArquivoVideo(req, res, next) {
-  require('./perfil_routes')(app, db, autenticar);
   const token = req.query.access_token;
   if (token === undefined) return autenticar(req, res, next);
   if (typeof token !== 'string' || !process.env.JWT_SECRET) {
