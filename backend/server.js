@@ -1861,67 +1861,52 @@ async function iniciarServidor() {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
     );
 
-    await db.execute(`CREATE TABLE IF NOT EXISTS video_avaliacao (
-      id_avaliacao BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      id_video BIGINT UNSIGNED NOT NULL,
-      id_usuario BIGINT UNSIGNED NOT NULL,
-      nota TINYINT UNSIGNED NOT NULL,
-      texto VARCHAR(2000) NOT NULL,
-      criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      INDEX idx_avaliacao_video (id_video, criado_em),
-      INDEX idx_avaliacao_usuario (id_usuario),
-      CONSTRAINT fk_avaliacao_video FOREIGN KEY (id_video) REFERENCES video_post(id_video) ON DELETE CASCADE,
-      CONSTRAINT fk_avaliacao_usuario FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario) ON DELETE CASCADE,
-      CONSTRAINT chk_avaliacao_nota CHECK (nota BETWEEN 1 AND 5)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
-    for (const [table, column, parentTable, parentColumn, constraint, onDelete] of [
-      ['obra_genero', 'id_obra', 'obra', 'id_obra', 'fk_obra_genero_obra', 'CASCADE'],
-      ['obra_genero', 'id_genero', 'genero', 'id_genero', 'fk_obra_genero_genero', 'CASCADE'],
-      ['obra_palavra_chave', 'id_obra', 'obra', 'id_obra', 'fk_obra_palavra_chave_obra', 'CASCADE'],
-      ['obra_palavra_chave', 'id_palavra_chave', 'palavra_chave', 'id_palavra_chave', 'fk_obra_palavra_chave_palavra', 'CASCADE'],
-      ['video_post', 'id_obra', 'obra', 'id_obra', 'fk_video_post_obra', 'SET NULL'],
-    ]) {
-      const [foreignKeys] = await db.execute(
-        `SELECT CONSTRAINT_NAME
-         FROM information_schema.KEY_COLUMN_USAGE
-         WHERE TABLE_SCHEMA = DATABASE()
-           AND TABLE_NAME = ?
-           AND COLUMN_NAME = ?
-           AND REFERENCED_TABLE_NAME = ?
-           AND REFERENCED_COLUMN_NAME = ?
-         LIMIT 1`,
-        [table, column, parentTable, parentColumn],
-      );
-      if (foreignKeys.length === 0) {
-        await db.query(
-          `ALTER TABLE \`${table}\`
-           ADD CONSTRAINT \`${constraint}\`
-           FOREIGN KEY (\`${column}\`)
-           REFERENCES \`${parentTable}\` (\`${parentColumn}\`)
-           ON DELETE ${onDelete}`,
-        );
+    
+    const [colunas] = await db.execute(`
+      SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE
+      FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND (
+          (TABLE_NAME = 'usuario' AND COLUMN_NAME = 'id_usuario')
+          OR
+          (TABLE_NAME = 'video_post' AND COLUMN_NAME = 'id_video')
+        )
+    `);
+
+    function buscarTipo(tabela, coluna) {
+      const tipo = colunas.find(
+        item => item.TABLE_NAME === tabela &&
+                item.COLUMN_NAME === coluna
+      )?.COLUMN_TYPE;
+
+      if (!tipo || !/^(tinyint|smallint|mediumint|int|bigint)(\(\d+\))?( unsigned)?$/i.test(tipo)) {
+        throw new Error(`Tipo não reconhecido: ${tabela}.${coluna}`);
       }
+
+      return tipo;
     }
 
-    conexao.release();
+    const tipoUsuario = buscarTipo('usuario', 'id_usuario');
+    const tipoVideo = buscarTipo('video_post', 'id_video');
 
-    app.use((req, res) => {
-      console.error('Rota não encontrada:', req.method, req.originalUrl);
-      return res.status(404).json({
-        erro: `Rota ${req.method} ${req.originalUrl} não encontrada.`,
-      });
-    });
+    console.log('Tipos encontrados:', { tipoUsuario, tipoVideo });
 
-    const porta = Number(process.env.PORT) || 3000;
-
-    app.listen(porta, '0.0.0.0', () => {
-      console.log(`API do LupTok rodando na porta ${porta}`);
-    });
-  } catch (error) {
-    console.error('Não foi possível conectar ao MySQL.');
-    console.error(error.message);
-    process.exit(1);
-  }
-}
-
-iniciarServidor();
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS video_avaliacao (
+        id_avaliacao BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        id_video ${tipoVideo} NOT NULL,
+        id_usuario ${tipoUsuario} NOT NULL,
+        nota TINYINT UNSIGNED NOT NULL,
+        texto VARCHAR(2000) NOT NULL,
+        criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_avaliacao_video (id_video, criado_em),
+        INDEX idx_avaliacao_usuario (id_usuario),
+        CONSTRAINT fk_avaliacao_video
+          FOREIGN KEY (id_video) REFERENCES video_post(id_video)
+          ON DELETE CASCADE,
+        CONSTRAINT fk_avaliacao_usuario
+          FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario)
+          ON DELETE CASCADE,
+        CONSTRAINT chk_avaliacao_nota CHECK (nota BETWEEN 1 AND 5)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
