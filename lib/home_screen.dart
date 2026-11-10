@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -9,7 +10,6 @@ import 'package:video_player/video_player.dart';
 
 import 'api_service.dart';
 import 'app_preferences.dart';
-import 'chat_screen.dart';
 import 'groups_screen.dart' show GroupsScreen;
 import 'profile_screen.dart';
 import 'settings_screen.dart';
@@ -313,6 +313,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           obraDescricao: obra?['descricao'] as String?,
           obraGeneros: generos,
           obraPalavrasChave: palavrasChave,
+          // A API só envia a contagem ao autor; não depende da ordem
+          // em que as preferências de login e os vídeos terminam de carregar.
           stars: curtidas is num ? curtidas.toInt() : 0,
           comentarios: 0,
           cor: _kVideoBackdrop,
@@ -868,69 +870,466 @@ class _VideoCard {
 // ANIMAÇÃO DA ESTRELA (duplo toque)
 // ══════════════════════════════════════════════════════════════════
 
-class _LikeBurst extends StatelessWidget {
-  const _LikeBurst({super.key});
+/// Explosão de curtida: uma estrela tridimensional construída a partir de
+/// malha extrudada, iluminação, projeção com perspectiva e partículas.
+/// Sem imagens prontas nem bibliotecas adicionais.
+class _LikeBurst extends StatefulWidget {
+  final bool removing;
+  const _LikeBurst({super.key, this.removing = false});
+
+  @override
+  State<_LikeBurst> createState() => _LikeBurstState();
+}
+
+class _LikeBurstState extends State<_LikeBurst>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1850),
+  )..forward();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 720),
-      curve: Curves.easeOutCubic,
-      builder: (context, progress, _) {
-        final scale = Curves.easeOutBack.transform(progress);
-        final opacity = (1 - Curves.easeIn.transform(progress)).clamp(0.0, 1.0);
-        return Opacity(
-          opacity: opacity,
-          child: Transform.scale(
-            scale: 0.55 + scale * 0.55,
-            child: SizedBox(
-              width: 148,
-              height: 148,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Container(
-                    width: 112 + progress * 24,
-                    height: 112 + progress * 24,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.white.withValues(
-                          alpha: 0.38 * (1 - progress),
-                        ),
-                        width: 2,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: _kStarGold.withValues(
-                            alpha: 0.28 * (1 - progress),
-                          ),
-                          blurRadius: 24,
-                          spreadRadius: 2,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Icon(
-                    Icons.star_rounded,
-                    color: _kStarGold,
-                    size: 96,
-                    shadows: [
-                      Shadow(
-                        color: Colors.black38,
-                        blurRadius: 18,
-                        offset: Offset(0, 5),
-                      ),
-                      Shadow(color: Color(0x99FFD166), blurRadius: 28),
-                    ],
-                  ),
-                ],
+    return IgnorePointer(
+      child: RepaintBoundary(
+        child: SizedBox(
+          width: 330,
+          height: 330,
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, _) => CustomPaint(
+              painter: _StarPopPainter(
+                t: _controller.value,
+                removing: widget.removing,
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Um ponto real no espaço tridimensional, antes da projeção 2D no canvas.
+class _StarPoint3 {
+  final double x;
+  final double y;
+  final double z;
+  const _StarPoint3(this.x, this.y, this.z);
+}
+
+/// Malha de 10 vértices nas duas faces, borda chanfrada e frente facetada.
+/// A rotação altera a projeção de TODOS os vértices (inclusive a espessura).
+class _PrismStarMesh {
+  static const _brightGold = Color(0xFFFFF4C2);
+  static const _midGold = Color(0xFFFFCF56);
+  static const _darkGold = Color(0xFF9E4D13);
+  static const _brightRose = Color(0xFFFFDCE8);
+  static const _midRose = Color(0xFFFF668A);
+  static const _darkRose = Color(0xFF7D123D);
+
+  static double _clamp01(double t) => t.clamp(0.0, 1.0).toDouble();
+
+  static List<_StarPoint3> _points(double radius, double z) {
+    return List.generate(10, (i) {
+      final a = -math.pi / 2 + math.pi * i / 5;
+      final r = i.isEven ? radius : radius * 0.43;
+      return _StarPoint3(r * math.cos(a), r * math.sin(a), z);
+    });
+  }
+
+  static Offset _project(
+    _StarPoint3 p,
+    Offset center,
+    double rx,
+    double ry,
+    double rz,
+    double scale,
+  ) {
+    // Z -> Y -> X: orientação espacial, sem simples Transform.rotate 2D.
+    final x0 = p.x * math.cos(rz) - p.y * math.sin(rz);
+    final y0 = p.x * math.sin(rz) + p.y * math.cos(rz);
+    final x1 = x0 * math.cos(ry) + p.z * math.sin(ry);
+    final z1 = -x0 * math.sin(ry) + p.z * math.cos(ry);
+    final y2 = y0 * math.cos(rx) - z1 * math.sin(rx);
+    final z2 = y0 * math.sin(rx) + z1 * math.cos(rx);
+    final distance = (420 - z2).clamp(100.0, 800.0).toDouble();
+    final perspective = 420 / distance;
+    return center + Offset(x1 * perspective * scale, y2 * perspective * scale);
+  }
+
+  static Path _poly(List<Offset> points) => Path()..addPolygon(points, true);
+
+  static void draw(
+    Canvas canvas, {
+    required Offset center,
+    required double scale,
+    required double rx,
+    required double ry,
+    required double rz,
+    required double time,
+    required bool removing,
+    double opacity = 1,
+  }) {
+    if (scale <= 0 || opacity <= 0) return;
+    final bright = removing ? _brightRose : _brightGold;
+    final mid = removing ? _midRose : _midGold;
+    final dark = removing ? _darkRose : _darkGold;
+    final edgeBack = _points(72, -15);
+    final edgeFront = _points(72, 9);
+    final bevelFront = _points(63, 22);
+    final back = edgeBack.map((p) => _project(p, center, rx, ry, rz, scale)).toList();
+    final rim = edgeFront.map((p) => _project(p, center, rx, ry, rz, scale)).toList();
+    final face = bevelFront.map((p) => _project(p, center, rx, ry, rz, scale)).toList();
+    final middle = _project(const _StarPoint3(0, 0, 24), center, rx, ry, rz, scale);
+
+    // A sombra acompanha o volume (e não um ícone achatado).
+    canvas.drawPath(
+      _poly(back),
+      Paint()
+        ..color = dark.withValues(alpha: opacity * 0.38)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 11),
+    );
+    canvas.drawPath(_poly(back), Paint()..color = dark.withValues(alpha: opacity));
+
+    // Faces laterais: luz incidente variável por direção da superfície.
+    final sides = <({double depth, Path path, Color color})>[];
+    for (var i = 0; i < 10; i++) {
+      final j = (i + 1) % 10;
+      final midAngle = -math.pi / 2 + math.pi * (i + 0.5) / 5;
+      final lightValue = _clamp01(
+        0.32 + 0.35 * math.cos(midAngle - rz - 0.6) +
+            0.22 * math.cos(ry + midAngle),
+      );
+      final points = [back[i], back[j], rim[j], rim[i]];
+      final depth = math.sin(midAngle + ry) * math.cos(rx);
+      sides.add((
+        depth: depth,
+        path: _poly(points),
+        color: Color.lerp(dark, mid, lightValue)!.withValues(alpha: opacity),
+      ));
+    }
+    sides.sort((a, b) => a.depth.compareTo(b.depth));
+    for (final side in sides) {
+      canvas.drawPath(side.path, Paint()..color = side.color);
+    }
+
+    // Bisel polido: cada uma das dez faixas tem um reflexo próprio.
+    for (var i = 0; i < 10; i++) {
+      final j = (i + 1) % 10;
+      final glint = _clamp01(
+        0.40 + 0.35 * math.sin(i * 1.35 + ry * 1.5 - rz + 1.1),
+      );
+      canvas.drawPath(
+        _poly([rim[i], rim[j], face[j], face[i]]),
+        Paint()..color = Color.lerp(mid, bright, glint)!
+            .withValues(alpha: opacity),
+      );
+    }
+
+    // Triângulos centrais da frente, cada um com sombreamento diferente.
+    for (var i = 0; i < 10; i++) {
+      final j = (i + 1) % 10;
+      final luminance = _clamp01(
+        0.38 + 0.25 * math.sin(i * 2.3 - ry + 0.5) +
+            0.28 * math.cos(rx * 1.5 + i * 0.9),
+      );
+      final color = Color.lerp(mid, bright, luminance)!;
+      canvas.drawPath(
+        _poly([middle, face[i], face[j]]),
+        Paint()..color = color.withValues(alpha: opacity),
+      );
+    }
+
+    final outline = _poly(face);
+    canvas.drawPath(
+      outline,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeJoin = StrokeJoin.round
+        ..strokeWidth = 1.3 * scale.clamp(0.35, 1.3).toDouble()
+        ..color = bright.withValues(alpha: opacity * 0.92),
+    );
+
+    // Reflexo especular móvel: passa somente pelo recorte da face frontal.
+    canvas.save();
+    canvas.clipPath(outline);
+    final scanX = center.dx - 150 * scale + 300 * scale * time;
+    final scanRect = Rect.fromLTWH(
+      scanX - 18 * scale,
+      center.dy - 105 * scale,
+      36 * scale,
+      210 * scale,
+    );
+    canvas.drawRect(
+      scanRect,
+      Paint()
+        ..shader = LinearGradient(
+          colors: [
+            Colors.white.withValues(alpha: 0),
+            Colors.white.withValues(alpha: opacity * 0.40),
+            Colors.white.withValues(alpha: 0),
+          ],
+        ).createShader(scanRect),
+    );
+    canvas.restore();
+  }
+}
+
+/// Desenho do brilho, partículas de vários tamanhos, trilhas e geometria 3D.
+/// Animação de curtida coreografada em cinco atos, ~1,85 s:
+/// 1. antecipação luminosa, 2. giro da estrela com perspectiva,
+/// 3. impacto elástico, 4. trilhas e poeira de estrelas,
+/// 5. permanência curta e saída desacelerada.
+///
+/// O movimento NÃO é somente um ScaleTransition. Cada frame redesenha
+/// a malha tridimensional e faz as partículas percorrerem curvas distintas.
+class _StarPopPainter extends CustomPainter {
+  final double t;
+  final bool removing;
+  const _StarPopPainter({required this.t, required this.removing});
+
+  double _part(double start, double end) =>
+      ((t - start) / (end - start)).clamp(0.0, 1.0).toDouble();
+
+  double _smooth(double v) => v * v * (3 - 2 * v);
+  double _out(double v) {
+    final q = 1 - v;
+    return 1 - q * q * q;
+  }
+
+  // Números pseudoaleatórios reproduzíveis: partículas NÃO mudam de caminho
+  // entre os frames, mesmo quando a animação é reconstruída pelo Flutter.
+  double _rand(int i, int salt) {
+    final n = math.sin((i + 1) * 12.9898 + salt * 78.233) * 43758.5453;
+    return n - n.floorToDouble();
+  }
+
+  Path _sparkle(Offset c, double r) => Path()
+    ..moveTo(c.dx, c.dy - r)
+    ..quadraticBezierTo(c.dx + r * 0.13, c.dy - r * 0.13, c.dx + r, c.dy)
+    ..quadraticBezierTo(c.dx + r * 0.13, c.dy + r * 0.13, c.dx, c.dy + r)
+    ..quadraticBezierTo(c.dx - r * 0.13, c.dy + r * 0.13, c.dx - r, c.dy)
+    ..quadraticBezierTo(c.dx - r * 0.13, c.dy - r * 0.13, c.dx, c.dy - r)
+    ..close();
+
+  void _aura(Canvas canvas, Offset c, Color gold, Color cream, double impact,
+      double visibility) {
+    if (visibility <= 0.001) return;
+    const radius = 126.0;
+    canvas.drawCircle(
+      c,
+      radius,
+      Paint()
+        ..shader = RadialGradient(
+          stops: const [0.0, 0.28, 0.65, 1.0],
+          colors: [
+            cream.withValues(alpha: visibility * (0.12 + 0.13 * impact)),
+            gold.withValues(alpha: visibility * (0.12 + 0.16 * impact)),
+            gold.withValues(alpha: visibility * 0.045),
+            Colors.transparent,
+          ],
+        ).createShader(Rect.fromCircle(center: c, radius: radius)),
+    );
+  }
+
+  void _drawTrails(Canvas canvas, Offset c, Color gold, Color pale,
+      double visibility) {
+    // Duas linhas curvas curtas passando por trás da estrela; elas se abrem
+    // após o impacto e não permanecem como anéis decorativos no vídeo.
+    for (var i = 0; i < 2; i++) {
+      final progress = _smooth(_part(0.32 + 0.055 * i, 0.70 + 0.05 * i));
+      final opacity = (1 - _smooth(_part(0.57 + i * 0.04, 0.79))) * visibility;
+      if (progress <= 0 || opacity <= 0.005) continue;
+      final radius = 49 + 75 * progress;
+      final start = -1.90 + i * 1.62 + 0.40 * progress;
+      canvas.drawArc(
+        Rect.fromCircle(center: c, radius: radius),
+        start,
+        1.15,
+        false,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeWidth = 2.2 * (1 - progress * 0.55)
+          ..color = (i == 0 ? pale : gold).withValues(alpha: opacity * 0.76),
+      );
+    }
+  }
+
+  void _drawParticles(Canvas canvas, Offset center, Color gold, Color pale) {
+    // Primeira camada: estilhaços e poeira dourada, com profundidade simulada,
+    // aceleração inicial, desaceleração e uma queda gravitacional quase sutil.
+    for (var i = 0; i < 46; i++) {
+      final delay = 0.36 + 0.085 * _rand(i, 1);
+      final finish = 0.77 + 0.15 * _rand(i, 2);
+      final u = _part(delay, finish);
+      if (u <= 0 || u >= 1) continue;
+
+      final easing = _out(u);
+      final angle = i * 2.399963229728653 +
+          (_rand(i, 3) - 0.5) * 0.6 + (removing ? -0.08 : 0.08);
+      final perspective = 0.65 + _rand(i, 4) * 0.85;
+      final travel = (54 + 95 * _rand(i, 5)) * easing * perspective;
+      final swirl = (removing ? -1.0 : 1.0) * 0.35 * u * u;
+      final moveAngle = angle + swirl;
+      final gravity = 18 * u * u * perspective;
+      final point = center + Offset(
+        math.cos(moveAngle) * travel,
+        math.sin(moveAngle) * travel * 0.78 + gravity,
+      );
+
+      final opacity = (_smooth((u / 0.18).clamp(0.0, 1.0).toDouble()) *
+          (1 - _smooth(((u - 0.52) / 0.48).clamp(0.0, 1.0).toDouble())))
+          .clamp(0.0, 1.0).toDouble();
+      final radius = (0.85 + _rand(i, 6) * 1.75) * perspective;
+      final color = i % 4 == 0 ? pale : gold;
+
+      // Cauda orientada pelo vetor de velocidade, mais curta quando desacelera.
+      final tail = (8 + 14 * _rand(i, 7)) * (1 - 0.55 * u) * perspective;
+      final back = point - Offset(
+        math.cos(moveAngle) * tail,
+        math.sin(moveAngle) * tail * 0.78 + 1,
+      );
+      canvas.drawLine(
+        back,
+        point,
+        Paint()
+          ..strokeCap = StrokeCap.round
+          ..strokeWidth = radius * 0.72
+          ..color = color.withValues(alpha: opacity * 0.62),
+      );
+      if (i % 7 == 0) {
+        canvas.drawPath(
+          _sparkle(point, radius * (1.5 + 0.35 * math.sin(u * math.pi))),
+          Paint()..color = pale.withValues(alpha: opacity * 0.95),
         );
-      },
+      } else {
+        canvas.drawCircle(
+          point,
+          radius,
+          Paint()..color = color.withValues(alpha: opacity),
+        );
+      }
+    }
+
+    // Segunda camada: partículas atrasadas mais delicadas, pequenas estrelas
+    // que surgem quando a estrela principal já terminou seu giro.
+    for (var i = 0; i < 14; i++) {
+      final begin = 0.48 + 0.12 * _rand(i, 20);
+      final u = _part(begin, 0.93);
+      if (u <= 0 || u >= 1) continue;
+      final angle = i * (2 * math.pi / 14) + 0.15;
+      final travel = 55 + (42 + 26 * _rand(i, 21)) * _smooth(u);
+      final pos = center + Offset(
+        math.cos(angle) * travel,
+        math.sin(angle) * travel * 0.83 + 13 * u * u,
+      );
+      final shine = math.sin(u * math.pi).clamp(0.0, 1.0).toDouble();
+      canvas.drawPath(
+        _sparkle(pos, 2.0 + 2.0 * _rand(i, 22)),
+        Paint()..color = pale.withValues(alpha: shine * 0.65),
+      );
+    }
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = Offset(size.width / 2, size.height / 2);
+    final gold = removing ? const Color(0xFFEA7187) : const Color(0xFFFFCF66);
+    final cream = removing ? const Color(0xFFFFE4E7) : const Color(0xFFFFF7DA);
+
+    final arriving = _part(0.09, 0.41);
+    final spin = _out(arriving);
+    final impactProgress = _part(0.30, 0.49);
+    final impact = math.sin(math.pi * impactProgress);
+    final exiting = _smooth(_part(0.79, 1.0));
+    final visibility = 1 - exiting;
+
+    // A antecipação começa com um ponto e não com um círculo gigante.
+    final glimmer = math.sin(math.pi * _part(0.0, 0.19));
+    if (glimmer > 0) {
+      canvas.drawPath(
+        _sparkle(c, 4 + 8 * glimmer),
+        Paint()..color = cream.withValues(alpha: glimmer * 0.70),
+      );
+    }
+
+    // Luz atrás do objeto 3D. Cresce no impacto, reduz durante a permanência.
+    final glow = _smooth(_part(0.12, 0.35)) * visibility;
+    _aura(canvas, c, gold, cream, impact, glow);
+    _drawTrails(canvas, c, gold, cream, glow);
+    _drawParticles(canvas, c, gold, cream);
+
+    // A escala tem dois tempos: aproximação e acomodação. O amortecimento
+    // cria a batida elástica, sem o efeito genérico de "zoom e desaparece".
+    final spring = 0.14 *
+        math.sin(math.pi * 2.55 * arriving) *
+        math.exp(-2.7 * arriving);
+    final scale = (0.07 + 0.93 * spin + spring) * (1 - exiting * 0.40);
+    final exitTilt = exiting * (removing ? -0.62 : 0.46);
+    final rx = -0.36 * (1 - spin) + 0.08 * math.sin(t * 5.2) + 0.28 * exiting;
+    final ry = (removing ? 1 : -1) * 1.27 * (1 - spin) + exitTilt;
+    final rz = (removing ? -1 : 1) * (0.58 * (1 - spin)) - 0.08 * spring;
+
+    _PrismStarMesh.draw(
+      canvas,
+      center: c + Offset(0, 14 * (1 - spin) - 11 * impact + 15 * exiting),
+      scale: scale,
+      rx: rx,
+      ry: ry,
+      rz: rz,
+      time: _smooth(_part(0.35, 0.77)),
+      removing: removing,
+      opacity: _smooth(_part(0.09, 0.20)) * visibility,
+    );
+
+    // Reflexos na frente, chegando DEPOIS da estrela, não todos de uma vez.
+    for (var i = 0; i < 5; i++) {
+      final angle = (i * 2 * math.pi / 5) - 0.72;
+      final begin = 0.43 + i * 0.045;
+      final p = _part(begin, begin + 0.26);
+      if (p <= 0 || p >= 1) continue;
+      final alpha = math.sin(p * math.pi) * 0.80;
+      final radius = 83 + 18 * _out(p) + (i % 2) * 9;
+      final pos = c + Offset(math.cos(angle) * radius,
+          math.sin(angle) * radius * 0.87);
+      canvas.drawPath(
+        _sparkle(pos, 3.2 + 2.4 * math.sin(p * math.pi)),
+        Paint()..color = cream.withValues(alpha: alpha),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _StarPopPainter old) =>
+      old.t != t || old.removing != removing;
+}
+
+/// Ícone discreto de estado curtido. A animação 3D fica no centro do vídeo;
+/// na lateral aparece apenas esta estrelinha simples, e só após o duplo toque.
+class _LikedStarBadge extends StatelessWidget {
+  const _LikedStarBadge({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(
+      width: 42,
+      height: 38,
+      child: Center(
+        child: Icon(
+          Icons.star_rounded,
+          size: 30,
+          color: Color(0xFFFFD166),
+          shadows: [Shadow(color: Colors.black54, blurRadius: 8)],
+        ),
+      ),
     );
   }
 }
@@ -945,6 +1344,9 @@ class _FeedVideo extends StatefulWidget {
   final String? videoId;
   final bool isActive;
   final bool userPaused;
+  final VoidCallback? onTapVideo;
+  final VoidCallback? onDoubleTapVideo;
+  final double muteTop;
 
   const _FeedVideo({
     required this.path,
@@ -952,6 +1354,9 @@ class _FeedVideo extends StatefulWidget {
     this.videoId,
     this.isActive = true,
     this.userPaused = false,
+    this.onTapVideo,
+    this.onDoubleTapVideo,
+    this.muteTop = 12,
   });
 
   @override
@@ -1020,6 +1425,22 @@ class _FeedVideoState extends State<_FeedVideo> {
     super.dispose();
   }
 
+  // Executa pause/play no MESMO evento do toque. No navegador,
+  // iniciar reprodução a partir de um rebuild assíncrono pode ser bloqueado.
+  void _onVideoTap() {
+    final callback = widget.onTapVideo;
+    if (callback == null) return;
+    final player = _controller;
+    if (player != null && player.value.isInitialized) {
+      if (widget.userPaused && widget.isActive) {
+        unawaited(player.play());
+      } else {
+        unawaited(player.pause());
+      }
+    }
+    callback();
+  }
+
   Future<void> _toggleMute() async {
     final controller = _controller;
     if (controller == null) return;
@@ -1058,23 +1479,38 @@ class _FeedVideoState extends State<_FeedVideo> {
                   aspectRatio: displayAspectRatio == 0
                       ? 9 / 16
                       : displayAspectRatio,
-                  child: VideoPlayer(controller),
+                  child: IgnorePointer(child: VideoPlayer(controller)),
                 ),
               ),
             ),
+            // A camada de toque fica ACIMA do player HTML (Flutter Web).
+            // Sem isso, o elemento <video> pode consumir o clique antes
+            // que o GestureDetector externo do feed o reconheça.
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: widget.onTapVideo == null ? null : _onVideoTap,
+                onDoubleTap: widget.onDoubleTapVideo,
+                child: const SizedBox.expand(),
+              ),
+            ),
             Positioned(
-              top: 12,
-              right: 12,
+              top: widget.muteTop,
+              right: 14,
               child: Material(
-                color: Colors.black.withValues(alpha: 0.38),
-                shape: const CircleBorder(),
-                child: IconButton(
-                  tooltip: _muted ? 'Ativar som' : 'Silenciar vídeo',
-                  onPressed: _toggleMute,
-                  color: Colors.white,
-                  iconSize: 20,
-                  icon: Icon(
-                    _muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                color: Colors.black.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(18),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(18),
+                  onTap: _toggleMute,
+                  child: Padding(
+                    padding: const EdgeInsets.all(11),
+                    child: Icon(
+                      _muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                      size: 21,
+                      color: Colors.white,
+                      shadows: const [Shadow(color: Colors.black54, blurRadius: 6)],
+                    ),
                   ),
                 ),
               ),
@@ -1609,7 +2045,7 @@ Future<void> _openSearchVideo(
   }
 }
 
-class _SearchVideoPlayerScreen extends StatelessWidget {
+class _SearchVideoPlayerScreen extends StatefulWidget {
   final Map<String, dynamic> video;
   final Object id;
   final String token;
@@ -1621,10 +2057,113 @@ class _SearchVideoPlayerScreen extends StatelessWidget {
   });
 
   @override
+  State<_SearchVideoPlayerScreen> createState() =>
+      _SearchVideoPlayerScreenState();
+}
+
+class _SearchVideoPlayerScreenState extends State<_SearchVideoPlayerScreen> {
+  bool _paused = false;
+  bool _liked = false;
+  bool _busy = false;
+  bool _showPauseFeedback = false;
+  bool _burstVisible = false;
+  bool _burstRemoving = false;
+  int _burstSequence = 0;
+  int? _likes;
+  String? _myUserId;
+  Timer? _pauseTimer;
+  Timer? _burstTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _liked = widget.video['curtida_usuario'] == true;
+    final count = widget.video['curtidas'];
+    _likes = count is num ? count.toInt() : null;
+    unawaited(_getCurrentUser());
+  }
+
+  Future<void> _getCurrentUser() async {
+    final p = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() => _myUserId = p.getString('perfil_id'));
+  }
+
+  @override
+  void dispose() {
+    _pauseTimer?.cancel();
+    _burstTimer?.cancel();
+    super.dispose();
+  }
+
+  void _tapVideo() {
+    setState(() {
+      _paused = !_paused;
+      _showPauseFeedback = true;
+    });
+    _pauseTimer?.cancel();
+    _pauseTimer = Timer(const Duration(milliseconds: 680), () {
+      if (mounted) setState(() => _showPauseFeedback = false);
+    });
+  }
+
+  Future<void> _doubleTapVideo() async {
+    if (_busy) return;
+    final wasLiked = _liked;
+    final oldCount = _likes;
+    final next = !wasLiked;
+    _burstTimer?.cancel();
+    setState(() {
+      _busy = true;
+      _liked = next;
+      _likes = oldCount == null
+          ? null
+          : (oldCount + (next ? 1 : -1)).clamp(0, 0x7fffffff).toInt();
+      _burstVisible = true;
+      _burstRemoving = !next;
+      _burstSequence++;
+    });
+    _burstTimer = Timer(const Duration(milliseconds: 1890), () {
+      if (mounted) setState(() => _burstVisible = false);
+    });
+    try {
+      final response = await ApiService.atualizarCurtidaVideo(
+        id: widget.id,
+        curtido: next,
+      );
+      if (response['curtido'] is! bool ||
+          (response['curtidas'] != null && response['curtidas'] is! num)) {
+        throw Exception('Resposta de curtida inválida.');
+      }
+      if (!mounted) return;
+      setState(() {
+        _liked = response['curtido'] as bool;
+        if (response['curtidas'] is num) {
+          _likes = (response['curtidas'] as num).toInt();
+        }
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _liked = wasLiked;
+        _likes = oldCount;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Não foi possível curtir: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final video = widget.video;
     final title = _searchVideoTitle(video);
     final description = video['descricao'] as String? ?? '';
     final author = video['autor'] as String? ?? '';
+    final isOwner = _myUserId != null &&
+        _myUserId == video['id_usuario']?.toString();
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -1634,7 +2173,7 @@ class _SearchVideoPlayerScreen extends StatelessWidget {
         actions: [
           IconButton(
             tooltip: 'Denunciar vídeo',
-            onPressed: () => _promptReportVideo(context, id),
+            onPressed: () => _promptReportVideo(context, widget.id),
             icon: const Icon(Icons.flag_outlined),
           ),
         ],
@@ -1642,10 +2181,76 @@ class _SearchVideoPlayerScreen extends StatelessWidget {
       body: Column(
         children: [
           Expanded(
-            child: _FeedVideo(
-              path: ApiService.urlArquivoVideo(id),
-              token: token,
-              videoId: id.toString(),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _tapVideo,
+              onDoubleTap: _doubleTapVideo,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  _FeedVideo(
+                    path: ApiService.urlArquivoVideo(widget.id),
+                    token: widget.token,
+                    videoId: widget.id.toString(),
+                    userPaused: _paused,
+                    onTapVideo: _tapVideo,
+                    onDoubleTapVideo: _doubleTapVideo,
+                  ),
+                  if (_burstVisible)
+                    Center(
+                      child: IgnorePointer(
+                        child: _LikeBurst(
+                          key: ValueKey('search:$_burstSequence'),
+                          removing: _burstRemoving,
+                        ),
+                      ),
+                    ),
+                  Center(
+                    child: IgnorePointer(
+                      child: AnimatedOpacity(
+                        opacity: (_paused || _showPauseFeedback) ? 1 : 0,
+                        duration: const Duration(milliseconds: 180),
+                        child: Container(
+                          padding: const EdgeInsets.all(18),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.18),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white24),
+                          ),
+                          child: Icon(
+                            _paused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                            color: Colors.white,
+                            size: 46,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (_liked)
+                    Positioned(
+                      right: 16,
+                      bottom: 18,
+                      child: IgnorePointer(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const _LikedStarBadge(),
+                            if (isOwner && _likes != null)
+                              Text(
+                                '$_likes',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  shadows: [Shadow(color: Colors.black54, blurRadius: 6)],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
           if (description.isNotEmpty || author.isNotEmpty)
@@ -1657,19 +2262,12 @@ class _SearchVideoPlayerScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (author.isNotEmpty)
-                    Text(
-                      author,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    Text(author, style: const TextStyle(
+                      color: Colors.white70, fontWeight: FontWeight.w600,
+                    )),
                   if (description.isNotEmpty) ...[
                     if (author.isNotEmpty) const SizedBox(height: 5),
-                    Text(
-                      description,
-                      style: const TextStyle(color: Colors.white),
-                    ),
+                    Text(description, style: const TextStyle(color: Colors.white)),
                   ],
                 ],
               ),
@@ -1817,8 +2415,10 @@ class _LoopTabState extends State<_LoopTab> {
   final Map<String, bool> _likeStates = {};
   final Map<String, int> _likeCounts = {};
   final Set<String> _pendingLikes = {};
+  final Map<String, bool> _queuedLikes = {};
   final Set<String> _likeAnimations = {};
   final Map<String, int> _likeAnimationVersions = {};
+  final Map<String, bool> _likeAnimationRemovals = {};
   final Map<String, Timer> _likeAnimationTimers = {};
   bool _mostrandoSeguindo = false;
   int _pageIndex = 0;
@@ -1994,9 +2594,20 @@ class _LoopTabState extends State<_LoopTab> {
 
   void _aoDarDoisToques(_VideoCard video, int index) {
     final key = _likeKey(video, index);
-    if (_pendingLikes.contains(key)) return;
     final vaCurtir = !_isLiked(video, index);
-    if (vaCurtir) _animateLike(key);
+    _animateLike(key, removing: !vaCurtir);
+
+    // Se uma chamada ainda estiver em andamento, memoriza a intenção mais
+    // recente e atualiza a interface já, sem disparar duas requisições em disputa.
+    if (_pendingLikes.contains(key)) {
+      setState(() {
+        _queuedLikes[key] = vaCurtir;
+        _likeStates[key] = vaCurtir;
+        final delta = vaCurtir ? 1 : -1;
+        _likeCounts[key] = (_likeCount(video, index) + delta).clamp(0, 0x7fffffff).toInt();
+      });
+      return;
+    }
     unawaited(_setLike(video, index, vaCurtir));
   }
 
@@ -2011,7 +2622,7 @@ class _LoopTabState extends State<_LoopTab> {
       _likeCounts[key] = (previousCount + (shouldLike ? 1 : -1)).clamp(
         0,
         0x7fffffff,
-      );
+      ).toInt();
       if (video.videoId != null) _pendingLikes.add(key);
     });
     final id = video.videoId;
@@ -2024,12 +2635,12 @@ class _LoopTabState extends State<_LoopTab> {
       );
       final count = result['curtidas'];
       final state = result['curtido'];
-      if (state is! bool || count is! num) {
+      if (state is! bool || (count != null && count is! num)) {
         throw Exception('O servidor retornou uma curtida inválida.');
       }
       if (!mounted) return;
       setState(() {
-        _likeCounts[key] = count.toInt();
+        if (count is num) _likeCounts[key] = count.toInt();
         _likeStates[key] = state;
         _pendingLikes.remove(key);
       });
@@ -2049,19 +2660,27 @@ class _LoopTabState extends State<_LoopTab> {
         ),
       );
     }
+
+    // Processa o último duplo toque recebido durante a requisição anterior.
+    if (!mounted) return;
+    final queued = _queuedLikes.remove(key);
+    if (queued != null && queued != _isLiked(video, index)) {
+      unawaited(_setLike(video, index, queued));
+    }
   }
 
-  void _animateLike(String key) {
+  void _animateLike(String key, {required bool removing}) {
     _likeAnimationTimers.remove(key)?.cancel();
     setState(() {
       _likeAnimations.add(key);
+      _likeAnimationRemovals[key] = removing;
       _likeAnimationVersions.update(
         key,
         (version) => version + 1,
         ifAbsent: () => 1,
       );
     });
-    _likeAnimationTimers[key] = Timer(const Duration(milliseconds: 850), () {
+    _likeAnimationTimers[key] = Timer(const Duration(milliseconds: 1890), () {
       if (!mounted) return;
       setState(() => _likeAnimations.remove(key));
       _likeAnimationTimers.remove(key);
@@ -2226,11 +2845,8 @@ class _LoopTabState extends State<_LoopTab> {
                   constraints: const BoxConstraints(maxWidth: 196),
                   padding: const EdgeInsets.all(3),
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.38),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.2),
-                    ),
+                    color: Colors.black.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(25),
                   ),
                   child: Row(
                     children: [
@@ -2258,21 +2874,7 @@ class _LoopTabState extends State<_LoopTab> {
                 size: 24,
               ),
             ),
-            IconButton(
-              tooltip: 'Mensagens',
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const ConversationsScreen(),
-                  ),
-                );
-              },
-              icon: const Icon(
-                Icons.chat_bubble_outline_rounded,
-                color: Colors.white,
-                size: 22,
-              ),
-            ),
+
           ],
         ),
       ),
@@ -2292,8 +2894,10 @@ class _LoopTabState extends State<_LoopTab> {
           duration: const Duration(milliseconds: 180),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: active ? AppPalette.button(context) : Colors.transparent,
-            borderRadius: BorderRadius.circular(16),
+            color: active
+                ? Colors.white.withValues(alpha: 0.19)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(20),
           ),
           child: Text(
             label,
@@ -2412,6 +3016,9 @@ class _LoopTabState extends State<_LoopTab> {
               videoId: v.videoId,
               isActive: active,
               userPaused: _userPaused,
+              muteTop: 88,
+              onTapVideo: _aoTocarSimples,
+              onDoubleTapVideo: () => _aoDarDoisToques(v, videoIndex),
             ),
 
           // 2. Degradê inferior suave para dar leitura excelente aos textos
@@ -2443,7 +3050,8 @@ class _LoopTabState extends State<_LoopTab> {
             Center(
               child: IgnorePointer(
                 child: _LikeBurst(
-                  key: ValueKey(_likeAnimationVersions[likeKey]),
+                  key: ValueKey('$likeKey:${_likeAnimationVersions[likeKey]}'),
+                  removing: _likeAnimationRemovals[likeKey] ?? false,
                 ),
               ),
             ),
@@ -2452,52 +3060,33 @@ class _LoopTabState extends State<_LoopTab> {
           Center(
             child: IgnorePointer(
               child: AnimatedOpacity(
-                opacity: _showPauseIndicator ? 1.0 : 0.0,
+                opacity: (_userPaused || _showPauseIndicator) ? 1.0 : 0.0,
                 duration: const Duration(milliseconds: 200),
                 child: AnimatedScale(
-                  scale: _showPauseIndicator ? 1.0 : 0.65,
+                  scale: (_userPaused || _showPauseIndicator) ? 1.0 : 0.65,
                   duration: const Duration(milliseconds: 200),
                   curve: Curves.easeOutBack,
                   child: Container(
-                    padding: const EdgeInsets.all(18),
+                    padding: const EdgeInsets.all(19),
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.55),
+                      color: Colors.black.withValues(alpha: 0.18),
                       shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.18),
+                          blurRadius: 24,
+                          spreadRadius: 3,
+                        ),
+                      ],
                     ),
                     child: Icon(
-                      _indicatorIsPause
-                          ? Icons.pause_rounded
-                          : Icons.play_arrow_rounded,
+                      _userPaused
+                          ? Icons.play_arrow_rounded
+                          : Icons.pause_rounded,
                       color: Colors.white,
                       size: 46,
                     ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          // 5. Estrela discreta no canto superior esquerdo (aparece se curtiu, some ao descurtir)
-          Positioned(
-            top: 76,
-            left: 14,
-            child: IgnorePointer(
-              child: AnimatedOpacity(
-                opacity: liked ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 250),
-                child: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.42),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.star_rounded,
-                    color: _kStarGold,
-                    size: 19,
-                    shadows: [
-                      Shadow(color: Color(0x99FFD166), blurRadius: 8),
-                    ],
                   ),
                 ),
               ),
@@ -2511,38 +3100,55 @@ class _LoopTabState extends State<_LoopTab> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Controle de estrela (curtir e descurtir)
-                _acao(
-                  icon: liked ? Icons.star_rounded : Icons.star_outline_rounded,
-                  iconColor: liked ? _kStarGold : Colors.white,
-                  label: isOwner ? _fmt(likes) : null,
-                  onTap: () {
-                    final key = _likeKey(v, videoIndex);
-                    if (_pendingLikes.contains(key)) return;
-                    final vaCurtir = !liked;
-                    if (vaCurtir) _animateLike(key);
-                    unawaited(_setLike(v, videoIndex, vaCurtir));
-                  },
+                // A estrela NÃO existe no layout até a pessoa curtir.
+                // A contagem também só aparece para o autor da publicação.
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 330),
+                  curve: Curves.easeOutCubic,
+                  alignment: Alignment.bottomCenter,
+                  child: liked
+                      ? Padding(
+                          padding: const EdgeInsets.only(bottom: 17),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const _LikedStarBadge(),
+                              if (isOwner) ...[
+                                const SizedBox(height: 1),
+                                Text(
+                                  _fmt(likes),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    shadows: [
+                                      Shadow(color: Colors.black87, blurRadius: 7),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        )
+                      : const SizedBox.shrink(),
                 ),
-                const SizedBox(height: 14),
 
                 // Comentários
                 _acao(
                   icon: Icons.chat_bubble_outline_rounded,
-                  imageAsset: 'assets/images/balao.png',
                   label: _fmt(
                     v.comentarios + (_comentarios[videoIndex]?.length ?? 0),
                   ),
                   onTap: () => _abrirComentarios(videoIndex),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 10),
 
                 // Compartilhar
                 _acao(
                   icon: Icons.share_outlined,
                   onTap: () => _compartilhar(v),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 10),
 
                 // Salvar publicação
                 _acao(
@@ -2552,7 +3158,7 @@ class _LoopTabState extends State<_LoopTab> {
                   iconColor: saved ? _kStarGold : Colors.white,
                   onTap: () => _toggleSaved(videoIndex),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 10),
 
                 // Mais opções / Denunciar
                 PopupMenuButton<String>(
@@ -2648,11 +3254,11 @@ class _LoopTabState extends State<_LoopTab> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.55),
+        color: Colors.black.withValues(alpha: 0.27),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.22),
-          width: 0.8,
+          color: Colors.white.withValues(alpha: 0.10),
+          width: 0.7,
         ),
       ),
       child: Row(
@@ -2768,9 +3374,9 @@ class _LoopTabState extends State<_LoopTab> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.4),
+        color: Colors.black.withValues(alpha: 0.24),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: cor.withValues(alpha: 0.7)),
+        border: Border.all(color: cor.withValues(alpha: 0.36)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -2795,15 +3401,11 @@ class _LoopTabState extends State<_LoopTab> {
   }
 
   Widget _botaoRedondo(Widget child) {
-    return Container(
+    // Ações flutuantes: área de toque confortável, sem bolhas pretas rígidas.
+    return SizedBox(
       width: 44,
-      height: 44,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: Colors.black.withValues(alpha: 0.35),
-      ),
-      child: child,
+      height: 42,
+      child: Center(child: child),
     );
   }
 
@@ -2822,7 +3424,15 @@ class _LoopTabState extends State<_LoopTab> {
         children: [
           _botaoRedondo(
             imageAsset == null
-                ? Icon(icon, color: iconColor ?? Colors.white, size: 24)
+                ? Icon(
+                    icon,
+                    color: iconColor ?? Colors.white,
+                    size: 25,
+                    shadows: const [
+                      Shadow(color: Colors.black87, blurRadius: 11),
+                      Shadow(color: Colors.black45, blurRadius: 3),
+                    ],
+                  )
                 : Image.asset(
                     imageAsset,
                     width: 24,
