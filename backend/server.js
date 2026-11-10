@@ -380,7 +380,7 @@ async function consultarGemini({ apiKey, model, mensagem, historico }) {
 
         const erro = new Error(
           dados?.error?.message ||
-          `A API Gemini retornou HTTP ${status}.`
+          `A Lupez retornou HTTP ${status}.`
         );
 
         erro.status = status;
@@ -399,8 +399,8 @@ async function consultarGemini({ apiKey, model, mensagem, historico }) {
 
       throw new Error(
         motivo
-          ? `A Gemini não retornou texto (${motivo}).`
-          : 'A Gemini não retornou texto.'
+          ? `A Lupez não retornou texto (${motivo}).`
+          : 'A Lupez não retornou texto.'
       );
 
     } catch (error) {
@@ -425,9 +425,9 @@ async function consultarGemini({ apiKey, model, mensagem, historico }) {
       if (!erroTemporario || tentativa === 2) {
         const erroFinal = new Error(
           timeout
-            ? 'O Gemini demorou demais para responder. Tente novamente.'
+            ? 'A Lupez demorou demais para responder. Tente novamente.'
             : status === 503
-              ? 'O Gemini está temporariamente sobrecarregado. Tente novamente em instantes.'
+              ? 'A Lupez está temporariamente sobrecarregada. Tente novamente em instantes.'
               : error.message
         );
 

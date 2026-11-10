@@ -8,6 +8,7 @@ environment:
 
 dependencies:
   camera: ^0.12.0+2
+  ffmpeg_kit_flutter_new_min: ^3.6.3
   flutter:
     sdk: flutter
   gal: ^2.3.3
@@ -31,4 +32,3 @@ flutter:
   assets:
     - assets/images/
     - assets/images/logobranca.png
-

@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -25,8 +25,7 @@ const Color _kVideoBackdrop = Color(0xFF191416);
 List<String> _apiStringList(Object? value) =>
     value is List ? value.whereType<String>().toList() : const [];
 
-String _cap(String s) =>
-    s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+String _cap(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 
 String _shorten(String s, [int max = 40]) {
   final t = s.trim();
@@ -253,8 +252,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       publicado.workTitle?.trim().isNotEmpty == true
           ? publicado.workTitle!
           : (publicado.description.trim().isNotEmpty
-              ? _shorten(publicado.description, 28)
-              : 'Recomendação'),
+                ? _shorten(publicado.description, 28)
+                : 'Recomendação'),
     );
   }
 
@@ -681,7 +680,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           child: Row(
             children: [
               _navAssetItem(
-                image: 'assets/images/loop.png',
+                image: AppPalette.isDark(context)
+                    ? 'assets/images/infinito.png'
+                    : 'assets/images/loop.png',
                 label: 'Loop',
                 active: _tabAtual == 0,
                 onTap: () => setState(() => _tabAtual = 0),
@@ -984,10 +985,23 @@ class _PrismStarMesh {
     final edgeBack = _points(72, -15);
     final edgeFront = _points(72, 9);
     final bevelFront = _points(63, 22);
-    final back = edgeBack.map((p) => _project(p, center, rx, ry, rz, scale)).toList();
-    final rim = edgeFront.map((p) => _project(p, center, rx, ry, rz, scale)).toList();
-    final face = bevelFront.map((p) => _project(p, center, rx, ry, rz, scale)).toList();
-    final middle = _project(const _StarPoint3(0, 0, 24), center, rx, ry, rz, scale);
+    final back = edgeBack
+        .map((p) => _project(p, center, rx, ry, rz, scale))
+        .toList();
+    final rim = edgeFront
+        .map((p) => _project(p, center, rx, ry, rz, scale))
+        .toList();
+    final face = bevelFront
+        .map((p) => _project(p, center, rx, ry, rz, scale))
+        .toList();
+    final middle = _project(
+      const _StarPoint3(0, 0, 24),
+      center,
+      rx,
+      ry,
+      rz,
+      scale,
+    );
 
     // A sombra acompanha o volume (e não um ícone achatado).
     canvas.drawPath(
@@ -996,7 +1010,10 @@ class _PrismStarMesh {
         ..color = dark.withValues(alpha: opacity * 0.38)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 11),
     );
-    canvas.drawPath(_poly(back), Paint()..color = dark.withValues(alpha: opacity));
+    canvas.drawPath(
+      _poly(back),
+      Paint()..color = dark.withValues(alpha: opacity),
+    );
 
     // Faces laterais: luz incidente variável por direção da superfície.
     final sides = <({double depth, Path path, Color color})>[];
@@ -1004,7 +1021,8 @@ class _PrismStarMesh {
       final j = (i + 1) % 10;
       final midAngle = -math.pi / 2 + math.pi * (i + 0.5) / 5;
       final lightValue = _clamp01(
-        0.32 + 0.35 * math.cos(midAngle - rz - 0.6) +
+        0.32 +
+            0.35 * math.cos(midAngle - rz - 0.6) +
             0.22 * math.cos(ry + midAngle),
       );
       final points = [back[i], back[j], rim[j], rim[i]];
@@ -1028,8 +1046,8 @@ class _PrismStarMesh {
       );
       canvas.drawPath(
         _poly([rim[i], rim[j], face[j], face[i]]),
-        Paint()..color = Color.lerp(mid, bright, glint)!
-            .withValues(alpha: opacity),
+        Paint()
+          ..color = Color.lerp(mid, bright, glint)!.withValues(alpha: opacity),
       );
     }
 
@@ -1037,7 +1055,8 @@ class _PrismStarMesh {
     for (var i = 0; i < 10; i++) {
       final j = (i + 1) % 10;
       final luminance = _clamp01(
-        0.38 + 0.25 * math.sin(i * 2.3 - ry + 0.5) +
+        0.38 +
+            0.25 * math.sin(i * 2.3 - ry + 0.5) +
             0.28 * math.cos(rx * 1.5 + i * 0.9),
       );
       final color = Color.lerp(mid, bright, luminance)!;
@@ -1119,8 +1138,14 @@ class _StarPopPainter extends CustomPainter {
     ..quadraticBezierTo(c.dx - r * 0.13, c.dy - r * 0.13, c.dx, c.dy - r)
     ..close();
 
-  void _aura(Canvas canvas, Offset c, Color gold, Color cream, double impact,
-      double visibility) {
+  void _aura(
+    Canvas canvas,
+    Offset c,
+    Color gold,
+    Color cream,
+    double impact,
+    double visibility,
+  ) {
     if (visibility <= 0.001) return;
     const radius = 126.0;
     canvas.drawCircle(
@@ -1139,8 +1164,13 @@ class _StarPopPainter extends CustomPainter {
     );
   }
 
-  void _drawTrails(Canvas canvas, Offset c, Color gold, Color pale,
-      double visibility) {
+  void _drawTrails(
+    Canvas canvas,
+    Offset c,
+    Color gold,
+    Color pale,
+    double visibility,
+  ) {
     // Duas linhas curvas curtas passando por trás da estrela; elas se abrem
     // após o impacto e não permanecem como anéis decorativos no vídeo.
     for (var i = 0; i < 2; i++) {
@@ -1173,30 +1203,38 @@ class _StarPopPainter extends CustomPainter {
       if (u <= 0 || u >= 1) continue;
 
       final easing = _out(u);
-      final angle = i * 2.399963229728653 +
-          (_rand(i, 3) - 0.5) * 0.6 + (removing ? -0.08 : 0.08);
+      final angle =
+          i * 2.399963229728653 +
+          (_rand(i, 3) - 0.5) * 0.6 +
+          (removing ? -0.08 : 0.08);
       final perspective = 0.65 + _rand(i, 4) * 0.85;
       final travel = (54 + 95 * _rand(i, 5)) * easing * perspective;
       final swirl = (removing ? -1.0 : 1.0) * 0.35 * u * u;
       final moveAngle = angle + swirl;
       final gravity = 18 * u * u * perspective;
-      final point = center + Offset(
-        math.cos(moveAngle) * travel,
-        math.sin(moveAngle) * travel * 0.78 + gravity,
-      );
+      final point =
+          center +
+          Offset(
+            math.cos(moveAngle) * travel,
+            math.sin(moveAngle) * travel * 0.78 + gravity,
+          );
 
-      final opacity = (_smooth((u / 0.18).clamp(0.0, 1.0).toDouble()) *
-          (1 - _smooth(((u - 0.52) / 0.48).clamp(0.0, 1.0).toDouble())))
-          .clamp(0.0, 1.0).toDouble();
+      final opacity =
+          (_smooth((u / 0.18).clamp(0.0, 1.0).toDouble()) *
+                  (1 - _smooth(((u - 0.52) / 0.48).clamp(0.0, 1.0).toDouble())))
+              .clamp(0.0, 1.0)
+              .toDouble();
       final radius = (0.85 + _rand(i, 6) * 1.75) * perspective;
       final color = i % 4 == 0 ? pale : gold;
 
       // Cauda orientada pelo vetor de velocidade, mais curta quando desacelera.
       final tail = (8 + 14 * _rand(i, 7)) * (1 - 0.55 * u) * perspective;
-      final back = point - Offset(
-        math.cos(moveAngle) * tail,
-        math.sin(moveAngle) * tail * 0.78 + 1,
-      );
+      final back =
+          point -
+          Offset(
+            math.cos(moveAngle) * tail,
+            math.sin(moveAngle) * tail * 0.78 + 1,
+          );
       canvas.drawLine(
         back,
         point,
@@ -1227,10 +1265,12 @@ class _StarPopPainter extends CustomPainter {
       if (u <= 0 || u >= 1) continue;
       final angle = i * (2 * math.pi / 14) + 0.15;
       final travel = 55 + (42 + 26 * _rand(i, 21)) * _smooth(u);
-      final pos = center + Offset(
-        math.cos(angle) * travel,
-        math.sin(angle) * travel * 0.83 + 13 * u * u,
-      );
+      final pos =
+          center +
+          Offset(
+            math.cos(angle) * travel,
+            math.sin(angle) * travel * 0.83 + 13 * u * u,
+          );
       final shine = math.sin(u * math.pi).clamp(0.0, 1.0).toDouble();
       canvas.drawPath(
         _sparkle(pos, 2.0 + 2.0 * _rand(i, 22)),
@@ -1269,9 +1309,8 @@ class _StarPopPainter extends CustomPainter {
 
     // A escala tem dois tempos: aproximação e acomodação. O amortecimento
     // cria a batida elástica, sem o efeito genérico de "zoom e desaparece".
-    final spring = 0.14 *
-        math.sin(math.pi * 2.55 * arriving) *
-        math.exp(-2.7 * arriving);
+    final spring =
+        0.14 * math.sin(math.pi * 2.55 * arriving) * math.exp(-2.7 * arriving);
     final scale = (0.07 + 0.93 * spin + spring) * (1 - exiting * 0.40);
     final exitTilt = exiting * (removing ? -0.62 : 0.46);
     final rx = -0.36 * (1 - spin) + 0.08 * math.sin(t * 5.2) + 0.28 * exiting;
@@ -1298,8 +1337,8 @@ class _StarPopPainter extends CustomPainter {
       if (p <= 0 || p >= 1) continue;
       final alpha = math.sin(p * math.pi) * 0.80;
       final radius = 83 + 18 * _out(p) + (i % 2) * 9;
-      final pos = c + Offset(math.cos(angle) * radius,
-          math.sin(angle) * radius * 0.87);
+      final pos =
+          c + Offset(math.cos(angle) * radius, math.sin(angle) * radius * 0.87);
       canvas.drawPath(
         _sparkle(pos, 3.2 + 2.4 * math.sin(p * math.pi)),
         Paint()..color = cream.withValues(alpha: alpha),
@@ -1465,10 +1504,9 @@ class _FeedVideoState extends State<_FeedVideo> {
         }
         final controller = _controller!;
         final value = controller.value;
-        final aspectRatio = value.aspectRatio;
-        final displayAspectRatio = value.rotationCorrection % 180 == 0
-            ? aspectRatio
-            : 1 / aspectRatio;
+        final sourceAspectRatio = value.aspectRatio > 0
+            ? value.aspectRatio
+            : 9 / 16;
         return Stack(
           fit: StackFit.expand,
           children: [
@@ -1476,10 +1514,17 @@ class _FeedVideoState extends State<_FeedVideo> {
               color: Colors.black,
               child: Center(
                 child: AspectRatio(
-                  aspectRatio: displayAspectRatio == 0
-                      ? 9 / 16
-                      : displayAspectRatio,
-                  child: IgnorePointer(child: VideoPlayer(controller)),
+                  aspectRatio: 9 / 16,
+                  child: ClipRect(
+                    child: FittedBox(
+                      fit: BoxFit.cover,
+                      child: SizedBox(
+                        width: sourceAspectRatio * 1000,
+                        height: 1000,
+                        child: IgnorePointer(child: VideoPlayer(controller)),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -1506,10 +1551,14 @@ class _FeedVideoState extends State<_FeedVideo> {
                   child: Padding(
                     padding: const EdgeInsets.all(11),
                     child: Icon(
-                      _muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                      _muted
+                          ? Icons.volume_off_rounded
+                          : Icons.volume_up_rounded,
                       size: 21,
                       color: Colors.white,
-                      shadows: const [Shadow(color: Colors.black54, blurRadius: 6)],
+                      shadows: const [
+                        Shadow(color: Colors.black54, blurRadius: 6),
+                      ],
                     ),
                   ),
                 ),
@@ -1541,21 +1590,16 @@ class _LoopSearchDelegate extends SearchDelegate<void> {
   Future<_SearchBundle> _search(String term) {
     if (_lastSearchQuery != term || _searchFuture == null) {
       _lastSearchQuery = term;
-      _searchFuture = Future.wait([
-        ApiService.buscarObras(term),
-        ApiService.buscarVideos(term),
-      ]).then(
-        (results) => _SearchBundle(
-          obras: results[0],
-          videos: results[1],
-        ),
-      );
+      _searchFuture = Future.wait(
+        [ApiService.buscarObras(term), ApiService.buscarVideos(term)],
+      ).then((results) => _SearchBundle(obras: results[0], videos: results[1]));
     }
     return _searchFuture!;
   }
 
   @override
-  String get searchFieldLabel => 'Buscar no Loop (ex: dorama colegial, True Beauty)';
+  String get searchFieldLabel =>
+      'Buscar no Loop (ex: dorama colegial, True Beauty)';
 
   @override
   ThemeData appBarTheme(BuildContext context) => Theme.of(context).copyWith(
@@ -1751,7 +1795,9 @@ class _LoopSearchDelegate extends SearchDelegate<void> {
                           color: AppPalette.raisedSurface(context),
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                            color: AppPalette.border(context).withValues(alpha: 0.25),
+                            color: AppPalette.border(
+                              context,
+                            ).withValues(alpha: 0.25),
                           ),
                           boxShadow: [
                             BoxShadow(
@@ -1773,8 +1819,9 @@ class _LoopSearchDelegate extends SearchDelegate<void> {
                                     vertical: 2,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: AppPalette.button(context)
-                                        .withValues(alpha: 0.15),
+                                    color: AppPalette.button(
+                                      context,
+                                    ).withValues(alpha: 0.15),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                   child: Text(
@@ -1947,7 +1994,11 @@ class _VideoSearchTile extends StatelessWidget {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [Colors.transparent, Colors.transparent, Colors.black87],
+                  colors: [
+                    Colors.transparent,
+                    Colors.transparent,
+                    Colors.black87,
+                  ],
                   stops: [0, 0.4, 1],
                 ),
               ),
@@ -2162,8 +2213,8 @@ class _SearchVideoPlayerScreenState extends State<_SearchVideoPlayerScreen> {
     final title = _searchVideoTitle(video);
     final description = video['descricao'] as String? ?? '';
     final author = video['autor'] as String? ?? '';
-    final isOwner = _myUserId != null &&
-        _myUserId == video['id_usuario']?.toString();
+    final isOwner =
+        _myUserId != null && _myUserId == video['id_usuario']?.toString();
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -2218,7 +2269,9 @@ class _SearchVideoPlayerScreenState extends State<_SearchVideoPlayerScreen> {
                             border: Border.all(color: Colors.white24),
                           ),
                           child: Icon(
-                            _paused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                            _paused
+                                ? Icons.play_arrow_rounded
+                                : Icons.pause_rounded,
                             color: Colors.white,
                             size: 46,
                           ),
@@ -2242,7 +2295,12 @@ class _SearchVideoPlayerScreenState extends State<_SearchVideoPlayerScreen> {
                                   color: Colors.white,
                                   fontSize: 12,
                                   fontWeight: FontWeight.w700,
-                                  shadows: [Shadow(color: Colors.black54, blurRadius: 6)],
+                                  shadows: [
+                                    Shadow(
+                                      color: Colors.black54,
+                                      blurRadius: 6,
+                                    ),
+                                  ],
                                 ),
                               ),
                           ],
@@ -2262,12 +2320,19 @@ class _SearchVideoPlayerScreenState extends State<_SearchVideoPlayerScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (author.isNotEmpty)
-                    Text(author, style: const TextStyle(
-                      color: Colors.white70, fontWeight: FontWeight.w600,
-                    )),
+                    Text(
+                      author,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   if (description.isNotEmpty) ...[
                     if (author.isNotEmpty) const SizedBox(height: 5),
-                    Text(description, style: const TextStyle(color: Colors.white)),
+                    Text(
+                      description,
+                      style: const TextStyle(color: Colors.white),
+                    ),
                   ],
                 ],
               ),
@@ -2604,7 +2669,9 @@ class _LoopTabState extends State<_LoopTab> {
         _queuedLikes[key] = vaCurtir;
         _likeStates[key] = vaCurtir;
         final delta = vaCurtir ? 1 : -1;
-        _likeCounts[key] = (_likeCount(video, index) + delta).clamp(0, 0x7fffffff).toInt();
+        _likeCounts[key] = (_likeCount(video, index) + delta)
+            .clamp(0, 0x7fffffff)
+            .toInt();
       });
       return;
     }
@@ -2619,10 +2686,9 @@ class _LoopTabState extends State<_LoopTab> {
     final previousCount = _likeCount(video, index);
     setState(() {
       _likeStates[key] = shouldLike;
-      _likeCounts[key] = (previousCount + (shouldLike ? 1 : -1)).clamp(
-        0,
-        0x7fffffff,
-      ).toInt();
+      _likeCounts[key] = (previousCount + (shouldLike ? 1 : -1))
+          .clamp(0, 0x7fffffff)
+          .toInt();
       if (video.videoId != null) _pendingLikes.add(key);
     });
     final id = video.videoId;
@@ -2797,12 +2863,7 @@ class _LoopTabState extends State<_LoopTab> {
           feed.isEmpty ? _buildEmpty() : _buildFeed(feed),
 
           // 2. A barra superior fica FIXA no topo, nunca se move ou duplica com os vídeos
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: _buildTopBar(),
-          ),
+          Positioned(top: 0, left: 0, right: 0, child: _buildTopBar()),
         ],
       ),
     );
@@ -2815,10 +2876,7 @@ class _LoopTabState extends State<_LoopTab> {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [
-            Colors.black.withValues(alpha: 0.65),
-            Colors.transparent,
-          ],
+          colors: [Colors.black.withValues(alpha: 0.65), Colors.transparent],
         ),
       ),
       padding: const EdgeInsets.fromLTRB(14, 6, 8, 14),
@@ -2851,7 +2909,7 @@ class _LoopTabState extends State<_LoopTab> {
                   child: Row(
                     children: [
                       _feedTab(
-                        'Looping',
+                        'Loop',
                         active: !_mostrandoSeguindo,
                         onTap: () => _trocarFeed(false),
                       ),
@@ -2874,7 +2932,6 @@ class _LoopTabState extends State<_LoopTab> {
                 size: 24,
               ),
             ),
-
           ],
         ),
       ),
@@ -3071,7 +3128,9 @@ class _LoopTabState extends State<_LoopTab> {
                     decoration: BoxDecoration(
                       color: Colors.black.withValues(alpha: 0.18),
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.22),
+                      ),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.18),
@@ -3122,7 +3181,10 @@ class _LoopTabState extends State<_LoopTab> {
                                     fontSize: 12,
                                     fontWeight: FontWeight.w700,
                                     shadows: [
-                                      Shadow(color: Colors.black87, blurRadius: 7),
+                                      Shadow(
+                                        color: Colors.black87,
+                                        blurRadius: 7,
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -3217,9 +3279,7 @@ class _LoopTabState extends State<_LoopTab> {
                       fontSize: 14,
                       fontWeight: FontWeight.w400,
                       height: 1.35,
-                      shadows: [
-                        Shadow(color: Colors.black87, blurRadius: 6),
-                      ],
+                      shadows: [Shadow(color: Colors.black87, blurRadius: 6)],
                     ),
                   ),
                 ],
@@ -3264,11 +3324,7 @@ class _LoopTabState extends State<_LoopTab> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            iconData,
-            size: 14,
-            color: const Color(0xFFFFD166),
-          ),
+          Icon(iconData, size: 14, color: const Color(0xFFFFD166)),
           const SizedBox(width: 6),
           Flexible(
             child: Text(
@@ -3344,7 +3400,10 @@ class _LoopTabState extends State<_LoopTab> {
             onTap: () => _toggleFollow(v.autor),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3.5),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 3.5,
+              ),
               decoration: BoxDecoration(
                 color: following
                     ? Colors.white.withValues(alpha: 0.18)
@@ -3402,11 +3461,7 @@ class _LoopTabState extends State<_LoopTab> {
 
   Widget _botaoRedondo(Widget child) {
     // Ações flutuantes: área de toque confortável, sem bolhas pretas rígidas.
-    return SizedBox(
-      width: 44,
-      height: 42,
-      child: Center(child: child),
-    );
+    return SizedBox(width: 44, height: 42, child: Center(child: child));
   }
 
   Widget _acao({
@@ -3660,7 +3715,7 @@ class _LupezOverlayState extends State<_LupezOverlay>
         _msgs.add(
           const _Mensagem(
             texto:
-                'Oi! Sou a **Lupez** 🎬✨\nComo posso te ajudar hoje? Posso recomendar filmes, séries, livros, animes e K-dramas!',
+                'Oi! Sou a **Lupez** \nComo posso te ajudar hoje? ',
             deLupez: true,
           ),
         );
