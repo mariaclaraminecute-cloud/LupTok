@@ -1,592 +1,1230 @@
 import 'dart:convert';
 
 import 'package:camera/camera.dart';
+
 import 'package:flutter/foundation.dart';
+
 import 'package:http/http.dart' as http;
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
+  // Permite que as telas atualizem dados da conta sem reiniciar o aplicativo.
+  static final ValueNotifier<int> perfilAtualizado = ValueNotifier<int>(0);
+
   static const String _configuredBaseUrl = String.fromEnvironment(
+
     'API_BASE_URL',
+
   );
 
   static String get baseUrl {
+
     const railwayUrl =
+
         'https://extraordinary-forgiveness-production-36f9.up.railway.app';
 
     final value = _configuredBaseUrl.isNotEmpty
+
         ? _configuredBaseUrl
+
         : railwayUrl;
 
     return value.endsWith('/')
+
         ? value.substring(0, value.length - 1)
+
         : value;
+
   }
 
   static Future<Map<String, dynamic>> cadastrar({
+
     required String nome,
+
     required String nomeUsuario,
+
     required String email,
+
     required String senha,
+
   }) async {
+
     return _post('/api/auth/register', {
+
       'nome': nome,
+
       'nome_usuario': nomeUsuario,
+
       'email': email.trim(),
+
       'senha': senha,
+
     });
+
   }
 
   static Future<Map<String, dynamic>> login({
+
     required String identificador,
+
     required String senha,
+
   }) async {
+
     return _post('/api/auth/login', {
+
       'identificador': identificador.trim(),
+
       'senha': senha,
+
     });
+
   }
 
   static Future<String?> tokenDaSessao() async {
+
     final preferencias = await SharedPreferences.getInstance();
+
     return preferencias.getString('session_token');
+
   }
 
   static Future<String> conversarComLupez({
+
     required String mensagem,
+
     required List<Map<String, String>> historico,
+
   }) async {
+
     final token = await tokenDaSessao();
+
     if (token == null) {
+
       throw Exception('Faça login para conversar com o Lupez.');
+
     }
+
     final response = await http
+
         .post(
+
           Uri.parse('$baseUrl/api/lupez/chat'),
+
           headers: {
+
             'Content-Type': 'application/json',
+
             'Authorization': 'Bearer $token',
+
           },
+
           body: jsonEncode({'mensagem': mensagem, 'historico': historico}),
+
         )
+
         .timeout(const Duration(seconds: 60));
+
     final data = _decodeResponse(response);
+
     final resposta = data['resposta'];
+
     if (resposta is! String || resposta.trim().isEmpty) {
+
       throw Exception('O servidor retornou uma resposta inválida do Lupez.');
+
     }
+
     return resposta.trim();
+
   }
 
   static Future<List<Map<String, dynamic>>> listarVideos({
+
     String? query,
+
     Object? idObra,
+
   }) async {
+
     final token = await tokenDaSessao();
+
     if (token == null) {
+
       throw Exception('Faça login para carregar o feed.');
+
     }
+
     final queryParams = <String, String>{};
+
     if (query != null && query.trim().isNotEmpty) {
+
       queryParams['q'] = query.trim();
+
     }
+
     if (idObra != null && idObra.toString().trim().isNotEmpty) {
+
       queryParams['id_obra'] = idObra.toString().trim();
+
     }
+
     final uri = Uri.parse(
+
       '$baseUrl/api/videos',
+
     ).replace(queryParameters: queryParams.isEmpty ? null : queryParams);
+
     final response = await http
+
         .get(uri, headers: {'Authorization': 'Bearer $token'})
+
         .timeout(const Duration(seconds: 20));
+
     final data = _decodeResponse(response);
+
     final videos = data['videos'];
+
     if (videos is! List) {
+
       throw Exception('O servidor retornou uma lista de vídeos inválida.');
+
     }
+
     return videos.map((video) {
+
       if (video is! Map) {
+
         throw Exception('O servidor retornou um vídeo inválido.');
+
       }
+
       return Map<String, dynamic>.from(video);
+
     }).toList();
+
   }
 
   static Future<List<Map<String, dynamic>>> buscarVideos(String query) =>
+
       listarVideos(query: query);
+
   static Future<List<Map<String, dynamic>>> buscarObras(String query) =>
+
       listarObras(query: query);
+
   // ── Chat entre usuários ──────────────────────────────────────────
   static Future<List<Map<String, dynamic>>> listarConversas() async {
+
     final data = await _authenticatedGet('/api/conversas');
+
     final conversas = data['conversas'];
+
     if (conversas is! List) {
+
       throw Exception('O servidor retornou uma lista de conversas inválida.');
+
     }
+
     return conversas.map(_mapResponseItem).toList();
+
   }
 
   static Future<Map<String, dynamic>> iniciarConversa({
+
     required Object idDestinatario,
+
   }) async {
+
     return _authenticatedPost('/api/conversas', {
+
       'id_destinatario': idDestinatario,
+
     });
+
   }
 
   static Future<List<Map<String, dynamic>>> listarMensagens({
+
     required Object idConversa,
+
   }) async {
+
     final data = await _authenticatedGet('/api/conversas/$idConversa/mensagens');
+
     final mensagens = data['mensagens'];
+
     if (mensagens is! List) {
+
       throw Exception('O servidor retornou mensagens inválidas.');
+
     }
+
     return mensagens.map(_mapResponseItem).toList();
+
   }
 
   static Future<Map<String, dynamic>> enviarMensagem({
+
     required Object idConversa,
+
     required String texto,
+
   }) async {
+
     return _authenticatedPost('/api/conversas/$idConversa/mensagens', {
+
       'texto': texto,
+
     });
+
   }
+
   // Curtir ou descurtir um vídeo.
   static Future<Map<String, dynamic>> atualizarCurtidaVideo({
+
     required Object id,
+
     required bool curtido,
+
   }) async {
+
     final token = await tokenDaSessao();
+
     if (token == null) {
+
       throw Exception('Faça login para curtir vídeos.');
+
     }
+
     final response = await http
+
         .put(
+
           Uri.parse('$baseUrl/api/videos/$id/like'),
+
           headers: {
+
             'Content-Type': 'application/json',
+
             'Authorization': 'Bearer $token',
+
           },
+
           body: jsonEncode({'curtido': curtido}),
+
         )
+
         .timeout(const Duration(seconds: 15));
+
     return _decodeResponse(response);
+
   }
+
   // Denunciar um vídeo.
   static Future<void> denunciarVideo({
+
     required Object id,
+
     required String motivo,
+
     required String descricao,
+
   }) async {
+
     final token = await tokenDaSessao();
+
     if (token == null) {
+
       throw Exception('Faça login para denunciar vídeos.');
+
     }
+
     final response = await http
+
         .post(
+
           Uri.parse('$baseUrl/api/videos/$id/report'),
+
           headers: {
+
             'Content-Type': 'application/json',
+
             'Authorization': 'Bearer $token',
+
           },
+
           body: jsonEncode({
+
             'motivo': motivo,
+
             'descricao': descricao,
+
           }),
+
         )
+
         .timeout(const Duration(seconds: 15));
+
     _decodeResponse(response);
+
   }
 
   static Future<List<Map<String, dynamic>>> listarObras({
+
     String? query,
+
   }) async {
+
     final endpoint = query == null
+
         ? '/api/works'
+
         : '/api/works?q=${Uri.encodeQueryComponent(query)}';
+
     final data = await _authenticatedGet(endpoint);
+
     final obras = data['obras'];
+
     if (obras is! List) {
+
       throw Exception('O servidor retornou uma lista de obras inválida.');
+
     }
+
     return obras.map(_mapResponseItem).toList();
+
   }
 
   static Future<List<Map<String, dynamic>>> listarGeneros() async {
+
     final data = await _authenticatedGet('/api/genres');
+
     final generos = data['generos'];
+
     if (generos is! List) {
+
       throw Exception('O servidor retornou uma lista de gêneros inválida.');
+
     }
+
     return generos.map(_mapResponseItem).toList();
+
   }
 
   static Future<List<Map<String, dynamic>>> listarPalavrasChave() async {
+
     final data = await _authenticatedGet('/api/keywords');
+
     final palavras = data['palavras_chave'];
+
     if (palavras is! List) {
+
       throw Exception(
+
         'O servidor retornou uma lista de palavras-chave inválida.',
+
       );
+
     }
+
     return palavras.map(_mapResponseItem).toList();
+
   }
 
   static Future<List<Map<String, dynamic>>> listarContas() async {
+
     final data = await _authenticatedGet('/api/users');
+
     final contas = data['usuarios'];
+
     if (contas is! List) {
+
       throw Exception('O servidor retornou uma lista de contas inválida.');
+
     }
+
     return contas.map(_parseAccount).toList();
+
   }
 
   static Future<Map<String, dynamic>> obterConta(Object id) async {
+
     final data = await _authenticatedGet('/api/users/$id');
+
     return _parseAccount(data['usuario']);
+
   }
 
   static Future<void> adicionarObra({
+
     required String titulo,
+
     required String tipo,
+
     String descricao = '',
+
     List<String> generos = const [],
+
     List<String> palavrasChave = const [],
+
   }) async {
+
     final token = await tokenDaSessao();
+
     if (token == null) {
+
       throw Exception('Faça login para adicionar uma obra.');
+
     }
+
     final response = await http
+
         .post(
+
           Uri.parse('$baseUrl/api/works'),
+
           headers: {
+
             'Content-Type': 'application/json',
+
             'Authorization': 'Bearer $token',
+
           },
+
           body: jsonEncode({
+
             'titulo': titulo,
+
             'tipo': tipo,
+
             'descricao': descricao,
+
             'generos': generos,
+
             'palavras_chave': palavrasChave,
+
           }),
+
         )
+
         .timeout(const Duration(seconds: 20));
+
     _decodeResponse(response);
+
   }
+
   // Editar os metadados de uma obra.
   static Future<Map<String, dynamic>> atualizarMetadadosObra({
+
     required Object id,
+
     required String descricao,
+
     required List<String> generos,
+
     required List<String> palavrasChave,
+
   }) async {
+
     final token = await tokenDaSessao();
+
     if (token == null) {
+
       throw Exception('Faça login para editar uma obra.');
+
     }
+
     final response = await http
+
         .put(
+
           Uri.parse('$baseUrl/api/works/$id/metadata'),
+
           headers: {
+
             'Content-Type': 'application/json',
+
             'Authorization': 'Bearer $token',
+
           },
+
           body: jsonEncode({
+
             'descricao': descricao,
+
             'generos': generos,
+
             'palavras_chave': palavrasChave,
+
           }),
+
         )
+
         .timeout(const Duration(seconds: 20));
+
     return _decodeResponse(response);
+
   }
 
   static Future<void> avaliarObra({
+
     required Object id,
+
     required bool souFa,
+
   }) async {
+
     final token = await tokenDaSessao();
+
     if (token == null) {
+
       throw Exception('Faça login para avaliar uma obra.');
+
     }
+
     final response = await http
+
         .put(
+
           Uri.parse('$baseUrl/api/works/$id/rating'),
+
           headers: {
+
             'Content-Type': 'application/json',
+
             'Authorization': 'Bearer $token',
+
           },
+
           body: jsonEncode({'sou_fa': souFa}),
+
         )
+
         .timeout(const Duration(seconds: 20));
+
     _decodeResponse(response);
+
   }
 
   static Future<Map<String, dynamic>> publicarVideo({
+
     required XFile arquivo,
+
     required String descricao,
+
     required String tipoConteudo,
+
     required String spoiler,
+
     required String privacidade,
+
     Object? idObra,
+
   }) async {
+
     final token = await tokenDaSessao();
+
     if (token == null) {
+
       throw Exception('Faça login para publicar um vídeo.');
+
     }
+
     final request = http.MultipartRequest(
+
       'POST',
+
       Uri.parse('$baseUrl/api/videos'),
+
     );
+
     request.headers['Authorization'] = 'Bearer $token';
+
     request.fields.addAll({
+
       'descricao': descricao,
+
       'tipo_conteudo': tipoConteudo,
+
       'spoiler': spoiler,
+
       'privacidade': privacidade,
+
     });
+
     if (idObra != null) {
+
       request.fields['id_obra'] = idObra.toString();
+
     }
+
     request.files.add(
+
       http.MultipartFile(
+
         'video',
+
         arquivo.openRead(),
+
         await arquivo.length(),
+
         filename: _nomeArquivoUploadVideo(arquivo),
+
       ),
+
     );
+
     final streamedResponse = await request.send().timeout(
+
       const Duration(minutes: 5),
+
     );
+
     final response = await http.Response.fromStream(streamedResponse);
+
     return _decodeResponse(response);
+
   }
 
   static String _nomeArquivoUploadVideo(XFile arquivo) {
+
     const extensoesPermitidas = {
+
       '.mp4',
+
       '.mov',
+
       '.m4v',
+
       '.webm',
+
     };
+
     String extensaoDe(String caminho) {
+
       final nome = caminho.split(RegExp(r'[/\\\\]')).last;
+
       final ponto = nome.lastIndexOf('.');
+
       return ponto < 0 ? '' : nome.substring(ponto).toLowerCase();
+
     }
+
     final extensao = [
+
       arquivo.name,
+
       arquivo.path,
+
     ].map(extensaoDe).where(extensoesPermitidas.contains).firstOrNull;
+
     if (extensao != null) {
+
       return 'video$extensao';
+
     }
+
     final extensaoMime = switch (arquivo.mimeType?.toLowerCase()) {
+
       'video/mp4' => '.mp4',
+
       'video/quicktime' => '.mov',
+
       'video/x-m4v' => '.m4v',
+
       'video/webm' => '.webm',
+
       _ => null,
+
     };
+
     if (extensaoMime != null) {
+
       return 'video$extensaoMime';
+
     }
+
     if (kIsWeb) return 'video.webm';
+
     return 'video.mp4';
+
   }
 
   static String urlArquivoVideo(Object id) =>
+
       '$baseUrl/api/videos/$id/arquivo';
+
   static Future<String> urlArquivoVideoWeb(Object id) async {
+
     final token = await tokenDaSessao();
+
     if (token == null) {
+
       throw Exception('Faça login para reproduzir o vídeo.');
+
     }
+
     final response = await http
+
         .get(
+
           Uri.parse('$baseUrl/api/videos/$id/acesso'),
+
           headers: {'Authorization': 'Bearer $token'},
+
         )
+
         .timeout(const Duration(seconds: 15));
+
     final data = _decodeResponse(response);
+
     final url = data['url'];
+
     if (url is! String) {
+
       throw Exception('O servidor não retornou um link de vídeo válido.');
+
     }
+
     return '$baseUrl$url';
+
   }
 
+// ── Perfil persistente no Railway ─────────────────────────────────────
+static Future<void> _sincronizarCachePerfil(Map<String, dynamic> usuario) async {
+  final prefs = await SharedPreferences.getInstance();
+  final nome = usuario['nome'];
+  final nomeUsuario = usuario['nome_usuario'];
+  if (nome is String) await prefs.setString('perfil_nome', nome);
+  if (nomeUsuario is String) {
+    await prefs.setString('perfil_usuario', '@${nomeUsuario.replaceFirst(RegExp(r'^@+'), '')}');
+  }
+  if (usuario['id_usuario'] != null) {
+    await prefs.setString('perfil_id', usuario['id_usuario'].toString());
+  }
+  final bio = usuario['bio'];
+  final assistindo = usuario['assistindo'];
+  if (bio is String) await prefs.setString('perfil_bio', bio);
+  if (assistindo is String) await prefs.setString('perfil_assistindo', assistindo);
+  final foto = usuario['foto_url'];
+  if (foto is String && foto.isNotEmpty) {
+    await prefs.setString('perfil_foto_url', foto);
+  } else if (usuario.containsKey('foto_url')) {
+    await prefs.remove('perfil_foto_url');
+  }
+  if (usuario['avatar_versao'] != null) {
+    await prefs.setString('perfil_avatar_versao', usuario['avatar_versao'].toString());
+  }
+}
+
+static Future<Map<String, dynamic>> meuPerfil() async {
+  final dados = await _authenticatedGet('/api/me');
+  final usuario = _mapResponseItem(dados['usuario']);
+  await _sincronizarCachePerfil(usuario);
+  return usuario;
+}
+
+static Future<Map<String, dynamic>> salvarMeuPerfil({
+  required String nome,
+  required String nomeUsuario,
+  required String bio,
+  required String assistindo,
+}) async {
+  final token = await tokenDaSessao();
+  if (token == null) throw Exception('Faça login para editar seu perfil.');
+  final response = await http.put(
+    Uri.parse('$baseUrl/api/me'),
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $token',
+    },
+    body: jsonEncode({
+      'nome': nome.trim(),
+      'nome_usuario': nomeUsuario.trim().replaceFirst(RegExp(r'^@+'), ''),
+      'bio': bio.trim(),
+      'assistindo': assistindo.trim(),
+    }),
+  ).timeout(const Duration(seconds: 20));
+  final dados = _decodeResponse(response);
+  final usuario = _mapResponseItem(dados['usuario']);
+  await _sincronizarCachePerfil(usuario);
+  perfilAtualizado.value++;
+  return usuario;
+}
+
+static Future<Map<String, dynamic>> salvarFotoPerfil(XFile foto) async {
+  final token = await tokenDaSessao();
+  if (token == null) throw Exception('Faça login para mudar sua foto.');
+  final tamanho = await foto.length();
+  if (tamanho > 500 * 1024) {
+    throw Exception('Escolha uma foto menor. O limite é 500 KB.');
+  }
+  final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/api/me/avatar'));
+  request.headers['Authorization'] = 'Bearer $token';
+  request.files.add(http.MultipartFile(
+    'foto', foto.openRead(), tamanho, filename: foto.name,
+  ));
+  final streamed = await request.send().timeout(const Duration(seconds: 25));
+  final response = await http.Response.fromStream(streamed);
+  final dados = _decodeResponse(response);
+  final usuario = _mapResponseItem(dados['usuario']);
+  await _sincronizarCachePerfil(usuario);
+  perfilAtualizado.value++;
+  return usuario;
+}
+
+static Future<Map<String, dynamic>> removerFotoPerfil() async {
+  final token = await tokenDaSessao();
+  if (token == null) throw Exception('Faça login para remover sua foto.');
+  final response = await http.delete(
+    Uri.parse('$baseUrl/api/me/avatar'),
+    headers: {'Authorization': 'Bearer $token'},
+  ).timeout(const Duration(seconds: 20));
+  final dados = _decodeResponse(response);
+  final usuario = _mapResponseItem(dados['usuario']);
+  await _sincronizarCachePerfil(usuario);
+  perfilAtualizado.value++;
+  return usuario;
+}
+
+static String? urlFotoPerfil(Object? caminho, [Object? versao]) {
+  if (caminho is! String || caminho.trim().isEmpty) return null;
+  final limpa = caminho.trim();
+  final absoluta = limpa.startsWith('https://') || limpa.startsWith('http://')
+      ? limpa : '$baseUrl${limpa.startsWith('/') ? '' : '/'}$limpa';
+  final uri = Uri.tryParse(absoluta);
+  if (uri == null) return null;
+  if (versao == null) return uri.toString();
+  return uri.replace(queryParameters: {...uri.queryParameters, 'v': versao.toString()}).toString();
+}
+
   static Future<void> salvarSessao(Map<String, dynamic> resposta) async {
+
     final token = resposta['token'];
+
     final usuario = resposta['usuario'];
+
     if (token is! String ||
+
         token.isEmpty ||
+
         usuario is! Map<String, dynamic>) {
+
       throw Exception('O servidor não retornou os dados da sessão.');
+
     }
+
     final nome = usuario['nome'];
+
     final nomeUsuario = usuario['nome_usuario'];
+
     final email = usuario['email'];
+
     final idUsuario = usuario['id_usuario'];
+
     if (nome is! String ||
+
         nomeUsuario is! String ||
+
         email is! String ||
+
         idUsuario == null) {
+
       throw Exception('O servidor retornou dados de conta inválidos.');
+
     }
+
     final preferencias = await SharedPreferences.getInstance();
+    final outroUsuario = preferencias.getString('perfil_id') != null &&
+        preferencias.getString('perfil_id') != idUsuario.toString();
+    if (outroUsuario) {
+      for (final chave in ['perfil_bio', 'perfil_assistindo', 'perfil_foto_url', 'perfil_avatar_versao']) {
+        await preferencias.remove(chave);
+      }
+    }
+
     await preferencias.setString('session_token', token);
+
     await preferencias.setString('perfil_nome', nome);
+
     await preferencias.setString('perfil_usuario', '@$nomeUsuario');
+
     await preferencias.setString('perfil_email', email);
+
     await preferencias.setString('perfil_id', idUsuario.toString());
+
   }
 
   static Future<bool> temSessaoValida() async {
+
     final preferencias = await SharedPreferences.getInstance();
+
     final token = preferencias.getString('session_token');
+
     if (token == null) return false;
+
     final partes = token.split('.');
+
     if (partes.length != 3) {
+
       await _limparDadosSessao(preferencias);
+
       return false;
+
     }
+
     try {
+
       final payload = jsonDecode(
+
         utf8.decode(base64Url.decode(base64Url.normalize(partes[1]))),
+
       );
+
       final expiracao = payload is Map<String, dynamic>
+
           ? payload['exp']
+
           : null;
+
       final valida =
+
           expiracao is num &&
+
           expiracao > DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
       if (!valida) {
+
         await _limparDadosSessao(preferencias);
+
       }
+
       return valida;
+
     } on FormatException {
+
       await _limparDadosSessao(preferencias);
+
       return false;
+
     }
+
   }
 
   static Future<void> encerrarSessao() async {
+
     final preferencias = await SharedPreferences.getInstance();
+
     await _limparDadosSessao(preferencias);
+
   }
 
   static Future<void> _limparDadosSessao(
+
     SharedPreferences preferencias,
+
   ) async {
+
     for (final chave in [
+
       'session_token',
+
       'perfil_id',
+
       'perfil_nome',
+
       'perfil_usuario',
+
       'perfil_email',
+      'perfil_foto_url',
+      'perfil_avatar_versao',
+
       'perfil_bio',
+
       'perfil_obra_favorita',
+
       'perfil_assistindo',
+
     ]) {
+
       await preferencias.remove(chave);
+
     }
+
   }
 
   static Future<Map<String, dynamic>> _post(
+
     String endpoint,
+
     Map<String, dynamic> body,
+
   ) async {
+
     final response = await http
+
         .post(
+
           Uri.parse('$baseUrl$endpoint'),
+
           headers: {'Content-Type': 'application/json'},
+
           body: jsonEncode(body),
+
         )
+
         .timeout(const Duration(seconds: 15));
+
     return _decodeResponse(response);
+
   }
 
   static Future<Map<String, dynamic>> _authenticatedGet(
+
     String endpoint,
+
   ) async {
+
     final token = await tokenDaSessao();
+
     if (token == null) {
+
       throw Exception('Faça login para continuar.');
+
     }
+
     final response = await http
+
         .get(
+
           Uri.parse('$baseUrl$endpoint'),
+
           headers: {'Authorization': 'Bearer $token'},
+
         )
+
         .timeout(const Duration(seconds: 20));
+
     return _decodeResponse(response);
+
   }
 
   static Future<Map<String, dynamic>> _authenticatedPost(
+
     String endpoint,
+
     Map<String, dynamic> body,
+
   ) async {
+
     final token = await tokenDaSessao();
+
     if (token == null) {
+
       throw Exception('Faça login para continuar.');
+
     }
+
     final response = await http
+
         .post(
+
           Uri.parse('$baseUrl$endpoint'),
+
           headers: {
+
             'Content-Type': 'application/json',
+
             'Authorization': 'Bearer $token',
+
           },
+
           body: jsonEncode(body),
+
         )
+
         .timeout(const Duration(seconds: 20));
+
     return _decodeResponse(response);
+
   }
 
   static Map<String, dynamic> _mapResponseItem(Object? item) {
+
     if (item is! Map) {
+
       throw Exception('O servidor retornou um item inválido.');
+
     }
+
     return Map<String, dynamic>.from(item);
+
   }
 
   static Map<String, dynamic> _parseAccount(Object? item) {
+
     final account = _mapResponseItem(item);
+
     final works = account['obras'];
+
     if (works is! List) {
+
       throw Exception('O servidor retornou obras de conta inválidas.');
+
     }
+
     return {
+
       ...account,
+
       'obras': works.map(_mapResponseItem).toList(),
+
     };
+
   }
 
   static Map<String, dynamic> _decodeResponse(http.Response response) {
+
     final Map<String, dynamic> data;
+
     try {
+
       final decoded = jsonDecode(response.body);
+
       if (decoded is! Map<String, dynamic>) {
+
         throw const FormatException();
+
       }
+
       data = decoded;
+
     } on FormatException {
+
       throw Exception('O servidor retornou uma resposta inválida.');
+
     }
+
     if (response.statusCode >= 200 && response.statusCode < 300) {
+
       return data;
+
     }
+
     throw Exception(
+
       data['message'] ??
+
           data['mensagem'] ??
+
           data['erro'] ??
+
           'Erro ${response.statusCode} ao acessar a API.',
+
     );
+
   }
+
 }

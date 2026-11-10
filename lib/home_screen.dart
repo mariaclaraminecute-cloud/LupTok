@@ -78,6 +78,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   bool _ocultarSpoilers = false;
   List<String> _gostosPerfil = [];
   String? _idUsuarioAtual;
+  String _nomePerfilAtual = '';
+  String? _fotoPerfilAtual;
+  String _versaoFotoPerfil = '0';
 
   bool _mostrarAvisoPublicado = false;
   String _tituloAvisoPublicado = '';
@@ -110,7 +113,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     super.initState();
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
     _carregarPreferencias();
+    unawaited(_sincronizarPerfilAoAbrir());
     unawaited(_carregarVideosApi());
+    ApiService.perfilAtualizado.addListener(_aoAtualizarPerfilGlobal);
 
     _glowCtrl = AnimationController(
       vsync: this,
@@ -179,8 +184,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     });
   }
 
+  Future<void> _sincronizarPerfilAoAbrir() async {
+    try {
+      await ApiService.meuPerfil();
+      await _carregarPreferencias();
+    } catch (_) {
+      // Se a rede cair, o perfil pode mostrar os últimos dados locais.
+    }
+  }
+
+  void _aoAtualizarPerfilGlobal() {
+    unawaited(_carregarPreferencias());
+    unawaited(_carregarVideosApi());
+  }
+
   @override
   void dispose() {
+    ApiService.perfilAtualizado.removeListener(_aoAtualizarPerfilGlobal);
     _avisoPublicadoTimer?.cancel();
     _bemVindoCtrl.dispose();
     _glowCtrl.dispose();
@@ -192,6 +212,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     if (!mounted) return;
     setState(() {
       _idUsuarioAtual = preferencias.getString('perfil_id');
+      _nomePerfilAtual = preferencias.getString('perfil_nome') ?? '';
+      _fotoPerfilAtual = preferencias.getString('perfil_foto_url');
+      _versaoFotoPerfil = preferencias.getString('perfil_avatar_versao') ?? '0';
       _ocultarSpoilers =
           preferencias.getBool('settings_hide_spoilers') ?? false;
       _gostosPerfil = [
@@ -375,7 +398,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       currentUserId: _idUsuarioAtual,
                       isVisible: _tabAtual == 0,
                     ),
-                    GroupsScreen(),
+                    GroupsScreen(key: ValueKey(ApiService.perfilAtualizado.value)),
                     ProfileScreen(
                       onOpenSettings: _abrirConfiguracoes,
                       availableVideos: _videos
@@ -801,10 +824,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 backgroundColor: active
                     ? AppPalette.button(context)
                     : AppPalette.accent(context),
-                child: const Text(
-                  'A',
-                  style: TextStyle(color: Colors.white, fontSize: 12),
-                ),
+                foregroundImage: _fotoPerfilAtual != null && _fotoPerfilAtual!.isNotEmpty
+                    ? NetworkImage(ApiService.urlFotoPerfil(_fotoPerfilAtual, _versaoFotoPerfil)!)
+                    : null,
+                child: _fotoPerfilAtual == null || _fotoPerfilAtual!.isEmpty
+                    ? Text(
+                        _nomePerfilAtual.isNotEmpty ? _nomePerfilAtual[0].toUpperCase() : '?',
+                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                      )
+                    : null,
               ),
               const SizedBox(height: 2),
               Text(
@@ -870,9 +898,9 @@ class _VideoCard {
 // ANIMAÇÃO DA ESTRELA (duplo toque)
 // ══════════════════════════════════════════════════════════════════
 
-/// Explosão de curtida: uma estrela tridimensional construída a partir de
-/// malha extrudada, iluminação, projeção com perspectiva e partículas.
-/// Sem imagens prontas nem bibliotecas adicionais.
+/// Curtida do Loop: estrela que nasce pequena, cresce, dá um leve impulso,
+/// permanece em destaque e solta partículas delicadas antes de sumir.
+/// A profundidade vem das camadas da estrela, não de uma rotação exagerada.
 class _LikeBurst extends StatefulWidget {
   final bool removing;
   const _LikeBurst({super.key, this.removing = false});
@@ -885,7 +913,7 @@ class _LikeBurstState extends State<_LikeBurst>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1850),
+    duration: const Duration(milliseconds: 1750),
   )..forward();
 
   @override
@@ -899,13 +927,13 @@ class _LikeBurstState extends State<_LikeBurst>
     return IgnorePointer(
       child: RepaintBoundary(
         child: SizedBox(
-          width: 330,
-          height: 330,
+          width: 300,
+          height: 300,
           child: AnimatedBuilder(
             animation: _controller,
-            builder: (context, _) => CustomPaint(
-              painter: _StarPopPainter(
-                t: _controller.value,
+            builder: (_, __) => CustomPaint(
+              painter: _SoftStarBurstPainter(
+                progress: _controller.value,
                 removing: widget.removing,
               ),
             ),
@@ -916,419 +944,235 @@ class _LikeBurstState extends State<_LikeBurst>
   }
 }
 
-/// Um ponto real no espaço tridimensional, antes da projeção 2D no canvas.
-class _StarPoint3 {
-  final double x;
-  final double y;
-  final double z;
-  const _StarPoint3(this.x, this.y, this.z);
-}
-
-/// Malha de 10 vértices nas duas faces, borda chanfrada e frente facetada.
-/// A rotação altera a projeção de TODOS os vértices (inclusive a espessura).
-class _PrismStarMesh {
-  static const _brightGold = Color(0xFFFFF4C2);
-  static const _midGold = Color(0xFFFFCF56);
-  static const _darkGold = Color(0xFF9E4D13);
-  static const _brightRose = Color(0xFFFFDCE8);
-  static const _midRose = Color(0xFFFF668A);
-  static const _darkRose = Color(0xFF7D123D);
-
-  static double _clamp01(double t) => t.clamp(0.0, 1.0).toDouble();
-
-  static List<_StarPoint3> _points(double radius, double z) {
-    return List.generate(10, (i) {
-      final a = -math.pi / 2 + math.pi * i / 5;
-      final r = i.isEven ? radius : radius * 0.43;
-      return _StarPoint3(r * math.cos(a), r * math.sin(a), z);
-    });
-  }
-
-  static Offset _project(
-    _StarPoint3 p,
-    Offset center,
-    double rx,
-    double ry,
-    double rz,
-    double scale,
-  ) {
-    // Z -> Y -> X: orientação espacial, sem simples Transform.rotate 2D.
-    final x0 = p.x * math.cos(rz) - p.y * math.sin(rz);
-    final y0 = p.x * math.sin(rz) + p.y * math.cos(rz);
-    final x1 = x0 * math.cos(ry) + p.z * math.sin(ry);
-    final z1 = -x0 * math.sin(ry) + p.z * math.cos(ry);
-    final y2 = y0 * math.cos(rx) - z1 * math.sin(rx);
-    final z2 = y0 * math.sin(rx) + z1 * math.cos(rx);
-    final distance = (420 - z2).clamp(100.0, 800.0).toDouble();
-    final perspective = 420 / distance;
-    return center + Offset(x1 * perspective * scale, y2 * perspective * scale);
-  }
-
-  static Path _poly(List<Offset> points) => Path()..addPolygon(points, true);
-
-  static void draw(
-    Canvas canvas, {
-    required Offset center,
-    required double scale,
-    required double rx,
-    required double ry,
-    required double rz,
-    required double time,
-    required bool removing,
-    double opacity = 1,
-  }) {
-    if (scale <= 0 || opacity <= 0) return;
-    final bright = removing ? _brightRose : _brightGold;
-    final mid = removing ? _midRose : _midGold;
-    final dark = removing ? _darkRose : _darkGold;
-    final edgeBack = _points(72, -15);
-    final edgeFront = _points(72, 9);
-    final bevelFront = _points(63, 22);
-    final back = edgeBack.map((p) => _project(p, center, rx, ry, rz, scale)).toList();
-    final rim = edgeFront.map((p) => _project(p, center, rx, ry, rz, scale)).toList();
-    final face = bevelFront.map((p) => _project(p, center, rx, ry, rz, scale)).toList();
-    final middle = _project(const _StarPoint3(0, 0, 24), center, rx, ry, rz, scale);
-
-    // A sombra acompanha o volume (e não um ícone achatado).
-    canvas.drawPath(
-      _poly(back),
-      Paint()
-        ..color = dark.withValues(alpha: opacity * 0.38)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 11),
-    );
-    canvas.drawPath(_poly(back), Paint()..color = dark.withValues(alpha: opacity));
-
-    // Faces laterais: luz incidente variável por direção da superfície.
-    final sides = <({double depth, Path path, Color color})>[];
-    for (var i = 0; i < 10; i++) {
-      final j = (i + 1) % 10;
-      final midAngle = -math.pi / 2 + math.pi * (i + 0.5) / 5;
-      final lightValue = _clamp01(
-        0.32 + 0.35 * math.cos(midAngle - rz - 0.6) +
-            0.22 * math.cos(ry + midAngle),
-      );
-      final points = [back[i], back[j], rim[j], rim[i]];
-      final depth = math.sin(midAngle + ry) * math.cos(rx);
-      sides.add((
-        depth: depth,
-        path: _poly(points),
-        color: Color.lerp(dark, mid, lightValue)!.withValues(alpha: opacity),
-      ));
-    }
-    sides.sort((a, b) => a.depth.compareTo(b.depth));
-    for (final side in sides) {
-      canvas.drawPath(side.path, Paint()..color = side.color);
-    }
-
-    // Bisel polido: cada uma das dez faixas tem um reflexo próprio.
-    for (var i = 0; i < 10; i++) {
-      final j = (i + 1) % 10;
-      final glint = _clamp01(
-        0.40 + 0.35 * math.sin(i * 1.35 + ry * 1.5 - rz + 1.1),
-      );
-      canvas.drawPath(
-        _poly([rim[i], rim[j], face[j], face[i]]),
-        Paint()..color = Color.lerp(mid, bright, glint)!
-            .withValues(alpha: opacity),
-      );
-    }
-
-    // Triângulos centrais da frente, cada um com sombreamento diferente.
-    for (var i = 0; i < 10; i++) {
-      final j = (i + 1) % 10;
-      final luminance = _clamp01(
-        0.38 + 0.25 * math.sin(i * 2.3 - ry + 0.5) +
-            0.28 * math.cos(rx * 1.5 + i * 0.9),
-      );
-      final color = Color.lerp(mid, bright, luminance)!;
-      canvas.drawPath(
-        _poly([middle, face[i], face[j]]),
-        Paint()..color = color.withValues(alpha: opacity),
-      );
-    }
-
-    final outline = _poly(face);
-    canvas.drawPath(
-      outline,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeJoin = StrokeJoin.round
-        ..strokeWidth = 1.3 * scale.clamp(0.35, 1.3).toDouble()
-        ..color = bright.withValues(alpha: opacity * 0.92),
-    );
-
-    // Reflexo especular móvel: passa somente pelo recorte da face frontal.
-    canvas.save();
-    canvas.clipPath(outline);
-    final scanX = center.dx - 150 * scale + 300 * scale * time;
-    final scanRect = Rect.fromLTWH(
-      scanX - 18 * scale,
-      center.dy - 105 * scale,
-      36 * scale,
-      210 * scale,
-    );
-    canvas.drawRect(
-      scanRect,
-      Paint()
-        ..shader = LinearGradient(
-          colors: [
-            Colors.white.withValues(alpha: 0),
-            Colors.white.withValues(alpha: opacity * 0.40),
-            Colors.white.withValues(alpha: 0),
-          ],
-        ).createShader(scanRect),
-    );
-    canvas.restore();
-  }
-}
-
-/// Desenho do brilho, partículas de vários tamanhos, trilhas e geometria 3D.
-/// Animação de curtida coreografada em cinco atos, ~1,85 s:
-/// 1. antecipação luminosa, 2. giro da estrela com perspectiva,
-/// 3. impacto elástico, 4. trilhas e poeira de estrelas,
-/// 5. permanência curta e saída desacelerada.
-///
-/// O movimento NÃO é somente um ScaleTransition. Cada frame redesenha
-/// a malha tridimensional e faz as partículas percorrerem curvas distintas.
-class _StarPopPainter extends CustomPainter {
-  final double t;
+class _SoftStarBurstPainter extends CustomPainter {
+  final double progress;
   final bool removing;
-  const _StarPopPainter({required this.t, required this.removing});
 
-  double _part(double start, double end) =>
-      ((t - start) / (end - start)).clamp(0.0, 1.0).toDouble();
+  const _SoftStarBurstPainter({
+    required this.progress,
+    required this.removing,
+  });
 
-  double _smooth(double v) => v * v * (3 - 2 * v);
-  double _out(double v) {
-    final q = 1 - v;
-    return 1 - q * q * q;
+  double _segment(double begin, double end) =>
+      ((progress - begin) / (end - begin)).clamp(0.0, 1.0).toDouble();
+
+  double _smooth(double value) => value * value * (3 - 2 * value);
+
+  double _outCubic(double value) {
+    final inverse = 1 - value;
+    return 1 - inverse * inverse * inverse;
   }
 
-  // Números pseudoaleatórios reproduzíveis: partículas NÃO mudam de caminho
-  // entre os frames, mesmo quando a animação é reconstruída pelo Flutter.
-  double _rand(int i, int salt) {
-    final n = math.sin((i + 1) * 12.9898 + salt * 78.233) * 43758.5453;
-    return n - n.floorToDouble();
+  // As partículas usam valores fixos por índice, sem saltos de um frame a outro.
+  double _random(int index, int salt) {
+    final result = math.sin(index * 24.17 + salt * 76.31) * 43758.5453;
+    return result - result.floorToDouble();
   }
 
-  Path _sparkle(Offset c, double r) => Path()
-    ..moveTo(c.dx, c.dy - r)
-    ..quadraticBezierTo(c.dx + r * 0.13, c.dy - r * 0.13, c.dx + r, c.dy)
-    ..quadraticBezierTo(c.dx + r * 0.13, c.dy + r * 0.13, c.dx, c.dy + r)
-    ..quadraticBezierTo(c.dx - r * 0.13, c.dy + r * 0.13, c.dx - r, c.dy)
-    ..quadraticBezierTo(c.dx - r * 0.13, c.dy - r * 0.13, c.dx, c.dy - r)
-    ..close();
-
-  void _aura(Canvas canvas, Offset c, Color gold, Color cream, double impact,
-      double visibility) {
-    if (visibility <= 0.001) return;
-    const radius = 126.0;
-    canvas.drawCircle(
-      c,
-      radius,
-      Paint()
-        ..shader = RadialGradient(
-          stops: const [0.0, 0.28, 0.65, 1.0],
-          colors: [
-            cream.withValues(alpha: visibility * (0.12 + 0.13 * impact)),
-            gold.withValues(alpha: visibility * (0.12 + 0.16 * impact)),
-            gold.withValues(alpha: visibility * 0.045),
-            Colors.transparent,
-          ],
-        ).createShader(Rect.fromCircle(center: c, radius: radius)),
-    );
-  }
-
-  void _drawTrails(Canvas canvas, Offset c, Color gold, Color pale,
-      double visibility) {
-    // Duas linhas curvas curtas passando por trás da estrela; elas se abrem
-    // após o impacto e não permanecem como anéis decorativos no vídeo.
-    for (var i = 0; i < 2; i++) {
-      final progress = _smooth(_part(0.32 + 0.055 * i, 0.70 + 0.05 * i));
-      final opacity = (1 - _smooth(_part(0.57 + i * 0.04, 0.79))) * visibility;
-      if (progress <= 0 || opacity <= 0.005) continue;
-      final radius = 49 + 75 * progress;
-      final start = -1.90 + i * 1.62 + 0.40 * progress;
-      canvas.drawArc(
-        Rect.fromCircle(center: c, radius: radius),
-        start,
-        1.15,
-        false,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeCap = StrokeCap.round
-          ..strokeWidth = 2.2 * (1 - progress * 0.55)
-          ..color = (i == 0 ? pale : gold).withValues(alpha: opacity * 0.76),
-      );
+  Path _starPath(double outerRadius) {
+    final path = Path();
+    for (var index = 0; index < 10; index++) {
+      final angle = -math.pi / 2 + math.pi * index / 5;
+      final radius = index.isEven ? outerRadius : outerRadius * 0.47;
+      final x = math.cos(angle) * radius;
+      final y = math.sin(angle) * radius;
+      if (index == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
     }
+    return path..close();
   }
 
-  void _drawParticles(Canvas canvas, Offset center, Color gold, Color pale) {
-    // Primeira camada: estilhaços e poeira dourada, com profundidade simulada,
-    // aceleração inicial, desaceleração e uma queda gravitacional quase sutil.
-    for (var i = 0; i < 46; i++) {
-      final delay = 0.36 + 0.085 * _rand(i, 1);
-      final finish = 0.77 + 0.15 * _rand(i, 2);
-      final u = _part(delay, finish);
+  Path _littleSparkle(Offset point, double radius) {
+    return Path()
+      ..moveTo(point.dx, point.dy - radius)
+      ..quadraticBezierTo(point.dx + radius * 0.17,
+          point.dy - radius * 0.17, point.dx + radius, point.dy)
+      ..quadraticBezierTo(point.dx + radius * 0.17,
+          point.dy + radius * 0.17, point.dx, point.dy + radius)
+      ..quadraticBezierTo(point.dx - radius * 0.17,
+          point.dy + radius * 0.17, point.dx - radius, point.dy)
+      ..quadraticBezierTo(point.dx - radius * 0.17,
+          point.dy - radius * 0.17, point.dx, point.dy - radius)
+      ..close();
+  }
+
+  void _drawParticles(Canvas canvas, Offset center, Color gold, Color light) {
+    // Nascem quando a estrela atinge o tamanho máximo e se espalham devagar.
+    for (var i = 0; i < 30; i++) {
+      final begin = 0.27 + _random(i, 1) * 0.12;
+      final duration = 0.41 + _random(i, 2) * 0.17;
+      final u = ((progress - begin) / duration).clamp(0.0, 1.0).toDouble();
       if (u <= 0 || u >= 1) continue;
 
-      final easing = _out(u);
-      final angle = i * 2.399963229728653 +
-          (_rand(i, 3) - 0.5) * 0.6 + (removing ? -0.08 : 0.08);
-      final perspective = 0.65 + _rand(i, 4) * 0.85;
-      final travel = (54 + 95 * _rand(i, 5)) * easing * perspective;
-      final swirl = (removing ? -1.0 : 1.0) * 0.35 * u * u;
-      final moveAngle = angle + swirl;
-      final gravity = 18 * u * u * perspective;
+      final ease = _outCubic(u);
+      final angle = i * 2.3999632297 + (_random(i, 3) - 0.5) * 0.46;
+      final distance = 40 + (50 + 35 * _random(i, 4)) * ease;
       final point = center + Offset(
-        math.cos(moveAngle) * travel,
-        math.sin(moveAngle) * travel * 0.78 + gravity,
+        math.cos(angle) * distance,
+        math.sin(angle) * distance * 0.93 + 9 * u * u,
       );
+      final alpha = math.sin(math.pi * u) *
+          (1 - _smooth(_segment(0.84, 1.0))) * 0.93;
+      if (alpha <= 0.002) continue;
 
-      final opacity = (_smooth((u / 0.18).clamp(0.0, 1.0).toDouble()) *
-          (1 - _smooth(((u - 0.52) / 0.48).clamp(0.0, 1.0).toDouble())))
-          .clamp(0.0, 1.0).toDouble();
-      final radius = (0.85 + _rand(i, 6) * 1.75) * perspective;
-      final color = i % 4 == 0 ? pale : gold;
-
-      // Cauda orientada pelo vetor de velocidade, mais curta quando desacelera.
-      final tail = (8 + 14 * _rand(i, 7)) * (1 - 0.55 * u) * perspective;
-      final back = point - Offset(
-        math.cos(moveAngle) * tail,
-        math.sin(moveAngle) * tail * 0.78 + 1,
-      );
-      canvas.drawLine(
-        back,
-        point,
-        Paint()
-          ..strokeCap = StrokeCap.round
-          ..strokeWidth = radius * 0.72
-          ..color = color.withValues(alpha: opacity * 0.62),
-      );
+      final color = i % 4 == 0 ? light : gold;
+      final size = (1.15 + _random(i, 5) * 1.5) * (1 - 0.22 * u);
       if (i % 7 == 0) {
         canvas.drawPath(
-          _sparkle(point, radius * (1.5 + 0.35 * math.sin(u * math.pi))),
-          Paint()..color = pale.withValues(alpha: opacity * 0.95),
+          _littleSparkle(point, size * 2.25),
+          Paint()..color = light.withValues(alpha: alpha),
         );
       } else {
         canvas.drawCircle(
           point,
-          radius,
-          Paint()..color = color.withValues(alpha: opacity),
+          size * 2.2,
+          Paint()
+            ..color = color.withValues(alpha: alpha * 0.16)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
+        );
+        canvas.drawCircle(
+          point,
+          size,
+          Paint()..color = color.withValues(alpha: alpha),
         );
       }
-    }
-
-    // Segunda camada: partículas atrasadas mais delicadas, pequenas estrelas
-    // que surgem quando a estrela principal já terminou seu giro.
-    for (var i = 0; i < 14; i++) {
-      final begin = 0.48 + 0.12 * _rand(i, 20);
-      final u = _part(begin, 0.93);
-      if (u <= 0 || u >= 1) continue;
-      final angle = i * (2 * math.pi / 14) + 0.15;
-      final travel = 55 + (42 + 26 * _rand(i, 21)) * _smooth(u);
-      final pos = center + Offset(
-        math.cos(angle) * travel,
-        math.sin(angle) * travel * 0.83 + 13 * u * u,
-      );
-      final shine = math.sin(u * math.pi).clamp(0.0, 1.0).toDouble();
-      canvas.drawPath(
-        _sparkle(pos, 2.0 + 2.0 * _rand(i, 22)),
-        Paint()..color = pale.withValues(alpha: shine * 0.65),
-      );
     }
   }
 
   @override
   void paint(Canvas canvas, Size size) {
-    final c = Offset(size.width / 2, size.height / 2);
-    final gold = removing ? const Color(0xFFEA7187) : const Color(0xFFFFCF66);
-    final cream = removing ? const Color(0xFFFFE4E7) : const Color(0xFFFFF7DA);
+    final center = Offset(size.width / 2, size.height / 2);
+    final gold = removing ? const Color(0xFFECA0A8) : const Color(0xFFFFD166);
+    final light = removing ? const Color(0xFFFFE8E9) : const Color(0xFFFFF4D1);
+    final shadow = removing ? const Color(0xFF8D2E3F) : const Color(0xFFB66A17);
 
-    final arriving = _part(0.09, 0.41);
-    final spin = _out(arriving);
-    final impactProgress = _part(0.30, 0.49);
-    final impact = math.sin(math.pi * impactProgress);
-    final exiting = _smooth(_part(0.79, 1.0));
-    final visibility = 1 - exiting;
+    // Crescimento principal: pequeno -> grande -> pequena acomodação.
+    // A estrela fica legível por um momento ANTES de sumir.
+    final growth = _outCubic(_segment(0.00, 0.38));
+    final bounceWindow = _segment(0.28, 0.56);
+    final bounce = (progress >= 0.28 && progress <= 0.56)
+        ? math.sin(math.pi * bounceWindow) * 0.10
+        : 0.0;
+    final fade = 1 - _smooth(_segment(0.77, 1.0));
+    final appear = _smooth(_segment(0.0, 0.08));
+    final alpha = (appear * fade).clamp(0.0, 1.0).toDouble();
+    final scale = (0.10 + 0.90 * growth + bounce) *
+        (1 - 0.13 * _smooth(_segment(0.77, 1.0)));
 
-    // A antecipação começa com um ponto e não com um círculo gigante.
-    final glimmer = math.sin(math.pi * _part(0.0, 0.19));
-    if (glimmer > 0) {
-      canvas.drawPath(
-        _sparkle(c, 4 + 8 * glimmer),
-        Paint()..color = cream.withValues(alpha: glimmer * 0.70),
-      );
-    }
+    if (alpha <= 0.002) return;
 
-    // Luz atrás do objeto 3D. Cresce no impacto, reduz durante a permanência.
-    final glow = _smooth(_part(0.12, 0.35)) * visibility;
-    _aura(canvas, c, gold, cream, impact, glow);
-    _drawTrails(canvas, c, gold, cream, glow);
-    _drawParticles(canvas, c, gold, cream);
-
-    // A escala tem dois tempos: aproximação e acomodação. O amortecimento
-    // cria a batida elástica, sem o efeito genérico de "zoom e desaparece".
-    final spring = 0.14 *
-        math.sin(math.pi * 2.55 * arriving) *
-        math.exp(-2.7 * arriving);
-    final scale = (0.07 + 0.93 * spin + spring) * (1 - exiting * 0.40);
-    final exitTilt = exiting * (removing ? -0.62 : 0.46);
-    final rx = -0.36 * (1 - spin) + 0.08 * math.sin(t * 5.2) + 0.28 * exiting;
-    final ry = (removing ? 1 : -1) * 1.27 * (1 - spin) + exitTilt;
-    final rz = (removing ? -1 : 1) * (0.58 * (1 - spin)) - 0.08 * spring;
-
-    _PrismStarMesh.draw(
-      canvas,
-      center: c + Offset(0, 14 * (1 - spin) - 11 * impact + 15 * exiting),
-      scale: scale,
-      rx: rx,
-      ry: ry,
-      rz: rz,
-      time: _smooth(_part(0.35, 0.77)),
-      removing: removing,
-      opacity: _smooth(_part(0.09, 0.20)) * visibility,
+    // Halo leve, restrito ao contorno da estrela, sem anéis gigantes.
+    final flash = math.sin(math.pi * _segment(0.23, 0.55))
+        .clamp(0.0, 1.0).toDouble();
+    final haloRadius = 72 + 18 * flash;
+    canvas.drawCircle(
+      center,
+      haloRadius,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            gold.withValues(alpha: alpha * (0.20 + 0.14 * flash)),
+            gold.withValues(alpha: alpha * 0.07),
+            Colors.transparent,
+          ],
+          stops: const [0, 0.57, 1],
+        ).createShader(Rect.fromCircle(center: center, radius: haloRadius)),
     );
 
-    // Reflexos na frente, chegando DEPOIS da estrela, não todos de uma vez.
-    for (var i = 0; i < 5; i++) {
-      final angle = (i * 2 * math.pi / 5) - 0.72;
-      final begin = 0.43 + i * 0.045;
-      final p = _part(begin, begin + 0.26);
-      if (p <= 0 || p >= 1) continue;
-      final alpha = math.sin(p * math.pi) * 0.80;
-      final radius = 83 + 18 * _out(p) + (i % 2) * 9;
-      final pos = c + Offset(math.cos(angle) * radius,
-          math.sin(angle) * radius * 0.87);
+    // Partículas passam atrás da estrela e aparecem só depois da expansão.
+    _drawParticles(canvas, center, gold, light);
+
+    canvas.save();
+    canvas.translate(center.dx, center.dy + 9 * (1 - growth));
+    canvas.rotate((removing ? 0.15 : -0.15) * (1 - growth));
+    canvas.scale(scale);
+    final star = _starPath(66);
+
+    // Profundidade discreta: cinco camadas laterais dão volume de verdade.
+    canvas.drawPath(
+      star.shift(const Offset(0, 8)),
+      Paint()
+        ..color = shadow.withValues(alpha: alpha * 0.38)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12),
+    );
+    for (var layer = 6; layer >= 1; layer--) {
       canvas.drawPath(
-        _sparkle(pos, 3.2 + 2.4 * math.sin(p * math.pi)),
-        Paint()..color = cream.withValues(alpha: alpha),
+        star.shift(Offset(0, layer * 0.85)),
+        Paint()..color = Color.lerp(
+          shadow,
+          gold,
+          (6 - layer) / 9,
+        )!.withValues(alpha: alpha),
       );
     }
+
+    // Face principal limpa e arredondada visualmente pelo contorno suave.
+    canvas.drawPath(
+      star,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [light.withValues(alpha: alpha),
+            gold.withValues(alpha: alpha),
+            shadow.withValues(alpha: alpha)],
+          stops: const [0.04, 0.58, 1.0],
+        ).createShader(const Rect.fromLTWH(-70, -70, 140, 140)),
+    );
+    canvas.drawPath(
+      star,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.45
+        ..strokeJoin = StrokeJoin.round
+        ..color = light.withValues(alpha: alpha * 0.85),
+    );
+
+    // Um único reflexo deslizando pela face, sem excesso de luz.
+    final shineProgress = _smooth(_segment(0.27, 0.69));
+    final shineAlpha = alpha *
+        math.sin(math.pi * _segment(0.27, 0.69))
+            .clamp(0.0, 1.0).toDouble() * 0.32;
+    if (shineAlpha > 0.002) {
+      canvas.save();
+      canvas.clipPath(star);
+      final left = -105 + 190 * shineProgress;
+      final rect = Rect.fromLTWH(left, -80, 25, 160);
+      canvas.drawRect(
+        rect,
+        Paint()
+          ..shader = LinearGradient(
+            colors: [
+              Colors.white.withValues(alpha: 0),
+              Colors.white.withValues(alpha: shineAlpha),
+              Colors.white.withValues(alpha: 0),
+            ],
+          ).createShader(rect),
+      );
+      canvas.restore();
+    }
+    canvas.restore();
   }
 
   @override
-  bool shouldRepaint(covariant _StarPopPainter old) =>
-      old.t != t || old.removing != removing;
+  bool shouldRepaint(covariant _SoftStarBurstPainter oldDelegate) =>
+      oldDelegate.progress != progress || oldDelegate.removing != removing;
 }
 
-/// Ícone discreto de estado curtido. A animação 3D fica no centro do vídeo;
-/// na lateral aparece apenas esta estrelinha simples, e só após o duplo toque.
+/// Pequena, discreta e só visível quando o vídeo estiver curtido.
 class _LikedStarBadge extends StatelessWidget {
   const _LikedStarBadge({super.key});
 
   @override
   Widget build(BuildContext context) {
     return const SizedBox(
-      width: 42,
-      height: 38,
+      width: 38,
+      height: 34,
       child: Center(
-        child: Icon(
-          Icons.star_rounded,
-          size: 30,
-          color: Color(0xFFFFD166),
-          shadows: [Shadow(color: Colors.black54, blurRadius: 8)],
-        ),
+        child: Icon(Icons.star_rounded, size: 27, color: _kStarGold),
       ),
     );
   }
@@ -2123,7 +1967,7 @@ class _SearchVideoPlayerScreenState extends State<_SearchVideoPlayerScreen> {
       _burstRemoving = !next;
       _burstSequence++;
     });
-    _burstTimer = Timer(const Duration(milliseconds: 1890), () {
+    _burstTimer = Timer(const Duration(milliseconds: 1800), () {
       if (mounted) setState(() => _burstVisible = false);
     });
     try {
@@ -2680,7 +2524,7 @@ class _LoopTabState extends State<_LoopTab> {
         ifAbsent: () => 1,
       );
     });
-    _likeAnimationTimers[key] = Timer(const Duration(milliseconds: 1890), () {
+    _likeAnimationTimers[key] = Timer(const Duration(milliseconds: 1800), () {
       if (!mounted) return;
       setState(() => _likeAnimations.remove(key));
       _likeAnimationTimers.remove(key);
