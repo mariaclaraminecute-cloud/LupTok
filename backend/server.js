@@ -1872,7 +1872,7 @@ async function iniciarServidor() {
       INDEX idx_avaliacao_usuario (id_usuario),
       CONSTRAINT fk_avaliacao_video FOREIGN KEY (id_video) REFERENCES video_post(id_video) ON DELETE CASCADE,
       CONSTRAINT fk_avaliacao_usuario FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario) ON DELETE CASCADE,
-      CONSTRAINT chk_avaliacao_nota CHECK (nota BETWEEN 1 AND 5)
+      CONSTRAINT chk_video_avaliacao_nota CHECK (nota BETWEEN 1 AND 5)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
     for (const [table, column, parentTable, parentColumn, constraint, onDelete] of [
       ['obra_genero', 'id_obra', 'obra', 'id_obra', 'fk_obra_genero_obra', 'CASCADE'],
