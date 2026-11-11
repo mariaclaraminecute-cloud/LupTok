@@ -12,7 +12,7 @@ const path = require('path');
 const { randomUUID } = require('crypto');
 
 const app = express();
-const uploadsDirectory = path.join(__dirname, 'uploads');
+const uploadsDirectory = process.env.UPLOADS_DIR || (process.env.RAILWAY_ENVIRONMENT ? '/app/uploads' : path.join(__dirname, 'uploads'));
 fs.mkdirSync(uploadsDirectory, { recursive: true });
 
 app.use(cors());
@@ -115,6 +115,132 @@ function receberVideo(req, res, next) {
   });
 }
 
+
+
+// Imagens do perfil: armazenadas no mesmo volume persistente configurado para uploads.
+const profileImageUpload = multer({
+  storage: multer.diskStorage({
+    destination: uploadsDirectory,
+    filename: (_req, file, cb) => cb(null, `${randomUUID()}${path.extname(file.originalname).toLowerCase()}`),
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, ['.jpg', '.jpeg', '.png', '.webp'].includes(ext));
+  },
+});
+
+function validarAssinaturaImagem(bytes) {
+  if (bytes.length < 12) return false;
+  return (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) ||
+    (bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))) ||
+    (bytes.toString('ascii',0,4) === 'RIFF' && bytes.toString('ascii',8,12) === 'WEBP');
+}
+
+app.get('/api/profile/me', autenticar, async (req, res) => {
+  try {
+    const [[usuario]] = await db.execute(
+      'SELECT nome, nome_usuario, bio, foto_url, capa_url, atividade, obra_atual FROM usuario WHERE id_usuario = ? LIMIT 1',
+      [req.usuario.id_usuario],
+    );
+    if (!usuario) return res.status(404).json({ erro: 'Perfil não encontrado.' });
+    return res.json(usuario);
+  } catch (error) {
+    console.error('Erro ao consultar perfil:', error.message);
+    return res.status(500).json({ erro: 'Não foi possível carregar o perfil.' });
+  }
+});
+
+app.put('/api/profile/me', autenticar, async (req, res) => {
+  const { nome, nome_usuario, bio, atividade, obra_atual } = req.body ?? {};
+  if (typeof nome !== 'string' || !nome.trim() || nome.trim().length > 100 ||
+      typeof nome_usuario !== 'string' || !/^[a-zA-Z0-9_.]{1,30}$/.test(nome_usuario) ||
+      typeof bio !== 'string' || bio.length > 160 ||
+      !['Assistindo', 'Lendo'].includes(atividade) ||
+      typeof obra_atual !== 'string' || obra_atual.length > 150) {
+    return res.status(400).json({ erro: 'Confira o nome, usuário, biografia e atividade.' });
+  }
+  try {
+    await db.execute(
+      `UPDATE usuario SET nome = ?, nome_usuario = ?, bio = ?, atividade = ?, obra_atual = ? WHERE id_usuario = ?`,
+      [nome.trim(), nome_usuario, bio.trim(), atividade, obra_atual.trim(), req.usuario.id_usuario],
+    );
+    return res.json({ nome: nome.trim(), nome_usuario, bio: bio.trim(), atividade, obra_atual: obra_atual.trim() });
+  } catch (error) {
+    if (error.code === 'ER_DUP_ENTRY') return res.status(409).json({ erro: 'Esse nome de usuário já está em uso.' });
+    console.error('Erro ao salvar perfil:', error.message);
+    return res.status(500).json({ erro: 'Não foi possível salvar o perfil.' });
+  }
+});
+
+app.delete('/api/profile/me/:tipo', autenticar, async (req, res) => {
+  const campo = req.params.tipo === 'foto' ? 'foto_url' : req.params.tipo === 'capa' ? 'capa_url' : null;
+  if (!campo) return res.status(404).json({ erro: 'Imagem inválida.' });
+  try {
+    const [[usuario]] = await db.execute(`SELECT ${campo} FROM usuario WHERE id_usuario = ?`, [req.usuario.id_usuario]);
+    if (!usuario) return res.status(404).json({ erro: 'Conta não encontrada.' });
+    await db.execute(`UPDATE usuario SET ${campo} = NULL WHERE id_usuario = ?`, [req.usuario.id_usuario]);
+    const antiga = usuario[campo];
+    if (typeof antiga === 'string' && antiga.startsWith('/api/profile/images/')) {
+      await fs.promises.unlink(path.join(uploadsDirectory, path.basename(antiga))).catch(() => {});
+    }
+    return res.json({ [campo]: null });
+  } catch (error) {
+    console.error('Erro ao remover imagem:', error.message);
+    return res.status(500).json({ erro: 'Não foi possível remover a imagem.' });
+  }
+});
+
+app.delete('/api/works/:id/my-interest', autenticar, async (req, res) => {
+  if (!/^\d+$/.test(req.params.id)) return res.status(400).json({ erro: 'Obra inválida.' });
+  try {
+    await db.execute('DELETE FROM usuario_obra WHERE id_usuario = ? AND id_obra = ?',
+      [req.usuario.id_usuario, req.params.id]);
+    return res.json({ mensagem: 'Obra removida dos seus interesses.' });
+  } catch (error) {
+    console.error('Erro ao remover interesse:', error.message);
+    return res.status(500).json({ erro: 'Não foi possível remover o interesse.' });
+  }
+});
+
+app.post('/api/profile/me/:tipo', autenticar, (req,res,next) => {
+  if (!['foto','capa'].includes(req.params.tipo)) return res.status(404).json({ erro: 'Tipo de imagem inválido.' });
+  profileImageUpload.single('imagem')(req,res,(error) => {
+    if (error) return res.status(error.code === 'LIMIT_FILE_SIZE' ? 413 : 400).json({ erro: 'Imagem inválida ou maior que 5 MB.' });
+    next();
+  });
+}, async (req,res) => {
+  if (!req.file) return res.status(400).json({ erro: 'Escolha uma imagem JPG, PNG ou WebP.' });
+  try {
+    const bytes = await fs.promises.readFile(req.file.path);
+    if (!validarAssinaturaImagem(bytes)) {
+      await fs.promises.unlink(req.file.path);
+      return res.status(400).json({ erro: 'O arquivo não é uma imagem válida.' });
+    }
+    const campo = req.params.tipo === 'foto' ? 'foto_url' : 'capa_url';
+    const url = `/api/profile/images/${req.file.filename}`;
+    const [[anterior]] = await db.execute(`SELECT ${campo} FROM usuario WHERE id_usuario = ?`, [req.usuario.id_usuario]);
+    await db.execute(`UPDATE usuario SET ${campo} = ? WHERE id_usuario = ?`, [url, req.usuario.id_usuario]);
+    const antiga = anterior?.[campo];
+    if (typeof antiga === 'string' && antiga.startsWith('/api/profile/images/')) {
+      const nome = path.basename(antiga);
+      await fs.promises.unlink(path.join(uploadsDirectory, nome)).catch(() => {});
+    }
+    return res.json({ [campo]: url });
+  } catch (error) {
+    await fs.promises.unlink(req.file.path).catch(() => {});
+    console.error('Erro ao salvar imagem:', error.message);
+    return res.status(500).json({ erro: 'Não foi possível salvar a imagem.' });
+  }
+});
+
+app.get('/api/profile/images/:filename', async (req,res) => {
+  const filename = req.params.filename;
+  if (!/^[a-f0-9-]{36}\.(jpg|jpeg|png|webp)$/i.test(filename)) return res.sendStatus(404);
+  return res.sendFile(path.join(uploadsDirectory, filename), (error) => {
+    if (error && !res.headersSent) res.status(404).json({ erro: 'Imagem não encontrada.' });
+  });
+});
 
 app.get('/', (req, res) => {
   res.json({
@@ -1027,7 +1153,7 @@ app.put('/api/works/:id/rating', autenticar, async (req, res) => {
 app.get('/api/users', autenticar, async (req, res) => {
   try {
     const [linhas] = await db.execute(
-      `SELECT u.id_usuario, u.nome, u.nome_usuario,
+      `SELECT u.id_usuario, u.nome, u.nome_usuario, u.bio, u.foto_url, u.capa_url, u.atividade, u.obra_atual,
               o.id_obra, o.titulo, o.tipo, uo.sou_fa
        FROM usuario u
        LEFT JOIN usuario_obra uo ON uo.id_usuario = u.id_usuario
@@ -1045,6 +1171,11 @@ app.get('/api/users', autenticar, async (req, res) => {
           id: linha.id_usuario,
           nome: linha.nome,
           nome_usuario: linha.nome_usuario,
+          bio: linha.bio,
+          foto_url: linha.foto_url,
+          capa_url: linha.capa_url,
+          atividade: linha.atividade,
+          obra_atual: linha.obra_atual,
           obras: [],
         };
         usuarios.set(String(linha.id_usuario), usuario);
@@ -1073,7 +1204,7 @@ app.get('/api/users/:id', autenticar, async (req, res) => {
 
   try {
     const [linhas] = await db.execute(
-      `SELECT u.id_usuario, u.nome, u.nome_usuario,
+      `SELECT u.id_usuario, u.nome, u.nome_usuario, u.bio, u.foto_url, u.capa_url, u.atividade, u.obra_atual,
               o.id_obra, o.titulo, o.tipo, uo.sou_fa
        FROM usuario u
        LEFT JOIN usuario_obra uo ON uo.id_usuario = u.id_usuario
@@ -1091,6 +1222,11 @@ app.get('/api/users/:id', autenticar, async (req, res) => {
         id: linhas[0].id_usuario,
         nome: linhas[0].nome,
         nome_usuario: linhas[0].nome_usuario,
+        bio: linhas[0].bio,
+        foto_url: linhas[0].foto_url,
+        capa_url: linhas[0].capa_url,
+        atividade: linhas[0].atividade,
+        obra_atual: linhas[0].obra_atual,
         obras: linhas
           .filter((linha) => linha.id_obra !== null)
           .map((linha) => ({
@@ -1903,6 +2039,19 @@ async function iniciarServidor() {
       }
     }
 
+    // Colunas opcionais para personalização do perfil (migração aditiva).
+    for (const [coluna, definicao] of [
+      ['capa_url', 'VARCHAR(500) NULL'],
+      ['bio', "VARCHAR(160) NOT NULL DEFAULT ''"],
+      ['atividade', "VARCHAR(20) NOT NULL DEFAULT 'Assistindo'"],
+      ['obra_atual', "VARCHAR(150) NOT NULL DEFAULT ''"],
+    ]) {
+      const [colunas] = await db.execute(
+        `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'usuario' AND COLUMN_NAME = ?`,
+        [coluna],
+      );
+      if (colunas.length === 0) await db.query(`ALTER TABLE usuario ADD COLUMN ${coluna} ${definicao}`);
+    }
     conexao.release();
 
     app.use((req, res) => {

@@ -1,26 +1,83 @@
 import 'dart:convert';
-
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-
 class ApiService {
   static const String _configuredBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
   );
-
   static String get baseUrl {
     const railwayUrl =
         'https://extraordinary-forgiveness-production-36f9.up.railway.app';
-
     final value = _configuredBaseUrl.isNotEmpty
         ? _configuredBaseUrl
         : railwayUrl;
-
     return value.endsWith('/')
         ? value.substring(0, value.length - 1)
         : value;
+  }
+  static String? urlImagemPerfil(Object? url) {
+    if (url is! String || url.trim().isEmpty) return null;
+    if (url.startsWith('https://') || url.startsWith('http://')) return url;
+    return '$baseUrl${url.startsWith('/') ? '' : '/'}$url';
+  }
+
+  static Future<Map<String, dynamic>> meuPerfil() => _authenticatedGet('/api/profile/me');
+
+  static Future<Map<String, dynamic>> salvarAtividadePerfil({
+    required String atividade, required String obraAtual,
+  }) async {
+    final token = await tokenDaSessao();
+    if (token == null) throw Exception('Faça login para continuar.');
+    final response = await http.put(
+      Uri.parse('$baseUrl/api/profile/me'),
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      body: jsonEncode({'atividade': atividade, 'obra_atual': obraAtual}),
+    ).timeout(const Duration(seconds: 20));
+    return _decodeResponse(response);
+  }
+
+  static Future<Map<String, dynamic>> enviarImagemPerfil({
+    required XFile arquivo, required String tipo,
+  }) async {
+    final token = await tokenDaSessao();
+    if (token == null) throw Exception('Faça login para continuar.');
+    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/api/profile/me/$tipo'));
+    request.headers['Authorization'] = 'Bearer $token';
+    request.files.add(http.MultipartFile.fromBytes('imagem', await arquivo.readAsBytes(), filename: arquivo.name));
+    final streamed = await request.send().timeout(const Duration(seconds: 45));
+    return _decodeResponse(await http.Response.fromStream(streamed));
+  }
+
+  static Future<Map<String, dynamic>> salvarPerfil({
+    required String nome, required String nomeUsuario, required String bio,
+    required String atividade, required String obraAtual,
+  }) async {
+    final token = await tokenDaSessao();
+    if (token == null) throw Exception('Faça login para continuar.');
+    final response = await http.put(Uri.parse('$baseUrl/api/profile/me'),
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      body: jsonEncode({'nome': nome, 'nome_usuario': nomeUsuario, 'bio': bio,
+        'atividade': atividade, 'obra_atual': obraAtual}),
+    ).timeout(const Duration(seconds: 20));
+    return _decodeResponse(response);
+  }
+
+  static Future<void> removerImagemPerfil(String tipo) async {
+    final token = await tokenDaSessao();
+    if (token == null) throw Exception('Faça login para continuar.');
+    final response = await http.delete(Uri.parse('$baseUrl/api/profile/me/$tipo'),
+      headers: {'Authorization': 'Bearer $token'}).timeout(const Duration(seconds: 20));
+    _decodeResponse(response);
+  }
+
+  static Future<void> removerInteresse(Object id) async {
+    final token = await tokenDaSessao();
+    if (token == null) throw Exception('Faça login para continuar.');
+    final response = await http.delete(Uri.parse('$baseUrl/api/works/$id/my-interest'),
+      headers: {'Authorization': 'Bearer $token'}).timeout(const Duration(seconds: 20));
+    _decodeResponse(response);
   }
 
   static Future<Map<String, dynamic>> cadastrar({
@@ -36,7 +93,6 @@ class ApiService {
       'senha': senha,
     });
   }
-
   static Future<Map<String, dynamic>> login({
     required String identificador,
     required String senha,
@@ -46,12 +102,10 @@ class ApiService {
       'senha': senha,
     });
   }
-
   static Future<String?> tokenDaSessao() async {
     final preferencias = await SharedPreferences.getInstance();
     return preferencias.getString('session_token');
   }
-
   static Future<String> conversarComLupez({
     required String mensagem,
     required List<Map<String, String>> historico,
@@ -77,7 +131,6 @@ class ApiService {
     }
     return resposta.trim();
   }
-
   static Future<List<Map<String, dynamic>>> listarVideos({
     String? query,
     Object? idObra,
@@ -111,7 +164,6 @@ class ApiService {
       return Map<String, dynamic>.from(video);
     }).toList();
   }
-
   static Future<List<Map<String, dynamic>>> buscarVideos(String query) =>
       listarVideos(query: query);
   static Future<List<Map<String, dynamic>>> buscarObras(String query) =>
@@ -125,7 +177,6 @@ class ApiService {
     }
     return conversas.map(_mapResponseItem).toList();
   }
-
   static Future<Map<String, dynamic>> iniciarConversa({
     required Object idDestinatario,
   }) async {
@@ -133,7 +184,6 @@ class ApiService {
       'id_destinatario': idDestinatario,
     });
   }
-
   static Future<List<Map<String, dynamic>>> listarMensagens({
     required Object idConversa,
   }) async {
@@ -144,7 +194,6 @@ class ApiService {
     }
     return mensagens.map(_mapResponseItem).toList();
   }
-
   static Future<Map<String, dynamic>> enviarMensagem({
     required Object idConversa,
     required String texto,
@@ -199,7 +248,6 @@ class ApiService {
         .timeout(const Duration(seconds: 15));
     _decodeResponse(response);
   }
-
   static Future<List<Map<String, dynamic>>> listarObras({
     String? query,
   }) async {
@@ -213,7 +261,6 @@ class ApiService {
     }
     return obras.map(_mapResponseItem).toList();
   }
-
   static Future<List<Map<String, dynamic>>> listarGeneros() async {
     final data = await _authenticatedGet('/api/genres');
     final generos = data['generos'];
@@ -222,7 +269,6 @@ class ApiService {
     }
     return generos.map(_mapResponseItem).toList();
   }
-
   static Future<List<Map<String, dynamic>>> listarPalavrasChave() async {
     final data = await _authenticatedGet('/api/keywords');
     final palavras = data['palavras_chave'];
@@ -233,7 +279,6 @@ class ApiService {
     }
     return palavras.map(_mapResponseItem).toList();
   }
-
   static Future<List<Map<String, dynamic>>> listarContas() async {
     final data = await _authenticatedGet('/api/users');
     final contas = data['usuarios'];
@@ -242,12 +287,10 @@ class ApiService {
     }
     return contas.map(_parseAccount).toList();
   }
-
   static Future<Map<String, dynamic>> obterConta(Object id) async {
     final data = await _authenticatedGet('/api/users/$id');
     return _parseAccount(data['usuario']);
   }
-
   static Future<void> adicionarObra({
     required String titulo,
     required String tipo,
@@ -304,7 +347,6 @@ class ApiService {
         .timeout(const Duration(seconds: 20));
     return _decodeResponse(response);
   }
-
   static Future<void> avaliarObra({
     required Object id,
     required bool souFa,
@@ -325,7 +367,6 @@ class ApiService {
         .timeout(const Duration(seconds: 20));
     _decodeResponse(response);
   }
-
   static Future<Map<String, dynamic>> publicarVideo({
     required XFile arquivo,
     required String descricao,
@@ -366,7 +407,6 @@ class ApiService {
     final response = await http.Response.fromStream(streamedResponse);
     return _decodeResponse(response);
   }
-
   static String _nomeArquivoUploadVideo(XFile arquivo) {
     const extensoesPermitidas = {
       '.mp4',
@@ -375,7 +415,7 @@ class ApiService {
       '.webm',
     };
     String extensaoDe(String caminho) {
-      final nome = caminho.split(RegExp(r'[/\\\\]')).last;
+      final nome = caminho.split(RegExp(r'[/\\\\\\\\]')).last;
       final ponto = nome.lastIndexOf('.');
       return ponto < 0 ? '' : nome.substring(ponto).toLowerCase();
     }
@@ -399,7 +439,6 @@ class ApiService {
     if (kIsWeb) return 'video.webm';
     return 'video.mp4';
   }
-
   static String urlArquivoVideo(Object id) =>
       '$baseUrl/api/videos/$id/arquivo';
   static Future<String> urlArquivoVideoWeb(Object id) async {
@@ -420,7 +459,6 @@ class ApiService {
     }
     return '$baseUrl$url';
   }
-
   static Future<void> salvarSessao(Map<String, dynamic> resposta) async {
     final token = resposta['token'];
     final usuario = resposta['usuario'];
@@ -446,7 +484,6 @@ class ApiService {
     await preferencias.setString('perfil_email', email);
     await preferencias.setString('perfil_id', idUsuario.toString());
   }
-
   static Future<bool> temSessaoValida() async {
     final preferencias = await SharedPreferences.getInstance();
     final token = preferencias.getString('session_token');
@@ -475,12 +512,10 @@ class ApiService {
       return false;
     }
   }
-
   static Future<void> encerrarSessao() async {
     final preferencias = await SharedPreferences.getInstance();
     await _limparDadosSessao(preferencias);
   }
-
   static Future<void> _limparDadosSessao(
     SharedPreferences preferencias,
   ) async {
@@ -493,11 +528,11 @@ class ApiService {
       'perfil_bio',
       'perfil_obra_favorita',
       'perfil_assistindo',
+      'perfil_atividade',
     ]) {
       await preferencias.remove(chave);
     }
   }
-
   static Future<Map<String, dynamic>> _post(
     String endpoint,
     Map<String, dynamic> body,
@@ -511,7 +546,6 @@ class ApiService {
         .timeout(const Duration(seconds: 15));
     return _decodeResponse(response);
   }
-
   static Future<Map<String, dynamic>> _authenticatedGet(
     String endpoint,
   ) async {
@@ -527,7 +561,6 @@ class ApiService {
         .timeout(const Duration(seconds: 20));
     return _decodeResponse(response);
   }
-
   static Future<Map<String, dynamic>> _authenticatedPost(
     String endpoint,
     Map<String, dynamic> body,
@@ -548,14 +581,12 @@ class ApiService {
         .timeout(const Duration(seconds: 20));
     return _decodeResponse(response);
   }
-
   static Map<String, dynamic> _mapResponseItem(Object? item) {
     if (item is! Map) {
       throw Exception('O servidor retornou um item inválido.');
     }
     return Map<String, dynamic>.from(item);
   }
-
   static Map<String, dynamic> _parseAccount(Object? item) {
     final account = _mapResponseItem(item);
     final works = account['obras'];
@@ -567,7 +598,6 @@ class ApiService {
       'obras': works.map(_mapResponseItem).toList(),
     };
   }
-
   static Map<String, dynamic> _decodeResponse(http.Response response) {
     final Map<String, dynamic> data;
     try {
