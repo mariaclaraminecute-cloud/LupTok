@@ -1906,11 +1906,86 @@ app.delete('/api/videos/:id/reviews/:reviewId', autenticar, async (req, res) => 
   } catch (e) { console.error('Erro ao excluir avaliação:', e); return res.status(500).json({ erro: 'Não foi possível excluir avaliação.' }); }
 });
 
+
+// Comunidades: acesso autenticado, participantes e mensagens persistidas no MySQL.
+app.get('/api/comunidades', autenticar, async (req, res) => {
+  try {
+    const [rows] = await db.execute(`SELECT c.id_comunidade AS id, c.nome, c.descricao, c.criador_id,
+      COUNT(m.id_usuario) AS membros,
+      MAX(CASE WHEN m.id_usuario = ? THEN 1 ELSE 0 END) AS participando
+      FROM comunidade c LEFT JOIN comunidade_membro m ON m.id_comunidade = c.id_comunidade
+      GROUP BY c.id_comunidade ORDER BY c.criada_em DESC`, [req.usuario.id_usuario]);
+    res.json({ comunidades: rows });
+  } catch (e) { console.error('Comunidades:', e); res.status(500).json({erro:'Não foi possível carregar as comunidades.'}); }
+});
+app.post('/api/comunidades', autenticar, async (req, res) => {
+  const nome = typeof req.body?.nome === 'string' ? req.body.nome.trim() : '';
+  const descricao = typeof req.body?.descricao === 'string' ? req.body.descricao.trim() : '';
+  if (nome.length < 3 || nome.length > 60 || descricao.length > 300) return res.status(400).json({erro:'Nome deve ter de 3 a 60 caracteres e descrição até 300.'});
+  const cx = await db.getConnection();
+  try {
+    await cx.beginTransaction();
+    const [r] = await cx.execute('INSERT INTO comunidade (nome, descricao, criador_id) VALUES (?, ?, ?)', [nome, descricao, req.usuario.id_usuario]);
+    await cx.execute('INSERT INTO comunidade_membro (id_comunidade,id_usuario) VALUES (?,?)', [r.insertId, req.usuario.id_usuario]);
+    await cx.commit();
+    res.status(201).json({comunidade:{id:r.insertId,nome,descricao,membros:1,participando:1}});
+  } catch(e) { await cx.rollback(); console.error('Criar comunidade:',e); res.status(500).json({erro:'Não foi possível criar a comunidade.'}); }
+  finally { cx.release(); }
+});
+app.post('/api/comunidades/:id/entrar', autenticar, async (req,res) => {
+  if (!/^\d+$/.test(req.params.id)) return res.status(400).json({erro:'Comunidade inválida.'});
+  try {
+    const [r] = await db.execute('INSERT IGNORE INTO comunidade_membro (id_comunidade,id_usuario) VALUES (?,?)', [req.params.id,req.usuario.id_usuario]);
+    res.json({participando:true});
+  } catch(e) { if(e.code === 'ER_NO_REFERENCED_ROW_2') return res.status(404).json({erro:'Comunidade não encontrada.'}); res.status(500).json({erro:'Não foi possível entrar na comunidade.'}); }
+});
+app.get('/api/comunidades/:id/mensagens', autenticar, async(req,res)=>{
+  if (!/^\d+$/.test(req.params.id)) return res.status(400).json({erro:'Comunidade inválida.'});
+  try {
+    const [[member]] = await db.execute('SELECT 1 FROM comunidade_membro WHERE id_comunidade=? AND id_usuario=?',[req.params.id,req.usuario.id_usuario]);
+    if (!member) return res.status(403).json({erro:'Entre na comunidade para ver as mensagens.'});
+    const [rows] = await db.execute(`SELECT cm.id_mensagem AS id,cm.texto,cm.criada_em,u.nome,u.id_usuario,
+      (cm.id_usuario = ?) AS enviado_por_mim FROM comunidade_mensagem cm
+      JOIN usuario u ON u.id_usuario=cm.id_usuario WHERE cm.id_comunidade=? ORDER BY cm.criada_em ASC,cm.id_mensagem ASC LIMIT 200`,[req.usuario.id_usuario,req.params.id]);
+    res.json({mensagens:rows});
+  } catch(e) { console.error('Mensagens comunidade:',e);res.status(500).json({erro:'Não foi possível carregar mensagens.'}); }
+});
+app.post('/api/comunidades/:id/mensagens', autenticar, async(req,res)=>{
+  const texto = typeof req.body?.texto === 'string' ? req.body.texto.trim() : '';
+  if (!/^\d+$/.test(req.params.id) || !texto || texto.length > 2000) return res.status(400).json({erro:'Mensagem inválida (máximo 2000 caracteres).'});
+  try {
+    const [[member]] = await db.execute('SELECT 1 FROM comunidade_membro WHERE id_comunidade=? AND id_usuario=?',[req.params.id,req.usuario.id_usuario]);
+    if (!member) return res.status(403).json({erro:'Entre na comunidade para enviar mensagens.'});
+    const [r] = await db.execute('INSERT INTO comunidade_mensagem (id_comunidade,id_usuario,texto) VALUES (?,?,?)',[req.params.id,req.usuario.id_usuario,texto]);
+    res.status(201).json({id:r.insertId});
+  } catch(e) {console.error('Enviar comunidade:',e);res.status(500).json({erro:'Não foi possível enviar a mensagem.'});}
+});
+
 async function iniciarServidor() {
   try {
     const conexao = await db.getConnection();
 
     console.log('MySQL conectado com sucesso!');
+    await db.execute(`CREATE TABLE IF NOT EXISTS comunidade (
+      id_comunidade BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      nome VARCHAR(60) NOT NULL, descricao VARCHAR(300) NOT NULL DEFAULT '',
+      criador_id BIGINT UNSIGNED NOT NULL, criada_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (criador_id) REFERENCES usuario(id_usuario) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.execute(`CREATE TABLE IF NOT EXISTS comunidade_membro (
+      id_comunidade BIGINT UNSIGNED NOT NULL, id_usuario BIGINT UNSIGNED NOT NULL,
+      PRIMARY KEY(id_comunidade,id_usuario),
+      FOREIGN KEY (id_comunidade) REFERENCES comunidade(id_comunidade) ON DELETE CASCADE,
+      FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.execute(`CREATE TABLE IF NOT EXISTS comunidade_mensagem (
+      id_mensagem BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      id_comunidade BIGINT UNSIGNED NOT NULL, id_usuario BIGINT UNSIGNED NOT NULL,
+      texto VARCHAR(2000) NOT NULL, criada_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_comunidade_msg(id_comunidade,criada_em),
+      FOREIGN KEY (id_comunidade) REFERENCES comunidade(id_comunidade) ON DELETE CASCADE,
+      FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
     await db.execute(
       `CREATE TABLE IF NOT EXISTS video_post (
          id_video BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,

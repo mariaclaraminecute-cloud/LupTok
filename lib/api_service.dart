@@ -45,7 +45,7 @@ class ApiService {
     if (token == null) throw Exception('Faça login para continuar.');
     final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/api/profile/me/$tipo'));
     request.headers['Authorization'] = 'Bearer $token';
-    request.files.add(http.MultipartFile.fromBytes('imagem', await arquivo.readAsBytes(), filename: arquivo.name));
+    request.files.add(http.MultipartFile('imagem', arquivo.openRead(), await arquivo.length(), filename: arquivo.name));
     final streamed = await request.send().timeout(const Duration(seconds: 45));
     return _decodeResponse(await http.Response.fromStream(streamed));
   }
@@ -169,6 +169,21 @@ class ApiService {
   static Future<List<Map<String, dynamic>>> buscarObras(String query) =>
       listarObras(query: query);
   // ── Chat entre usuários ──────────────────────────────────────────
+  static Future<List<Map<String, dynamic>>> listarComunidades() async {
+    final data = await _authenticatedGet('/api/comunidades');
+    return (data['comunidades'] as List).map(_mapResponseItem).toList();
+  }
+  static Future<Map<String, dynamic>> criarComunidade(String nome, String descricao) =>
+      _authenticatedPost('/api/comunidades', {'nome': nome, 'descricao': descricao});
+  static Future<Map<String, dynamic>> entrarComunidade(Object id) =>
+      _authenticatedPost('/api/comunidades/$id/entrar', {});
+  static Future<List<Map<String, dynamic>>> listarMensagensComunidade(Object id) async {
+    final data = await _authenticatedGet('/api/comunidades/$id/mensagens');
+    return (data['mensagens'] as List).map(_mapResponseItem).toList();
+  }
+  static Future<Map<String, dynamic>> enviarMensagemComunidade(Object id, String texto) =>
+      _authenticatedPost('/api/comunidades/$id/mensagens', {'texto': texto});
+
   static Future<List<Map<String, dynamic>>> listarConversas() async {
     final data = await _authenticatedGet('/api/conversas');
     final conversas = data['conversas'];

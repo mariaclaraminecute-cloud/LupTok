@@ -1,8 +1,6 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
 import 'app_preferences.dart';
 import 'api_service.dart';
 import 'home_screen.dart';
@@ -11,7 +9,6 @@ import 'onboarding_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
-
   @override
   State<SplashScreen> createState() => _SplashScreenState();
 }
@@ -24,16 +21,13 @@ class _SplashScreenState extends State<SplashScreen>
   );
 
   late List<String> _shuffledCapas;
-
   final ScrollController _scrollController1 = ScrollController();
   final ScrollController _scrollController2 = ScrollController();
   final ScrollController _scrollController3 = ScrollController();
-
   Timer? _loginTimer;
   Timer? _scrollTimer1;
   Timer? _scrollTimer2;
   Timer? _scrollTimer3;
-
   late AnimationController _logoAnimationController;
   late Animation<double> _logoFloatAnimation;
   late Animation<double> _logoScaleAnimation;
@@ -42,10 +36,8 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   void initState() {
     super.initState();
-
     _shuffledCapas = List<String>.from(_capas);
     _shuffledCapas.shuffle();
-
     _logoAnimationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2400),
@@ -71,15 +63,12 @@ class _SplashScreenState extends State<SplashScreen>
         curve: Curves.easeInOut,
       ),
     );
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _startScrolls();
     });
-
     _loginTimer = Timer(const Duration(seconds: 4), () async {
       if (!mounted) return;
-
       final temSessao = await ApiService.temSessaoValida();
       if (!mounted) return;
       Widget destino = const LoginScreen();
@@ -90,7 +79,6 @@ class _SplashScreenState extends State<SplashScreen>
             : const OnboardingScreen();
       }
       if (!mounted) return;
-
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
           pageBuilder: (context, animation, secondaryAnimation) {
@@ -111,13 +99,11 @@ class _SplashScreenState extends State<SplashScreen>
       const Duration(seconds: 55),
       (timer) => _scrollTimer1 = timer,
     );
-
     _scrollColumn(
       _scrollController2,
       const Duration(seconds: 70),
       (timer) => _scrollTimer2 = timer,
     );
-
     _scrollColumn(
       _scrollController3,
       const Duration(seconds: 62),
@@ -131,14 +117,10 @@ class _SplashScreenState extends State<SplashScreen>
     void Function(Timer timer) saveTimer,
   ) {
     if (!mounted || !controller.hasClients) return;
-
     final maxScroll = controller.position.maxScrollExtent;
-
     if (maxScroll <= 0) return;
-
     final timer = Timer(Duration.zero, () {});
     saveTimer(timer);
-
     controller
         .animateTo(
           (maxScroll + controller.position.viewportDimension) / 3,
@@ -147,12 +129,10 @@ class _SplashScreenState extends State<SplashScreen>
         )
         .then((_) {
           if (!mounted || !controller.hasClients) return;
-
           controller.jumpTo(
             controller.offset -
                 (maxScroll + controller.position.viewportDimension) / 3,
           );
-
           final nextTimer = Timer(const Duration(milliseconds: 100), () {
             if (mounted) {
               _scrollColumn(controller, duration, saveTimer);
@@ -169,13 +149,10 @@ class _SplashScreenState extends State<SplashScreen>
     _scrollTimer1?.cancel();
     _scrollTimer2?.cancel();
     _scrollTimer3?.cancel();
-
     _scrollController1.dispose();
     _scrollController2.dispose();
     _scrollController3.dispose();
-
     _logoAnimationController.dispose();
-
     super.dispose();
   }
 
@@ -183,7 +160,6 @@ class _SplashScreenState extends State<SplashScreen>
     return Column(
       children: List.generate(images.length * 3, (index) {
         final imageIndex = index % images.length;
-
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 3),
           child: ClipRRect(

@@ -3,8 +3,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 import 'api_service.dart';
+import 'video_work_label.dart';
+import 'review_service.dart';
 import 'app_preferences.dart';
 import 'chat_screen.dart';
 import 'work_compatibility.dart';
@@ -1298,113 +1301,453 @@ class _ProfileVideoScreen extends StatefulWidget {
   State<_ProfileVideoScreen> createState() => _ProfileVideoScreenState();
 }
 class _ProfileVideoScreenState extends State<_ProfileVideoScreen> {
+  bool _liked = false;
+  int _likeCount = 0;
+  bool _busyLike = false;
+  int _reviewCount = 0;
+  bool _paused = false;
+  bool _muted = false;
+  bool _saved = false;
+  bool _hideSpoilers = false;
+  int? _feedIndex;
+  String _author = '';
+  String _description = '';
+  String _workTitle = '';
+  String _workType = '';
+  String _spoiler = 'nenhum';
   VideoPlayerController? _controller;
   late final Future<void> _initialize;
+
   @override
   void initState() {
     super.initState();
     _initialize = _initializeVideo();
+    _loadSocial();
+    _loadPreferences();
   }
+
+  Future<void> _loadPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _hideSpoilers = prefs.getBool('settings_hide_spoilers') ?? false;
+      _saved = prefs.getStringList('saved_profile_video_ids')?.contains(widget.video.videoId) ?? false;
+    });
+  }
+
+  Future<void> _loadSocial() async {
+    final id = widget.video.videoId;
+    if (id == null) return;
+    try {
+      final videos = await ApiService.listarVideos();
+      final entry = videos.where((v) => v['id'].toString() == id).firstOrNull;
+      final reviews = await ReviewService.listar(id);
+      if (!mounted) return;
+      setState(() {
+        _liked = entry?['curtida_usuario'] == true;
+        _likeCount = (entry?['curtidas'] as num?)?.toInt() ?? 0;
+        _reviewCount = reviews.length;
+        _author = (entry?['autor'] ?? '').toString();
+        _description = (entry?['descricao'] ?? '').toString();
+        _workTitle = (entry?['obra_titulo'] ?? entry?['titulo_obra'] ?? entry?['obraTitulo'] ?? '').toString();
+        _workType = (entry?['obra_tipo'] ?? entry?['tipo_obra'] ?? entry?['tipo'] ?? '').toString();
+        _spoiler = (entry?['spoiler'] ?? 'nenhum').toString().toLowerCase();
+      });
+    } catch (_) { /* A reprodução continua mesmo sem os dados sociais. */ }
+  }
+
+  Future<void> _toggleLike() async {
+    final id = widget.video.videoId;
+    if (id == null || _busyLike) return;
+    setState(() => _busyLike = true);
+    try {
+      final result = await ApiService.atualizarCurtidaVideo(id: id, curtido: !_liked);
+      if (!mounted) return;
+      setState(() {
+        _liked = result['curtido'] == true;
+        _likeCount = (result['curtidas'] as num?)?.toInt() ?? _likeCount;
+      });
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Não foi possível curtir: $e')));
+    } finally {
+      if (mounted) setState(() => _busyLike = false);
+    }
+  }
+
+  Future<void> _showReviews() async {
+    final id = widget.video.videoId;
+    if (id == null) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF20191D),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => _ProfileReviewsSheet(videoId: id),
+    );
+    await _loadSocial();
+  }
+
+  Future<void> _toggleSave() async {
+    final id = widget.video.videoId;
+    if (id == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Vídeo indisponível para salvar.')));
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getStringList('saved_profile_video_ids') ?? <String>[];
+    if (saved.contains(id)) { saved.remove(id); } else { saved.add(id); }
+    await prefs.setStringList('saved_profile_video_ids', saved);
+    if (!mounted) return;
+    setState(() => _saved = saved.contains(id));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_saved ? 'Vídeo salvo!' : 'Vídeo removido dos salvos.')));
+  }
+
+  Future<void> _shareVideo() async {
+    final title = widget.video.title;
+    await SharePlus.instance.share(ShareParams(
+      subject: 'LupTok: $title',
+      text: '$title. Recomendado por ${_author.isEmpty ? 'um usuário' : _author} no LupTok.',
+    ));
+  }
+
+  Future<void> _reportVideo() async {
+    final id = widget.video.videoId;
+    if (id == null) return;
+    await _promptProfileReportVideo(context, id);
+  }
+
   Future<void> _initializeVideo() async {
     final video = widget.video;
     final path = video.videoPath!;
     final parsedUri = Uri.tryParse(path);
-    final isNetworkUri =
-        parsedUri != null &&
+    final isNetworkUri = parsedUri != null &&
         (parsedUri.scheme == 'http' || parsedUri.scheme == 'https');
     final uri = kIsWeb && video.videoId != null
         ? Uri.parse(await ApiService.urlArquivoVideoWeb(video.videoId!))
-        : isNetworkUri
-        ? parsedUri
-        : Uri.file(path);
+        : isNetworkUri ? parsedUri : Uri.file(path);
     if (!mounted) return;
     final controller = VideoPlayerController.networkUrl(
       uri,
       httpHeaders: kIsWeb || video.videoToken == null
-          ? const {}
-          : {'Authorization': 'Bearer ${video.videoToken}'},
+          ? const {} : {'Authorization': 'Bearer ${video.videoToken}'},
     );
     _controller = controller;
     await controller.initialize();
     await controller.setLooping(true);
     await controller.play();
+    if (mounted) setState(() {});
   }
+
+  void _togglePause() {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) return;
+    setState(() => _paused = !_paused);
+    if (_paused) { controller.pause(); } else { controller.play(); }
+  }
+
+  Future<void> _toggleMute() async {
+    final controller = _controller;
+    if (controller == null) return;
+    final next = !_muted;
+    await controller.setVolume(next ? 0 : 1);
+    if (mounted) setState(() => _muted = next);
+  }
+
   @override
   void dispose() {
     _controller?.dispose();
     super.dispose();
   }
+
+  Widget _sideAction(IconData icon, VoidCallback action, {String? count, Color color = Colors.white}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 17),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Material(
+          color: const Color(0xFF21171C).withValues(alpha: .36),
+          shape: CircleBorder(side: BorderSide(color: Colors.white.withValues(alpha: .16))),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: action,
+            child: SizedBox(width: 48, height: 48,
+              child: Icon(icon, color: color, size: 25)),
+          ),
+        ),
+        if (count != null) ...[
+          const SizedBox(height: 4),
+          Text(count, style: const TextStyle(color: Colors.white, fontSize: 12,
+              fontWeight: FontWeight.w700, shadows: [Shadow(color: Colors.black87, blurRadius: 5)])),
+        ],
+      ]),
+    );
+  }
+
+  String _profileSpoilerLabel(String spoiler) {
+    if (_hideSpoilers && spoiler != 'nenhum') return 'Spoiler oculto';
+    switch (spoiler) {
+      case 'leve': return 'Spoiler leve';
+      case 'muito': return 'Muito spoiler';
+      default: return 'Sem spoiler';
+    }
+  }
+
+  Widget _spoilerBadge(String spoiler) {
+    final hidden = _hideSpoilers && spoiler != 'nenhum';
+    final isStrong = spoiler == 'muito';
+    final isLight = spoiler == 'leve';
+    final color = hidden
+        ? const Color(0xFFFFE9E9)
+        : isStrong
+            ? const Color(0xFFFFC3CB)
+            : isLight
+                ? const Color(0xFFFFD9A0)
+                : const Color(0xFFCAF0D5);
+    final icon = hidden
+        ? Icons.visibility_off_outlined
+        : isStrong
+            ? Icons.warning_amber_rounded
+            : isLight
+                ? Icons.auto_awesome_outlined
+                : Icons.verified_outlined;
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 245),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: const Color(0xFF21171C).withValues(alpha: .76),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: .48)),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: .20), blurRadius: 12, offset: const Offset(0, 4))],
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 17, color: color),
+        const SizedBox(width: 8),
+        Flexible(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(_profileSpoilerLabel(spoiler), maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w800)),
+            Text(hidden ? 'Conteúdo protegido' : isStrong ? 'Revela partes importantes' : isLight ? 'Pode revelar alguns detalhes' : 'Assista sem preocupação',
+              maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white70, fontSize: 10)),
+          ],
+        )),
+      ]),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final safeTop = MediaQuery.paddingOf(context).top;
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        title: Text(widget.video.title),
-      ),
-      body: Center(
-        child: FutureBuilder<void>(
+      body: Stack(fit: StackFit.expand, children: [
+        FutureBuilder<void>(
           future: _initialize,
           builder: (context, snapshot) {
             if (snapshot.hasError) {
-              return const Padding(
+              return const Center(child: Padding(
                 padding: EdgeInsets.all(24),
-                child: Text(
-                  'Não foi possível reproduzir este vídeo.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white),
-                ),
-              );
+                child: Text('Não foi possível reproduzir este vídeo.',
+                    textAlign: TextAlign.center, style: TextStyle(color: Colors.white)),
+              ));
             }
             if (snapshot.connectionState != ConnectionState.done) {
-              return const CircularProgressIndicator(color: Colors.white);
+              return const Center(child: CircularProgressIndicator(color: Color(0xFFF0AAB7)));
             }
             final controller = _controller!;
-            final sourceAspectRatio = controller.value.aspectRatio;
-            final sourceDisplayAspectRatio =
-                controller.value.rotationCorrection % 180 == 0
-                ? sourceAspectRatio
-                : 1 / sourceAspectRatio;
-            return GestureDetector(
-              onTap: () {
-                if (controller.value.isPlaying) {
-                  controller.pause();
-                } else {
-                  controller.play();
-                }
-                setState(() {});
-              },
-              child: AspectRatio(
-                aspectRatio: 9 / 16,
-                child: ClipRect(
-                  child: FittedBox(
-                    fit: BoxFit.cover,
-                    child: SizedBox(
-                      width: sourceDisplayAspectRatio,
-                      height: 1,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          VideoPlayer(controller),
-                          if (!controller.value.isPlaying)
-                            const Icon(
-                              Icons.play_arrow_rounded,
-                              color: Colors.white,
-                              size: 64,
-                            ),
-                        ],
-                      ),
-                    ),
+            final ratio = controller.value.aspectRatio > 0 ? controller.value.aspectRatio : 9 / 16;
+            // Mesmo enquadramento do Loop: ocupa a área inteira, sem barras.
+            return ClipRect(
+              child: SizedBox.expand(
+                child: FittedBox(
+                  fit: BoxFit.cover,
+                  child: SizedBox(
+                    width: ratio * 1000,
+                    height: 1000,
+                    child: VideoPlayer(controller),
                   ),
                 ),
               ),
             );
           },
         ),
-      ),
+        Positioned.fill(child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: _togglePause,
+          onDoubleTap: _toggleLike,
+        )),
+        Positioned(left: 0, right: 0, bottom: 0, height: 330,
+          child: IgnorePointer(child: DecoratedBox(decoration: BoxDecoration(
+            gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter,
+              colors: [Colors.transparent, Colors.black.withValues(alpha: .38),
+                Colors.black.withValues(alpha: .88)],
+              stops: const [0, .45, 1]),
+          ))),
+        ),
+        // Cabeçalho rosa do LupTok: substitui o título "Loop" sem
+        // deslocar ou redimensionar o vídeo que continua atrás dele.
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: Container(
+            height: safeTop + 62,
+            padding: EdgeInsets.only(top: safeTop, left: 8, right: 8),
+            decoration: const BoxDecoration(
+              color: Color(0xFFFFE9E9),
+              boxShadow: [BoxShadow(color: Color(0x26000000), blurRadius: 12, offset: Offset(0, 3))],
+            ),
+            child: Row(
+              children: [
+                IconButton(
+                  tooltip: 'Voltar ao perfil',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                      color: Color(0xFF713C47), size: 21),
+                ),
+                Expanded(
+                  child: Center(
+                    child: Image.asset(
+                      AppPalette.logo(context),
+                      height: 47,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const Text('LupTok',
+                        style: TextStyle(color: Color(0xFF713C47),
+                          fontWeight: FontWeight.w800, fontSize: 21)),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: _muted ? 'Ativar som' : 'Silenciar',
+                  onPressed: _toggleMute,
+                  icon: Icon(_muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                    color: const Color(0xFF713C47), size: 23),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Positioned(top: safeTop + 78, left: 16, right: 70,
+          child: Align(alignment: Alignment.centerLeft, child: _spoilerBadge(_spoiler)),
+        ),
+        if (_paused) const Center(child: IgnorePointer(
+          child: Icon(Icons.play_arrow_rounded, color: Colors.white, size: 74,
+            shadows: [Shadow(color: Colors.black54, blurRadius: 15)]),
+        )),
+        Positioned(right: 10, bottom: 60,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            if (_liked) _sideAction(Icons.star_rounded, _toggleLike,
+              color: const Color(0xFFFFD166)),
+            _sideAction(Icons.chat_bubble_outline_rounded, _showReviews,
+              count: '$_reviewCount'),
+            _sideAction(Icons.share_outlined, _shareVideo),
+            _sideAction(_saved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+              _toggleSave, color: _saved ? const Color(0xFFFFD166) : Colors.white),
+            Padding(padding: const EdgeInsets.only(bottom: 17),
+              child: PopupMenuButton<String>(
+                tooltip: 'Mais ações',
+                color: AppPalette.raisedSurface(context),
+                onSelected: (value) { if (value == 'report') _reportVideo(); },
+                itemBuilder: (_) => const [PopupMenuItem(value: 'report',
+                  child: ListTile(contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.flag_outlined), title: Text('Denunciar vídeo')))],
+                child: Container(width: 48, height: 48,
+                  decoration: BoxDecoration(color: const Color(0xFF21171C).withValues(alpha: .36),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white.withValues(alpha: .16))),
+                  child: const Icon(Icons.more_horiz_rounded, color: Colors.white, size: 24)),
+              ),
+            ),
+          ]),
+        ),
+        Positioned(left: 16, right: 78, bottom: 60,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min, children: [
+              if (_author.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Row(children: [
+                  CircleAvatar(radius: 14, backgroundColor: const Color(0xFFB8787C),
+                    child: Text(_author.replaceFirst('@', '').isEmpty ? '?' :
+                      _author.replaceFirst('@', '')[0].toUpperCase(),
+                      style: const TextStyle(color: Colors.white, fontSize: 12))),
+                  const SizedBox(width: 8),
+                  Flexible(child: Text(_author.startsWith('@') ? _author : '@$_author',
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontSize: 13,
+                      fontWeight: FontWeight.w700))),
+                ]),
+              ],
+              if (_description.trim().isNotEmpty) ...[
+                const SizedBox(height: 9),
+                Text(_description.trim(), maxLines: 3, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 13.5,
+                    height: 1.35, shadows: [Shadow(color: Colors.black87, blurRadius: 5)])),
+              ],
+            ]),
+        ),
+        // Etiqueta pequena no canto inferior direito, sem alterar o vídeo.
+        Positioned(right: 8, bottom: 8,
+          child: VideoWorkLabel(
+            title: _workTitle.isNotEmpty ? _workTitle : widget.video.title,
+            type: _workType.isNotEmpty ? _workType : widget.video.contentType,
+          ),
+        ),
+      ]),
     );
   }
+}
+class _ProfileReviewsSheet extends StatefulWidget {
+  final String videoId;
+  const _ProfileReviewsSheet({required this.videoId});
+  @override State<_ProfileReviewsSheet> createState() => _ProfileReviewsSheetState();
+}
+class _ProfileReviewsSheetState extends State<_ProfileReviewsSheet> {
+  final _text = TextEditingController();
+  List<Map<String, dynamic>> _reviews = [];
+  int _stars = 5;
+  bool _sending = false;
+  @override void initState() { super.initState(); _load(); }
+  @override void dispose() { _text.dispose(); super.dispose(); }
+  Future<void> _load() async {
+    try { final result = await ReviewService.listar(widget.videoId);
+      if (mounted) setState(() => _reviews = result);
+    } catch (_) {}
+  }
+  Future<void> _send() async {
+    if (_sending || _text.text.trim().isEmpty) return;
+    setState(() => _sending = true);
+    try {
+      await ReviewService.enviar(widget.videoId, _text.text.trim(), _stars);
+      _text.clear(); await _load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    } finally { if (mounted) setState(() => _sending = false); }
+  }
+  @override Widget build(BuildContext context) => SafeArea(
+    child: Padding(padding: EdgeInsets.fromLTRB(18, 16, 18, 18 + MediaQuery.viewInsetsOf(context).bottom),
+      child: SizedBox(height: MediaQuery.sizeOf(context).height * .62,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Comentários e avaliações', style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 14),
+          Expanded(child: ListView.builder(itemCount: _reviews.length, itemBuilder: (ctx, i) {
+            final review = _reviews[i];
+            return ListTile(title: Text('${review['nome_usuario'] ?? review['nome'] ?? 'Usuário'}', style: const TextStyle(color: Colors.white)),
+              subtitle: Text('${review['comentario'] ?? review['texto'] ?? ''}', style: const TextStyle(color: Colors.white70)),
+              trailing: Text('★ ${review['nota'] ?? ''}', style: const TextStyle(color: Color(0xFFFFD166))));
+          })),
+          Row(children: [const Text('Nota', style: TextStyle(color: Colors.white)),
+            ...List.generate(5, (i) => IconButton(onPressed: () => setState(() => _stars = i + 1),
+              icon: Icon(i < _stars ? Icons.star_rounded : Icons.star_border_rounded,
+                color: const Color(0xFFFFD166), size: 22), constraints: const BoxConstraints(minWidth: 36))),
+          ]),
+          Row(children: [Expanded(child: TextField(controller: _text,
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(hintText: 'Escreva seu comentário', hintStyle: TextStyle(color: Colors.white54)))),
+            IconButton(onPressed: _sending ? null : _send, icon: const Icon(Icons.send_rounded, color: Color(0xFFFFB7BA))),
+          ]),
+        ]))),
+  );
 }
 // Miniatura real do vídeo, sem alterar upload, banco ou feed.
 class _ProfileVideoThumbnail extends StatefulWidget {
@@ -1493,6 +1836,113 @@ class _ProfileVideoThumbnailState extends State<_ProfileVideoThumbnail> {
             ),
           ),
       ],
+    );
+  }
+}
+
+Future<void> _promptProfileReportVideo(BuildContext context, Object videoId) async {
+  const reasons = [
+    'Fora do propósito do LupTok',
+    'Assédio ou bullying',
+    'Conteúdo inadequado',
+    'Spam',
+    'Outro motivo',
+  ];
+  final descriptionController = TextEditingController();
+  String? selectedReason;
+  final report = await showDialog<(String, String)>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (context, setDialogState) => AlertDialog(
+        title: const Text('Denunciar vídeo'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Sua denúncia é privada e será encaminhada para análise.',
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: selectedReason,
+                decoration: const InputDecoration(labelText: 'Motivo'),
+                items: reasons
+                    .map(
+                      (reason) =>
+                          DropdownMenuItem(value: reason, child: Text(reason)),
+                    )
+                    .toList(),
+                onChanged: (value) =>
+                    setDialogState(() => selectedReason = value),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: descriptionController,
+                maxLength: 500,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Detalhes (opcional)',
+                  alignLabelWithHint: true,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: selectedReason == null
+                ? null
+                : () => Navigator.pop(dialogContext, (
+                    selectedReason!,
+                    descriptionController.text.trim(),
+                  )),
+            child: const Text('Continuar'),
+          ),
+        ],
+      ),
+    ),
+  );
+  descriptionController.dispose();
+  if (report == null || !context.mounted) return;
+
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Confirmar denúncia'),
+      content: const Text('Deseja enviar esta denúncia para análise?'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: const Text('Voltar'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: const Text('Enviar'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) return;
+
+  try {
+    await ApiService.denunciarVideo(
+      id: videoId,
+      motivo: report.$1,
+      descricao: report.$2,
+    );
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Denúncia enviada para análise.')),
+    );
+  } catch (error) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
     );
   }
 }

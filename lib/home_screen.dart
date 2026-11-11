@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 
 import 'api_service.dart';
+import 'video_work_label.dart';
 import 'review_service.dart';
 import 'app_preferences.dart';
 import 'groups_screen.dart' show GroupsScreen;
@@ -217,6 +218,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     if (!mounted || publicado == null) return;
     final preferencias = await SharedPreferences.getInstance();
     final nomeUsuario = preferencias.getString('perfil_usuario') ?? '@usuario';
+    final apelidoLocal = preferencias.getString('perfil_nome')?.trim();
     setState(() {
       _idUsuarioAtual ??= publicado.ownerId;
       _videos.insert(
@@ -228,6 +230,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   ? 'Meu vídeo'
                   : _shorten(publicado.description)),
           autor: nomeUsuario,
+          apelido: apelidoLocal?.isNotEmpty == true ? apelidoLocal : null,
           tipo: publicado.contentType,
           genero: 'Vídeo de ${publicado.contentType.toLowerCase()}',
           descricao: publicado.description,
@@ -269,6 +272,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         final id = video['id'];
         final ownerId = video['id_usuario'];
         final autor = video['autor'];
+        final apelido = video['apelido'] ?? video['nome'] ??
+            video['nome_exibicao'] ?? video['nomeExibicao'];
         final descricao = video['descricao'];
         final tipo = video['tipo_conteudo'];
         final spoiler = video['spoiler'];
@@ -301,6 +306,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   ? 'Vídeo de ${tipo.toLowerCase()}'
                   : _shorten(descricao)),
           autor: autor,
+          apelido: apelido is String && apelido.trim().isNotEmpty ? apelido.trim() : null,
           tipo: obra?['tipo'] as String? ?? tipo,
           genero: generos.isEmpty
               ? 'Vídeo de ${tipo.toLowerCase()}'
@@ -421,84 +427,36 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Widget _buildPublicacaoToast() {
     return Positioned(
-      top: 50,
-      left: 18,
-      right: 18,
+      top: 44, left: 20, right: 20,
       child: Material(
         color: Colors.transparent,
         child: AnimatedSlide(
           offset: _mostrarAvisoPublicado ? Offset.zero : const Offset(0, -1.2),
-          duration: const Duration(milliseconds: 350),
-          curve: Curves.easeOutBack,
+          duration: const Duration(milliseconds: 280),
           child: AnimatedOpacity(
-            opacity: _mostrarAvisoPublicado ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 300),
+            opacity: _mostrarAvisoPublicado ? 1 : 0,
+            duration: const Duration(milliseconds: 220),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF7D171D), Color(0xFF451717)],
-                ),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: const Color(0xFFFFD166).withValues(alpha: 0.7),
-                  width: 1.2,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.35),
-                    blurRadius: 18,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
+                color: AppPalette.raisedSurface(context),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: const Color(0xFFB8787C).withValues(alpha: .45)),
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: .15), blurRadius: 16, offset: const Offset(0, 5))],
               ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFFFD166),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.check_rounded,
-                      color: Color(0xFF7D171D),
-                      size: 22,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text(
-                          'Vídeo publicado!',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontFamily: 'IMFellFrenchCanon',
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          _tituloAvisoPublicado.isNotEmpty
-                              ? 'Sua recomendação de "$_tituloAvisoPublicado" já está no feed.'
-                              : 'Sua recomendação já está visível para a comunidade.',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+              child: Row(children: [
+                Container(padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: const Color(0xFFB8787C).withValues(alpha: .16),shape: BoxShape.circle),
+                  child: const Icon(Icons.check_rounded, color: Color(0xFFB8787C), size: 20)),
+                const SizedBox(width: 12),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,mainAxisSize: MainAxisSize.min,children: [
+                  Text('Vídeo publicado',style: TextStyle(color: AppPalette.primaryText(context),fontSize: 14,fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 3),
+                  Text(_tituloAvisoPublicado.isNotEmpty ? '$_tituloAvisoPublicado já está no Loop.' : 'Seu vídeo já está no Loop.',
+                    maxLines: 1,overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: AppPalette.mutedText(context),fontSize: 12)),
+                ])),
+              ]),
             ),
           ),
         ),
@@ -668,7 +626,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget _buildBottomNav() {
     return Container(
       decoration: BoxDecoration(
-        color: AppPalette.background(context),
+        color: const Color(0xFFFFE9E9),
         border: Border(
           top: BorderSide(
             color: AppPalette.border(context).withValues(alpha: 0.35),
@@ -690,8 +648,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 onTap: () => setState(() => _tabAtual = 0),
               ),
               _navAssetItem(
-                image: 'assets/images/grupos.png',
-                label: 'Pessoas',
+                image: null,
+                label: 'Conversas',
                 active: _tabAtual == 1,
                 onTap: () => setState(() => _tabAtual = 1),
                 fallback: Icons.groups_rounded,
@@ -740,7 +698,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _navAssetItem({
-    required String image,
+    required String? image,
     required String label,
     required bool active,
     required VoidCallback onTap,
@@ -758,7 +716,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               SizedBox(
                 width: 20,
                 height: 20,
-                child: Image.asset(
+                child: image == null
+                    ? Icon(
+                        fallback ?? Icons.chat_bubble_outline_rounded,
+                        color: active ? AppPalette.primaryText(context) : AppPalette.accent(context),
+                        size: 22,
+                      )
+                    : Image.asset(
                   image,
                   fit: BoxFit.contain,
                   errorBuilder: (_, _, _) => Icon(
@@ -845,6 +809,7 @@ Widget _luptokAvatar(String? url, String inicial, double radius) {
 
 class _VideoCard {
   final String titulo, tipo, genero, descricao, spoiler, autor;
+  final String? apelido;
   final String? obraId, obraTitulo, obraTipo, obraDescricao;
   final List<String> obraGeneros, obraPalavrasChave;
   final String? videoPath;
@@ -859,6 +824,7 @@ class _VideoCard {
   const _VideoCard({
     required this.titulo,
     required this.autor,
+    this.apelido,
     required this.tipo,
     required this.genero,
     required this.descricao,
@@ -1525,20 +1491,16 @@ class _FeedVideoState extends State<_FeedVideo> {
         return Stack(
           fit: StackFit.expand,
           children: [
-            ColoredBox(
-              color: Colors.black,
-              child: Center(
-                child: AspectRatio(
-                  aspectRatio: 9 / 16,
-                  child: ClipRect(
-                    child: FittedBox(
-                      fit: BoxFit.cover,
-                      child: SizedBox(
-                        width: sourceAspectRatio * 1000,
-                        height: 1000,
-                        child: IgnorePointer(child: VideoPlayer(controller)),
-                      ),
-                    ),
+            // Preenche toda a área do feed, sem a moldura fixa 9:16.
+            // BoxFit.cover preserva a proporção e recorta apenas o excesso.
+            ClipRect(
+              child: SizedBox.expand(
+                child: FittedBox(
+                  fit: BoxFit.cover,
+                  child: SizedBox(
+                    width: sourceAspectRatio * 1000,
+                    height: 1000,
+                    child: IgnorePointer(child: VideoPlayer(controller)),
                   ),
                 ),
               ),
@@ -2491,6 +2453,8 @@ class _LoopTabState extends State<_LoopTab> {
   final PageController _pageCtrl = PageController();
   final Set<int> _saved = {};
   final Set<String> _following = {};
+  final Map<String, String> _apelidosPorId = {};
+  final Set<String> _apelidosConsultados = {};
   final Map<String, int> _reviewCounts = {};
   final Map<String, bool> _likeStates = {};
   final Map<String, int> _likeCounts = {};
@@ -2529,11 +2493,38 @@ class _LoopTabState extends State<_LoopTab> {
     followedUsernames.addListener(_syncFollowedUsers);
     savedVideoIndices.addListener(_syncSavedVideos);
     _carregarInteracoes();
+    _carregarApelidos();
+  }
+
+  // Busca o nome público da conta quando o endpoint de vídeos retorna
+  // apenas o username. O username continua sendo a chave para seguir.
+  void _carregarApelidos() {
+    for (final video in widget.videos) {
+      final id = video.ownerId;
+      if (id == null || id.isEmpty ||
+          (video.apelido != null && video.apelido!.trim().isNotEmpty) ||
+          !_apelidosConsultados.add(id)) continue;
+      unawaited(_buscarApelido(id));
+    }
+  }
+
+  Future<void> _buscarApelido(String id) async {
+    try {
+      final conta = await ApiService.obterConta(id);
+      final nome = (conta['apelido'] ?? conta['nome'] ??
+              conta['nome_exibicao'])?.toString().trim();
+      if (mounted && nome != null && nome.isNotEmpty) {
+        setState(() => _apelidosPorId[id] = nome);
+      }
+    } catch (_) {
+      // Se a consulta falhar, mantém o identificador já disponível.
+    }
   }
 
   @override
   void didUpdateWidget(covariant _LoopTab oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _carregarApelidos();
     if (oldWidget.isVisible && !widget.isVisible && !_userPaused) {
       setState(() => _userPaused = true);
     } else if (!oldWidget.isVisible && widget.isVisible && _userPaused) {
@@ -2586,6 +2577,7 @@ class _LoopTabState extends State<_LoopTab> {
         MaterialPageRoute<void>(
           builder: (_) => ProfileScreen(
             isOwner: isOwner,
+            publicUserId: int.tryParse(id),
             publicUsername: '@$username',
             publicName: account['nome'] as String,
             publicWorks: works,
@@ -2888,21 +2880,23 @@ class _LoopTabState extends State<_LoopTab> {
   Widget _buildTopBar() {
     return Container(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Colors.black.withValues(alpha: 0.65), Colors.transparent],
+        color: const Color(0xFFFFE9E9),
+        border: Border(
+          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.22)),
         ),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.20), blurRadius: 14, offset: const Offset(0, 3)),
+        ],
       ),
-      padding: const EdgeInsets.fromLTRB(14, 6, 8, 14),
+      padding: const EdgeInsets.fromLTRB(14, 6, 8, 8),
       child: SafeArea(
         bottom: false,
         child: Row(
           children: [
             Image.asset(
               AppPalette.logo(context),
-              width: 32,
-              height: 32,
+              width: 46,
+              height: 46,
               fit: BoxFit.contain,
               errorBuilder: (_, _, _) => const Icon(
                 Icons.play_circle_filled_rounded,
@@ -2918,7 +2912,7 @@ class _LoopTabState extends State<_LoopTab> {
                   constraints: const BoxConstraints(maxWidth: 196),
                   padding: const EdgeInsets.all(3),
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.12),
+                    color: Colors.transparent,
                     borderRadius: BorderRadius.circular(25),
                   ),
                   child: Row(
@@ -2943,8 +2937,8 @@ class _LoopTabState extends State<_LoopTab> {
               onPressed: _pesquisar,
               icon: const Icon(
                 Icons.search_rounded,
-                color: Colors.white,
-                size: 24,
+                color: const Color(0xFF713C47),
+                size: 25,
               ),
             ),
           ],
@@ -2967,16 +2961,17 @@ class _LoopTabState extends State<_LoopTab> {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: active
-                ? Colors.white.withValues(alpha: 0.19)
+                ? const Color(0xFFB8787C).withValues(alpha: 0.20)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text(
             label,
             style: TextStyle(
-              color: Colors.white,
-              fontSize: 12.5,
-              fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+              color: const Color(0xFF713C47),
+              fontSize: 13.5,
+              letterSpacing: 0.2,
+              fontWeight: active ? FontWeight.w800 : FontWeight.w500,
             ),
           ),
         ),
@@ -3088,7 +3083,7 @@ class _LoopTabState extends State<_LoopTab> {
               videoId: v.videoId,
               isActive: active,
               userPaused: _userPaused,
-              muteTop: 88,
+              muteTop: 112,
               onTapVideo: _aoTocarSimples,
               onDoubleTapVideo: () => _aoDarDoisToques(v, videoIndex),
             ),
@@ -3114,6 +3109,17 @@ class _LoopTabState extends State<_LoopTab> {
                   ),
                 ),
               ),
+            ),
+          ),
+
+          // Etiqueta de spoiler no topo, fora da área de descrição.
+          Positioned(
+            top: MediaQuery.paddingOf(context).top + 77,
+            left: 16,
+            right: 74,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _spoilerBadge(v.spoiler),
             ),
           ),
 
@@ -3170,7 +3176,7 @@ class _LoopTabState extends State<_LoopTab> {
           // 6. Coluna vertical de interação lateral (lado direito)
           Positioned(
             right: 10,
-            bottom: 24,
+            bottom: 60,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -3266,19 +3272,15 @@ class _LoopTabState extends State<_LoopTab> {
             ),
           ),
 
-          // 7. Informações inferiores reorganizadas: Obra, Autor, Descrição e Spoiler
+          // Autor e legenda próximos da base; a obra fica separada à direita.
           Positioned(
             left: 16,
             right: 76,
-            bottom: 24,
+            bottom: 18,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Identificação elegante da obra à qual o vídeo está relacionado
-                _obraBadge(v),
-                const SizedBox(height: 10),
-
                 // Linha do autor com avatar, nome de usuário e botão de seguir
                 _autorRow(v, isOwner),
 
@@ -3298,12 +3300,17 @@ class _LoopTabState extends State<_LoopTab> {
                     ),
                   ),
                 ],
-                const SizedBox(height: 8),
 
-                // Nível de spoiler
-                _spoilerBadge(v.spoiler),
               ],
             ),
+          ),
+
+          // Etiqueta pequena, no canto inferior direito (estilo áudio do TikTok).
+          // É uma sobreposição: não muda a altura nem a proporção do vídeo.
+          Positioned(
+            right: 8,
+            bottom: 8,
+            child: _obraBadge(v),
           ),
         ],
       ),
@@ -3313,148 +3320,175 @@ class _LoopTabState extends State<_LoopTab> {
   // ── Peças da interface do feed ──────────────────────────────────
 
   Widget _obraBadge(_VideoCard v) {
-    final titulo = v.obraTitulo ?? (v.titulo.isNotEmpty ? v.titulo : 'Obra');
-    final tipo = v.obraTipo ?? v.tipo;
-    final generos = v.obraGeneros.take(2).map(_cap).join(' · ');
-
-    final iconData = switch (tipo.toLowerCase()) {
-      'filme' => Icons.movie_rounded,
-      'série' || 'serie' => Icons.tv_rounded,
-      'livro' => Icons.menu_book_rounded,
-      'anime' => Icons.animation_rounded,
-      'dorama' || 'k-drama' => Icons.theater_comedy_rounded,
-      _ => Icons.movie_filter_rounded,
-    };
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.27),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.10),
-          width: 0.7,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(iconData, size: 14, color: const Color(0xFFFFD166)),
-          const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              '$titulo${tipo.isNotEmpty ? ' · $tipo' : ''}${generos.isNotEmpty ? ' ($generos)' : ''}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.2,
-              ),
-            ),
-          ),
-        ],
-      ),
+    return VideoWorkLabel(
+      title: v.obraTitulo ?? (v.titulo.isNotEmpty ? v.titulo : 'Obra'),
+      type: v.obraTipo ?? v.tipo,
     );
   }
 
   Widget _autorRow(_VideoCard v, bool isOwner) {
-    final nome = v.autor.replaceFirst('@', '');
-    final inicial = nome.isEmpty ? '?' : nome.substring(0, 1).toUpperCase();
+    final apelido = (v.apelido?.trim().isNotEmpty == true
+            ? v.apelido!.trim()
+            : _apelidosPorId[v.ownerId]?.trim()) ??
+        v.autor.replaceFirst('@', '');
+    final inicial = apelido.isEmpty ? '?' : apelido.substring(0, 1).toUpperCase();
     final following = _following.contains(v.autor);
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        GestureDetector(
-          onTap: () => _abrirPerfilAutor(v),
-          behavior: HitTestBehavior.opaque,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
+        // O botão de seguir é um pequeno selo sobreposto ao avatar,
+        // sem competir visualmente com o apelido ou com a legenda.
+        SizedBox(
+          width: 48,
+          height: 46,
+          child: Stack(
+            clipBehavior: Clip.none,
             children: [
-              _luptokAvatar(v.fotoUrl, inicial, 16),
-              const SizedBox(width: 8),
-              Text(
-                v.autor,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.w700,
-                  shadows: [Shadow(color: Colors.black87, blurRadius: 6)],
+              Positioned(
+                left: 0,
+                top: 0,
+                child: GestureDetector(
+                  onTap: () => _abrirPerfilAutor(v),
+                  child: _luptokAvatar(v.fotoUrl, inicial, 19),
                 ),
               ),
+              if (!isOwner)
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: Semantics(
+                    button: true,
+                    label: following ? 'Deixar de seguir' : 'Seguir ${apelido}',
+                    child: Tooltip(
+                      message: following ? 'Seguindo' : 'Seguir',
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () => _toggleFollow(v.autor),
+                          customBorder: const CircleBorder(),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 220),
+                            curve: Curves.easeOutCubic,
+                            width: 24,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: following
+                                  ? const Color(0xFF33232B)
+                                  : const Color(0xFFFFE9E9),
+                              border: Border.all(
+                                color: following
+                                    ? const Color(0xFFFFD1D9)
+                                    : const Color(0xFFB8787C),
+                                width: 1.5,
+                              ),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Color(0x77000000),
+                                  blurRadius: 7,
+                                  offset: Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 180),
+                              child: Icon(
+                                following ? Icons.check_rounded : Icons.add_rounded,
+                                key: ValueKey(following),
+                                size: 16,
+                                color: following
+                                    ? const Color(0xFFFFE9E9)
+                                    : const Color(0xFF8D4555),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
-        if (!isOwner) ...[
-          const SizedBox(width: 10),
-          GestureDetector(
-            onTap: () => _toggleFollow(v.autor),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              padding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 3.5,
-              ),
-              decoration: BoxDecoration(
-                color: following
-                    ? Colors.white.withValues(alpha: 0.18)
-                    : AppPalette.button(context),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: following ? Colors.white38 : Colors.transparent,
-                ),
-              ),
-              child: Text(
-                following ? 'Seguindo' : 'Seguir',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                ),
+        const SizedBox(width: 9),
+        Flexible(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _abrirPerfilAutor(v),
+            child: Text(
+              apelido,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                shadows: [Shadow(color: Colors.black87, blurRadius: 6)],
               ),
             ),
           ),
-        ],
+        ),
       ],
     );
   }
 
   Widget _spoilerBadge(String spoiler) {
-    final cor = _spoilerColor(spoiler);
+    final hidden = widget.ocultarSpoilers && spoiler != 'nenhum';
+    final isStrong = spoiler == 'muito';
+    final isLight = spoiler == 'leve';
+    final color = hidden
+        ? const Color(0xFFFFE9E9)
+        : isStrong
+            ? const Color(0xFFFFC3CB)
+            : isLight
+                ? const Color(0xFFFFD9A0)
+                : const Color(0xFFCAF0D5);
+    final icon = hidden
+        ? Icons.visibility_off_outlined
+        : isStrong
+            ? Icons.warning_amber_rounded
+            : isLight
+                ? Icons.auto_awesome_outlined
+                : Icons.verified_outlined;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
+      constraints: const BoxConstraints(maxWidth: 245),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.24),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: cor.withValues(alpha: 0.36)),
+        color: const Color(0xFF21171C).withValues(alpha: .76),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: .48)),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: .20), blurRadius: 12, offset: const Offset(0, 4))],
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 6.5,
-            height: 6.5,
-            decoration: BoxDecoration(color: cor, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 5),
-          Text(
-            _spoilerLabel(spoiler),
-            style: TextStyle(
-              color: cor,
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 17, color: color),
+        const SizedBox(width: 8),
+        Flexible(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(_spoilerLabel(spoiler), maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w800)),
+            Text(hidden ? 'Conteúdo protegido' : isStrong ? 'Revela partes importantes' : isLight ? 'Pode revelar alguns detalhes' : 'Assista sem preocupação',
+              maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white70, fontSize: 10)),
+          ],
+        )),
+      ]),
     );
   }
 
   Widget _botaoRedondo(Widget child) {
     // Ações flutuantes: área de toque confortável, sem bolhas pretas rígidas.
-    return SizedBox(width: 44, height: 42, child: Center(child: child));
+    return Container(
+      width: 46, height: 46,
+      decoration: BoxDecoration(
+        color: const Color(0xFF21171C).withValues(alpha: .36),
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white.withValues(alpha: .16)),
+      ),
+      child: Center(child: child),
+    );
   }
 
   Widget _acao({
@@ -3475,7 +3509,7 @@ class _LoopTabState extends State<_LoopTab> {
                 ? Icon(
                     icon,
                     color: iconColor ?? Colors.white,
-                    size: 25,
+                    size: 23,
                     shadows: const [
                       Shadow(color: Colors.black87, blurRadius: 11),
                       Shadow(color: Colors.black45, blurRadius: 3),

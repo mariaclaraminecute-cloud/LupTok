@@ -1,7 +1,5 @@
 import 'dart:async';
 
-
-
 import 'package:camera/camera.dart';
 
 import 'package:flutter/foundation.dart';
@@ -30,21 +28,15 @@ import 'vertical_video.dart';
 
 import 'vertical_video_processor.dart';
 
-
-
 class VideoRecorderScreen extends StatefulWidget {
 
   const VideoRecorderScreen({super.key});
-
-
 
   @override
 
   State<VideoRecorderScreen> createState() => _VideoRecorderScreenState();
 
 }
-
-
 
 class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
 
@@ -92,8 +84,6 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
 
   final ImagePicker _imagePicker = ImagePicker();
 
-
-
   @override
 
   void initState() {
@@ -105,8 +95,6 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
     _prepareCamera();
 
   }
-
-
 
   Future<void> _prepareCamera() async {
 
@@ -123,8 +111,6 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
     await _initializeCamera();
 
   }
-
-
 
   Future<void> _initializeCamera({int? cameraIndex}) async {
 
@@ -149,8 +135,6 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
       return;
 
     }
-
-
 
     try {
 
@@ -230,15 +214,11 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
 
   }
 
-
-
   Future<void> _alternarGravacao() async {
 
     final controller = _cameraController;
 
     if (controller == null || !controller.value.isInitialized) return;
-
-
 
     try {
 
@@ -396,8 +376,6 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
 
   }
 
-
-
   Future<void> _selecionarDaGaleria() async {
 
     if (_isRecording || _startingRecording || _selectingVideo) return;
@@ -410,8 +388,6 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
 
       if (video == null || !mounted) return;
 
-
-
       final camera = _cameraController;
 
       _cameraController = null;
@@ -419,8 +395,6 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
       await camera?.dispose();
 
       if (!mounted) return;
-
-
 
       final publicado = await Navigator.of(context).push<PublishedVideo>(
 
@@ -478,8 +452,6 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
 
   }
 
-
-
   Future<void> _trocarCamera() async {
 
     if (_cameras.length < 2 || _isRecording || _startingRecording) return;
@@ -505,8 +477,6 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
     if (mounted) await _initializeCamera(cameraIndex: nextIndex);
 
   }
-
-
 
   Future<void> _alternarFlash() async {
 
@@ -536,8 +506,6 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
 
   }
 
-
-
   void _alternarTemporizador() {
 
     const options = [0, 3, 10];
@@ -548,23 +516,17 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
 
   }
 
-
-
   void _alternarDuracao() {
 
     setState(() => _maxDuration = _maxDuration == 15 ? 60 : 15);
 
   }
 
-
-
   Future<void> _salvarNaGaleria([XFile? video]) async {
 
     final arquivo = video ?? _recordedVideo;
 
     if (!mounted || arquivo == null || _savingVideo || kIsWeb) return;
-
-
 
     setState(() {
 
@@ -594,8 +556,6 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
 
       }
 
-
-
       await Gal.putVideo(arquivo.path, album: 'Luptok');
 
       if (mounted) setState(() => _gallerySaved = true);
@@ -611,8 +571,6 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
     }
 
   }
-
-
 
   Future<void> _compartilharVideo() async {
 
@@ -635,8 +593,6 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
     );
 
   }
-
-
 
   @override
 
@@ -661,8 +617,6 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
     super.dispose();
 
   }
-
-
 
   @override
 
@@ -1302,15 +1256,11 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
 
   }
 
-
-
   String _formatDuration(int seconds) =>
 
       '${(seconds ~/ 60).toString().padLeft(2, '0')}:'
 
       '${(seconds % 60).toString().padLeft(2, '0')}';
-
-
 
   Widget _cameraTool({
 
@@ -1367,8 +1317,6 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
     );
 
   }
-
-
 
   Widget _recordingButton() {
 
@@ -1443,8 +1391,6 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
     );
 
   }
-
-
 
   Widget _buildRecordedActions() {
 
@@ -1576,8 +1522,6 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
 
 }
 
-
-
 class PublishedVideo {
 
   final String videoPath;
@@ -1607,8 +1551,6 @@ class PublishedVideo {
   final List<String> workGenres;
 
   final List<String> workKeywords;
-
-
 
   const PublishedVideo({
 
@@ -1644,39 +1586,40 @@ class PublishedVideo {
 
 }
 
-
-
-class VideoPreviewScreen extends StatelessWidget {
+class VideoPreviewScreen extends StatefulWidget {
 
   final XFile video;
 
-
-
   const VideoPreviewScreen({super.key, required this.video});
 
+  @override
+  State<VideoPreviewScreen> createState() => _VideoPreviewScreenState();
+}
 
+class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
+  final GlobalKey<_PlayableVideoState> _playerKey = GlobalKey<_PlayableVideoState>();
 
   Future<void> _continueToPost(BuildContext context) async {
+    await _playerKey.currentState?.pauseVideo();
 
     final published = await Navigator.of(context).push<PublishedVideo>(
 
       MaterialPageRoute<PublishedVideo>(
 
-        builder: (_) => VideoPostScreen(video: video),
+        builder: (_) => VideoPostScreen(video: widget.video),
 
       ),
 
     );
 
-    if (published != null && context.mounted) {
-
+    if (!mounted) return;
+    if (published != null) {
       Navigator.of(context).pop(published);
-
+    } else {
+      await _playerKey.currentState?.resumeVideo();
     }
 
   }
-
-
 
   @override
 
@@ -1732,7 +1675,7 @@ class VideoPreviewScreen extends StatelessWidget {
 
                   ),
 
-                  child: _PlayableVideo(path: video.path),
+                  child: _PlayableVideo(key: _playerKey, path: widget.video.path),
 
                 ),
 
@@ -1814,17 +1757,11 @@ class VideoPreviewScreen extends StatelessWidget {
 
 }
 
-
-
 class VideoPostScreen extends StatefulWidget {
 
   final XFile video;
 
-
-
   const VideoPostScreen({super.key, required this.video});
-
-
 
   @override
 
@@ -1832,11 +1769,11 @@ class VideoPostScreen extends StatefulWidget {
 
 }
 
-
-
 class _VideoPostScreenState extends State<VideoPostScreen> {
 
   final TextEditingController _descriptionController = TextEditingController();
+  final TextEditingController _workSearchController = TextEditingController();
+  String _workQuery = '';
 
   String? _contentType;
 
@@ -1850,8 +1787,6 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
 
   late Future<List<Map<String, dynamic>>> _works;
 
-
-
   @override
 
   void initState() {
@@ -1862,19 +1797,16 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
 
   }
 
-
-
   @override
 
   void dispose() {
 
     _descriptionController.dispose();
+    _workSearchController.dispose();
 
     super.dispose();
 
   }
-
-
 
   Future<void> _publish() async {
 
@@ -1909,6 +1841,7 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
       final resposta = await ApiService.publicarVideo(
 
         arquivo: videoVertical?.file ?? widget.video,
+
         descricao: descricao,
 
         tipoConteudo: _contentType!,
@@ -2003,8 +1936,6 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
 
   }
 
-
-
   List<String> _stringList(Object? value) {
 
     if (value is! List) return const [];
@@ -2013,133 +1944,111 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
 
   }
 
-
-
-  Widget _buildWorkSelector() {
-
-    return FutureBuilder<List<Map<String, dynamic>>>(
-
-      future: _works,
-
-      builder: (context, snapshot) {
-
-        if (snapshot.hasError) {
-
-          return Column(
-
-            crossAxisAlignment: CrossAxisAlignment.start,
-
-            children: [
-
-              Text(
-
-                'Não foi possível carregar as obras: '
-
-                '${snapshot.error.toString().replaceFirst('Exception: ', '')}',
-
-              ),
-
-              TextButton(
-
-                onPressed: () => setState(() {
-
-                  _works = ApiService.listarObras();
-
-                }),
-
-                child: const Text('Tentar novamente'),
-
-              ),
-
-            ],
-
-          );
-
-        }
-
-        if (!snapshot.hasData) {
-
-          return const Padding(
-
-            padding: EdgeInsets.symmetric(vertical: 12),
-
-            child: Center(child: CircularProgressIndicator()),
-
-          );
-
-        }
-
-
-
-        final works = snapshot.data!;
-
-        return DropdownButtonFormField<String>(
-
-          isExpanded: true,
-
-          initialValue: _workId ?? '',
-
-          decoration: InputDecoration(
-
-            labelText: 'Obra relacionada (opcional)',
-
-            filled: true,
-
-            fillColor: AppPalette.input(context),
-
-            border: OutlineInputBorder(
-
-              borderRadius: BorderRadius.circular(10),
-
-              borderSide: BorderSide(color: AppPalette.border(context)),
-
-            ),
-
-          ),
-
-          items: [
-
-            const DropdownMenuItem(
-
-              value: '',
-
-              child: Text('Sem obra específica'),
-
-            ),
-
-            for (final work in works)
-
-              DropdownMenuItem(
-
-                value: work['id'].toString(),
-
-                child: Text(
-
-                  '${work['titulo']} · ${work['tipo']}',
-
-                  overflow: TextOverflow.ellipsis,
-
-                ),
-
-              ),
-
-          ],
-
-          onChanged: (value) => setState(
-
-            () => _workId = value == null || value.isEmpty ? null : value,
-
-          ),
-
-        );
-
-      },
-
-    );
-
+  String _normalizeWorkType(Object? value) {
+    final raw = (value ?? '').toString().trim().toLowerCase();
+    if (raw == 'filme' || raw == 'filmes' || raw == 'movie') return 'Filme';
+    if (raw == 'série' || raw == 'serie' || raw == 'series' || raw == 'séries') return 'Série';
+    if (raw == 'livro' || raw == 'livros' || raw == 'book') return 'Livro';
+    return raw;
   }
 
+  IconData _workIcon(String? type) {
+    switch (type) {
+      case 'Filme': return Icons.movie_outlined;
+      case 'Série': return Icons.tv_outlined;
+      default: return Icons.menu_book_rounded;
+    }
+  }
 
+  Widget _buildWorkSelector() {
+    final themeColor = AppPalette.primaryText(context);
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _works,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Não foi possível carregar as obras: ${snapshot.error}'),
+            TextButton(onPressed: () => setState(() => _works = ApiService.listarObras()),
+              child: const Text('Tentar novamente')),
+          ]);
+        }
+        if (!snapshot.hasData) {
+          return const Center(child: Padding(
+            padding: EdgeInsets.all(16), child: CircularProgressIndicator()));
+        }
+        if (_contentType == null) {
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: AppPalette.input(context), borderRadius: BorderRadius.circular(16)),
+            child: const Text('Escolha Filme, Série ou Livro para encontrar uma obra.'),
+          );
+        }
+        final works = snapshot.data!.where((work) =>
+          _normalizeWorkType(work['tipo']) == _contentType).toList();
+        final query = _workQuery.trim().toLowerCase();
+        final filtered = works.where((work) =>
+          (work['titulo'] ?? '').toString().toLowerCase().contains(query)).toList();
+        final selected = works.where((work) => work['id'].toString() == _workId).toList();
+        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          TextField(
+            controller: _workSearchController,
+            onChanged: (value) => setState(() => _workQuery = value),
+            decoration: InputDecoration(
+              hintText: 'Pesquisar ${_contentType == 'Série' ? 'séries' : _contentType == 'Filme' ? 'filmes' : 'livros'}...',
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: _workQuery.isEmpty ? null : IconButton(
+                icon: const Icon(Icons.close_rounded),
+                onPressed: () { _workSearchController.clear(); setState(() => _workQuery = ''); },
+              ),
+              filled: true, fillColor: AppPalette.input(context),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+            ),
+          ),
+          if (selected.isNotEmpty) Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: InputChip(
+              avatar: Icon(_workIcon(_contentType), size: 18),
+              label: Text((selected.first['titulo'] ?? '').toString(), overflow: TextOverflow.ellipsis),
+              onDeleted: () => setState(() => _workId = null),
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (filtered.isEmpty)
+            Padding(padding: const EdgeInsets.all(14), child: Text(
+              query.isEmpty ? 'Nenhuma obra dessa categoria foi encontrada.' : 'Nenhuma obra corresponde à pesquisa.',
+            ))
+          else
+            Container(
+              constraints: const BoxConstraints(maxHeight: 245),
+              decoration: BoxDecoration(
+                color: AppPalette.input(context), borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppPalette.border(context)),
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: filtered.length,
+                separatorBuilder: (context, index) => Divider(height: 1, color: AppPalette.border(context)),
+                itemBuilder: (context, index) {
+                  final work = filtered[index];
+                  final id = work['id'].toString();
+                  final active = id == _workId;
+                  return ListTile(
+                    dense: true,
+                    leading: Icon(_workIcon(_contentType), color: themeColor),
+                    title: Text((work['titulo'] ?? 'Sem título').toString(), maxLines: 2),
+                    trailing: Icon(active ? Icons.check_circle_rounded : Icons.circle_outlined,
+                      color: active ? const Color(0xFFB8787C) : themeColor),
+                    selected: active,
+                    onTap: () => setState(() => _workId = active ? null : id),
+                  );
+                },
+              ),
+            ),
+        ]);
+      },
+    );
+  }
 
   Widget _sectionTitle(String text) => Padding(
 
@@ -2163,8 +2072,6 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
 
   );
 
-
-
   @override
 
   Widget build(BuildContext context) {
@@ -2179,7 +2086,8 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
 
         foregroundColor: AppPalette.primaryText(context),
 
-        title: const Text('POSTAR'),
+        title: const Text('Criar publicação', style: TextStyle(fontWeight: FontWeight.w800)),
+        centerTitle: true,
 
       ),
 
@@ -2205,7 +2113,7 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
 
                       child: ConstrainedBox(
 
-                        constraints: const BoxConstraints(maxHeight: 240),
+                        constraints: const BoxConstraints(maxHeight: 300, maxWidth: 180),
 
                         child: _PlayableVideo(path: widget.video.path),
 
@@ -2215,7 +2123,7 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
 
                     const SizedBox(height: 20),
 
-                    _sectionTitle('Descrição'),
+                    _sectionTitle('Sua legenda'),
 
                     TextField(
 
@@ -2229,7 +2137,7 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
 
                       decoration: InputDecoration(
 
-                        hintText: 'O que você achou?',
+                        hintText: 'Conte o que você achou, sem estragar a surpresa...',
 
                         filled: true,
 
@@ -2265,7 +2173,7 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
 
                     const SizedBox(height: 8),
 
-                    _sectionTitle('Adicionar conteúdo *'),
+                    _sectionTitle('Sobre o que é seu vídeo? *'),
 
                     Wrap(
 
@@ -2283,7 +2191,12 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
 
                             onSelected: (_) =>
 
-                                setState(() => _contentType = type),
+                                setState(() {
+                                  _contentType = type;
+                                  _workId = null;
+                                  _workQuery = '';
+                                  _workSearchController.clear();
+                                }),
 
                             selectedColor: AppPalette.surface(context),
 
@@ -2439,17 +2352,11 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
 
 }
 
-
-
 class _PlayableVideo extends StatefulWidget {
 
   final String path;
 
-
-
-  const _PlayableVideo({required this.path});
-
-
+  const _PlayableVideo({super.key, required this.path});
 
   @override
 
@@ -2457,15 +2364,14 @@ class _PlayableVideo extends StatefulWidget {
 
 }
 
-
-
 class _PlayableVideoState extends State<_PlayableVideo> {
 
   late final VideoPlayerController _controller;
 
   late final Future<void> _initialize;
 
-
+  bool _paused = false;
+  bool _changingPlayback = false;
 
   @override
 
@@ -2477,26 +2383,58 @@ class _PlayableVideoState extends State<_PlayableVideo> {
 
     _initialize = _controller.initialize().then((_) {
 
+      if (!mounted) return;
       _controller.setLooping(true);
+      _controller.addListener(_syncPlayback);
       _controller.play();
 
     });
 
   }
 
+  void _syncPlayback() {
+    if (!mounted || !_controller.value.isInitialized) return;
+    final paused = !_controller.value.isPlaying;
+    if (_paused != paused) setState(() => _paused = paused);
+  }
 
+  Future<void> pauseVideo() async {
+    if (!_controller.value.isInitialized) return;
+    await _controller.pause();
+    if (mounted) setState(() => _paused = true);
+  }
+
+  Future<void> resumeVideo() async {
+    if (!_controller.value.isInitialized) return;
+    await _controller.play();
+    if (mounted) setState(() => _paused = false);
+  }
+
+  Future<void> _togglePlayback() async {
+    if (_changingPlayback || !_controller.value.isInitialized) return;
+    _changingPlayback = true;
+    try {
+      if (_controller.value.isPlaying) {
+        await pauseVideo();
+      } else {
+        await resumeVideo();
+      }
+    } finally {
+      _changingPlayback = false;
+    }
+  }
 
   @override
 
   void dispose() {
 
+    _controller.removeListener(_syncPlayback);
+    _controller.pause();
     _controller.dispose();
 
     super.dispose();
 
   }
-
-
 
   @override
 
@@ -2565,47 +2503,72 @@ class _PlayableVideoState extends State<_PlayableVideo> {
         }
 
         final ratio = _controller.value.aspectRatio > 0
+
             ? _controller.value.aspectRatio
+
             : 9 / 16;
-        return GestureDetector(
-          onTap: () {
-            if (_controller.value.isPlaying) {
-              _controller.pause();
-            } else {
-              _controller.play();
-            }
-            setState(() {});
-          },
-          child: AspectRatio(
+
+        return AspectRatio(
+
             aspectRatio: 9 / 16,
+
             child: ClipRRect(
+
               borderRadius: BorderRadius.circular(14),
+
               child: ColoredBox(
+
                 color: Colors.black,
+
                 child: Stack(
+
                   fit: StackFit.expand,
+
                   children: [
+
                     ClipRect(
+
                       child: FittedBox(
+
                         fit: BoxFit.cover,
+
                         child: SizedBox(
+
                           width: ratio * 1000,
+
                           height: 1000,
+
                           child: VideoPlayer(_controller),
+
+                        ),
+
+                      ),
+
+                    ),
+
+                    if (_paused)
+                      const Center(
+                        child: IgnorePointer(
+                          child: Icon(Icons.play_circle_fill_rounded,
+                              color: Colors.white70, size: 48),
                         ),
                       ),
-                    ),
-                    if (!_controller.value.isPlaying)
-                      const Center(
-                        child: Icon(Icons.play_circle_fill_rounded,
-                            color: Colors.white70, size: 48),
+                    Positioned.fill(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _togglePlayback,
+                        child: const ColoredBox(color: Colors.transparent),
                       ),
+                    ),
                   ],
+
                 ),
+
               ),
+
             ),
-          ),
-        );
+
+          );
 
       },
 

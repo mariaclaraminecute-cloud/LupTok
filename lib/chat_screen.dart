@@ -27,7 +27,9 @@ Widget _chatAvatar(String? url, String inicial, double radius) {
 
 class ConversationsScreen extends StatefulWidget {
 
-  const ConversationsScreen({super.key});
+  const ConversationsScreen({super.key, this.embedded = false});
+
+  final bool embedded;
 
 
 
@@ -159,7 +161,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
 
       backgroundColor: bg,
 
-      appBar: AppBar(
+      appBar: widget.embedded ? null : AppBar(
 
         backgroundColor: bg,
 
@@ -337,7 +339,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
 
                     Text(
 
-                      'Acesse o perfil de outro membro ou a aba Pessoas para enviar uma mensagem direta.',
+                      'Toque no botão de nova conversa para enviar sua primeira mensagem.',
 
                       textAlign: TextAlign.center,
 

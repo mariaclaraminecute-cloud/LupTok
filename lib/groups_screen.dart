@@ -4,8 +4,8 @@ import 'api_service.dart';
 import 'app_preferences.dart';
 import 'chat_screen.dart';
 import 'profile_screen.dart';
-import 'work_compatibility.dart';
 
+/// Página principal da aba Conversas. O histórico fica visível imediatamente.
 class GroupsScreen extends StatefulWidget {
   const GroupsScreen({super.key});
 
@@ -14,330 +14,201 @@ class GroupsScreen extends StatefulWidget {
 }
 
 class _GroupsScreenState extends State<GroupsScreen> {
-  late Future<List<Map<String, dynamic>>> _accounts;
-  List<Map<String, dynamic>> _myWorks = [];
+  int _section = 0;
+
+  Future<void> _novaConversa() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(builder: (_) => const _NewConversationScreen()),
+    );
+    if (mounted) setState(() {});
+  }
 
   @override
-  void initState() {
-    super.initState();
-    _accounts = _loadAccounts();
-  }
-
-  Future<List<Map<String, dynamic>>> _loadAccounts() async {
-    final results = await Future.wait([
-      ApiService.listarContas(),
-      ApiService.listarObras(),
-    ]);
-    _myWorks = results[1];
-    final accounts = results[0];
-    accounts.sort((first, second) {
-      final firstWorks = first['obras'] as List<Map<String, dynamic>>;
-      final secondWorks = second['obras'] as List<Map<String, dynamic>>;
-      return workCompatibility(secondWorks, _myWorks).compareTo(
-        workCompatibility(firstWorks, _myWorks),
-      );
-    });
-    return accounts;
-  }
-
-  Future<void> _reload() async {
-    setState(() => _accounts = _loadAccounts());
-  }
-
-  void _openProfile(Map<String, dynamic> account) {
-    final username = account['nome_usuario'] as String;
-    final works = account['obras'] as List<Map<String, dynamic>>;
-    final accountId = account['id'];
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ProfileScreen(
-          isOwner: false,
-          publicUserId: accountId != null ? int.tryParse(accountId.toString()) : null,
-          publicUsername: '@$username',
-          publicName: account['nome'] as String,
-          publicWorks: works,
-          availableVideos: const [],
+  Widget build(BuildContext context) {
+    final primary = AppPalette.primaryText(context);
+    final accent = AppPalette.button(context);
+    return Scaffold(
+      backgroundColor: AppPalette.background(context),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 12, 10),
+              child: Row(children: [
+                Expanded(child: Text('Conversas', style: TextStyle(
+                  color: primary, fontFamily: 'IMFellFrenchCanon', fontSize: 30,
+                ))),
+                IconButton(
+                  tooltip: 'Nova conversa',
+                  onPressed: _novaConversa,
+                  icon: Icon(Icons.edit_square, color: primary),
+                ),
+              ]),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(children: [
+                _tab('Mensagens', 0, accent, primary),
+                const SizedBox(width: 10),
+                _tab('Comunidades', 1, accent, primary),
+              ]),
+            ),
+            const SizedBox(height: 8),
+            Expanded(child: _section == 0
+              ? ConversationsScreen(key: ValueKey(_section), embedded: true)
+              : _communities()),
+          ],
         ),
       ),
     );
   }
 
-  Future<void> _iniciarChat(Map<String, dynamic> account) async {
+  Widget _tab(String label, int index, Color accent, Color primary) {
+    final active = _section == index;
+    return Expanded(child: InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: () => setState(() => _section = index),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: active ? accent.withValues(alpha: 0.20) : Colors.transparent,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: active ? accent : AppPalette.border(context).withValues(alpha: 0.25)),
+        ),
+        child: Text(label, textAlign: TextAlign.center, style: TextStyle(
+          color: primary, fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+        )),
+      ),
+    ));
+  }
+
+  Widget _communities() {
+    return Center(child: Padding(
+      padding: const EdgeInsets.all(30),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.groups_rounded, size: 56, color: AppPalette.button(context)),
+        const SizedBox(height: 18),
+        Text('Comunidades', style: TextStyle(
+          fontSize: 23, fontWeight: FontWeight.w700,
+          color: AppPalette.primaryText(context),
+        )),
+        const SizedBox(height: 10),
+        Text('Em breve, você poderá encontrar comunidades para conversar sobre seus livros, filmes e séries favoritos.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: AppPalette.mutedText(context), height: 1.5)),
+      ]),
+    ));
+  }
+}
+
+/// A busca por pessoas fica acessível somente ao iniciar uma nova conversa.
+class _NewConversationScreen extends StatefulWidget {
+  const _NewConversationScreen();
+
+  @override
+  State<_NewConversationScreen> createState() => _NewConversationScreenState();
+}
+
+class _NewConversationScreenState extends State<_NewConversationScreen> {
+  late final Future<List<Map<String, dynamic>>> _accounts = ApiService.listarContas();
+  String _query = '';
+  bool _opening = false;
+
+  Future<void> _openChat(Map<String, dynamic> account) async {
+    if (_opening) return;
     final id = account['id'];
     if (id == null) return;
-    final nome = account['nome'] as String;
-    final username = account['nome_usuario'] as String;
-    final foto = account['foto_url'] as String?;
-
+    setState(() => _opening = true);
     try {
-      final res = await ApiService.iniciarConversa(idDestinatario: id);
-      final idConversa = res['id_conversa'] as int;
+      final result = await ApiService.iniciarConversa(idDestinatario: id);
+      final rawId = result['id_conversa'];
+      final conversationId = rawId is int ? rawId : int.tryParse('$rawId');
+      if (conversationId == null) throw Exception('Conversa sem identificador.');
       if (!mounted) return;
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => ChatConversationScreen(
-            conversaId: idConversa,
-            recipientName: nome,
-            recipientUsername: '@$username',
-            recipientPhoto: foto,
-            recipientId: id is int ? id : int.parse(id.toString()),
-          ),
+      final name = account['nome']?.toString() ?? 'Usuário';
+      final username = account['nome_usuario']?.toString() ?? '';
+      await Navigator.of(context).push<void>(MaterialPageRoute<void>(
+        builder: (_) => ChatConversationScreen(
+          conversaId: conversationId,
+          recipientName: name,
+          recipientUsername: username.isEmpty ? '' : '@$username',
+          recipientPhoto: account['foto_url'] as String?,
+          recipientId: id is int ? id : int.tryParse('$id') ?? 0,
         ),
-      );
+      ));
+      if (mounted) Navigator.of(context).pop();
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Não foi possível abrir a conversa: ${e.toString().replaceFirst('Exception: ', '')}',
-          ),
-        ),
-      );
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Não foi possível iniciar a conversa: ${e.toString().replaceFirst('Exception: ', '')}'),
+      ));
+    } finally {
+      if (mounted) setState(() => _opening = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final primary = AppPalette.primaryText(context);
     return Scaffold(
       backgroundColor: AppPalette.background(context),
-      body: SafeArea(
-        child: FutureBuilder<List<Map<String, dynamic>>>(
+      appBar: AppBar(
+        title: const Text('Nova conversa'),
+        backgroundColor: AppPalette.background(context),
+        foregroundColor: primary,
+      ),
+      body: Column(children: [
+        Padding(padding: const EdgeInsets.all(16), child: TextField(
+          onChanged: (value) => setState(() => _query = value.trim().toLowerCase()),
+          decoration: InputDecoration(
+            hintText: 'Pesquisar por nome ou @usuário',
+            prefixIcon: const Icon(Icons.search_rounded),
+            filled: true,
+            fillColor: AppPalette.raisedSurface(context),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+          ),
+        )),
+        Expanded(child: FutureBuilder<List<Map<String, dynamic>>>(
           future: _accounts,
           builder: (context, snapshot) {
-            if (snapshot.hasError) {
-              return _message(
-                context,
-                'Não foi possível carregar as contas.',
-                action: TextButton(
-                  onPressed: _reload,
-                  child: const Text('Tentar novamente'),
-                ),
-              );
-            }
             if (snapshot.connectionState != ConnectionState.done) {
               return const Center(child: CircularProgressIndicator());
             }
-            final accounts = snapshot.data!;
-            if (accounts.isEmpty) {
-              return _message(
-                context,
-                'Ainda não há outras contas cadastradas. '
-                'Quando alguém criar uma conta, ela aparecerá aqui.',
-                action: TextButton(
-                  onPressed: _reload,
-                  child: const Text('Atualizar'),
-                ),
-              );
+            if (snapshot.hasError) {
+              return Center(child: Text('Não foi possível carregar os usuários.', style: TextStyle(color: primary)));
             }
-
-            return RefreshIndicator(
-              onRefresh: _reload,
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Pessoas',
-                        style: TextStyle(
-                          color: AppPalette.primaryText(context),
-                          fontFamily: 'IMFellFrenchCanon',
-                          fontSize: 30,
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: 'Mensagens',
-                        icon: Icon(
-                          Icons.chat_bubble_outline_rounded,
-                          color: AppPalette.primaryText(context),
-                        ),
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => const ConversationsScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
+            final accounts = (snapshot.data ?? []).where((account) {
+              final name = account['nome']?.toString().toLowerCase() ?? '';
+              final username = account['nome_usuario']?.toString().toLowerCase() ?? '';
+              return name.contains(_query) || username.contains(_query);
+            }).toList();
+            if (accounts.isEmpty) {
+              return Center(child: Text('Nenhum usuário encontrado.', style: TextStyle(color: primary)));
+            }
+            return ListView.builder(
+              itemCount: accounts.length,
+              itemBuilder: (context, index) {
+                final account = accounts[index];
+                final name = account['nome']?.toString() ?? 'Usuário';
+                final username = account['nome_usuario']?.toString() ?? '';
+                final photo = ApiService.urlImagemPerfil(account['foto_url'] as String?);
+                return ListTile(
+                  enabled: !_opening,
+                  leading: CircleAvatar(
+                    backgroundColor: AppPalette.button(context),
+                    foregroundImage: photo == null ? null : NetworkImage(photo),
+                    child: Text(name.isEmpty ? '?' : name[0].toUpperCase(), style: const TextStyle(color: Colors.white)),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Contas cadastradas, ordenadas pela compatibilidade das obras.',
-                    style: TextStyle(color: AppPalette.mutedText(context)),
-                  ),
-                  const SizedBox(height: 16),
-                  for (final account in accounts)
-                    _AccountTile(
-                      account: account,
-                      myWorks: _myWorks,
-                      onTap: () => _openProfile(account),
-                      onChat: () => _iniciarChat(account),
-                    ),
-                ],
-              ),
+                  title: Text(name, style: TextStyle(color: primary)),
+                  subtitle: Text('@$username', style: TextStyle(color: AppPalette.mutedText(context))),
+                  trailing: Icon(Icons.chat_bubble_outline_rounded, color: AppPalette.button(context)),
+                  onTap: () => _openChat(account),
+                );
+              },
             );
           },
-        ),
-      ),
-    );
-  }
-
-  Widget _message(
-    BuildContext context,
-    String message, {
-    Widget? action,
-  }) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.people_outline_rounded,
-            size: 48,
-            color: AppPalette.mutedText(context),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppPalette.mutedText(context)),
-          ),
-          if (action != null) action,
-        ],
-      ),
-    ),
-  );
-}
-
-class _AccountTile extends StatelessWidget {
-  final Map<String, dynamic> account;
-  final List<Map<String, dynamic>> myWorks;
-  final VoidCallback onTap;
-  final VoidCallback onChat;
-
-  const _AccountTile({
-    required this.account,
-    required this.myWorks,
-    required this.onTap,
-    required this.onChat,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final name = account['nome'] as String;
-    final username = account['nome_usuario'] as String;
-    final works = account['obras'] as List<Map<String, dynamic>>;
-    final percentage = workCompatibility(myWorks, works);
-    final hasOpinions = myWorks.any((work) => work['sou_fa'] is bool) &&
-        works.any((work) => work['sou_fa'] is bool);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: AppPalette.raisedSurface(context),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: AppPalette.border(context).withValues(alpha: 0.15),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(
-              alpha: AppPalette.isDark(context) ? 0.2 : 0.05,
-            ),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 22,
-                  backgroundColor: AppPalette.button(context),
-                  foregroundColor: Colors.white,
-                  child: Text(
-                    name.isEmpty ? '?' : name[0].toUpperCase(),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
-                        style: TextStyle(
-                          color: AppPalette.primaryText(context),
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '@$username',
-                        style: TextStyle(
-                          color: AppPalette.mutedText(context),
-                          fontSize: 12,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: hasOpinions
-                              ? AppPalette.button(context).withValues(alpha: 0.12)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          hasOpinions
-                              ? '$percentage% compatível'
-                              : 'Sem obras em comum',
-                          style: TextStyle(
-                            color: hasOpinions
-                                ? AppPalette.primaryText(context)
-                                : AppPalette.mutedText(context),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Conversar',
-                  icon: Icon(
-                    Icons.chat_bubble_outline_rounded,
-                    color: AppPalette.button(context),
-                    size: 22,
-                  ),
-                  onPressed: onChat,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+        )),
+      ]),
     );
   }
 }
-
