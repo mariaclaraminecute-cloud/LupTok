@@ -1287,7 +1287,7 @@ app.get('/api/videos', autenticar, async (req, res) => {
     }
 
     const [videos] = await db.execute(
-      `SELECT v.id_video, v.id_usuario, u.nome_usuario, v.descricao,
+      `SELECT v.id_video, v.id_usuario, u.nome_usuario, u.foto_url, v.descricao,
               v.tipo_conteudo, v.spoiler, v.privacidade, v.criado_em,
               o.id_obra, o.titulo AS obra_titulo, o.tipo AS obra_tipo,
               o.descricao AS obra_descricao,
@@ -1321,6 +1321,7 @@ app.get('/api/videos', autenticar, async (req, res) => {
           id: video.id_video,
           id_usuario: video.id_usuario,
           autor: `@${video.nome_usuario}`,
+          foto_url: video.foto_url,
           descricao: video.descricao,
           tipo_conteudo: video.tipo_conteudo,
           spoiler: video.spoiler,

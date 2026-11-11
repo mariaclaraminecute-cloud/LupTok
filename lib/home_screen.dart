@@ -323,6 +323,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           videoToken: token,
           videoId: id.toString(),
           ownerId: ownerId.toString(),
+          fotoUrl: video['foto_url'] as String?,
           privacy: privacidade,
         );
       }).toList();
@@ -831,6 +832,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 // MODEL
 // ══════════════════════════════════════════════════════════════════
 
+
+Widget _luptokAvatar(String? url, String inicial, double radius) {
+  final resolved = ApiService.urlImagemPerfil(url);
+  return CircleAvatar(
+    radius: radius,
+    backgroundColor: const Color(0xFFB8787C),
+    foregroundImage: resolved == null ? null : NetworkImage(resolved),
+    child: Text(inicial, style: TextStyle(color: Colors.white, fontSize: radius * 0.8)),
+  );
+}
+
 class _VideoCard {
   final String titulo, tipo, genero, descricao, spoiler, autor;
   final String? obraId, obraTitulo, obraTipo, obraDescricao;
@@ -839,6 +851,7 @@ class _VideoCard {
   final String? videoToken;
   final String? videoId;
   final String? ownerId;
+  final String? fotoUrl;
   final String privacy;
   final int stars, comentarios;
   final Color cor;
@@ -864,6 +877,7 @@ class _VideoCard {
     this.videoToken,
     this.videoId,
     this.ownerId,
+    this.fotoUrl,
     this.privacy = 'Público',
   });
 }
@@ -3359,29 +3373,7 @@ class _LoopTabState extends State<_LoopTab> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [
-                      AppPalette.button(context),
-                      AppPalette.accent(context),
-                    ],
-                  ),
-                  border: Border.all(color: Colors.white, width: 1.2),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  inicial,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
+              _luptokAvatar(v.fotoUrl, inicial, 16),
               const SizedBox(width: 8),
               Text(
                 v.autor,
