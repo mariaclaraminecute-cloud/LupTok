@@ -1961,26 +1961,46 @@ app.post('/api/comunidades/:id/mensagens', autenticar, async(req,res)=>{
   } catch(e) {console.error('Enviar comunidade:',e);res.status(500).json({erro:'Não foi possível enviar a mensagem.'});}
 });
 
+// Usa o tipo real da chave primária existente no banco, inclusive UNSIGNED.
+// Evita incompatibilidades entre instalações antigas e tabelas novas.
+async function tipoChaveEstrangeira(tabela, coluna) {
+  const [linhas] = await db.execute(
+    `SELECT COLUMN_TYPE FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1`,
+    [tabela, coluna],
+  );
+  if (linhas.length === 0) {
+    throw new Error(`Coluna de referência ausente: ${tabela}.${coluna}`);
+  }
+  const tipo = String(linhas[0].COLUMN_TYPE).toUpperCase();
+  // Somente tipos inteiros são aceitos; nunca interpolar SQL arbitrário.
+  if (!/^(TINYINT|SMALLINT|MEDIUMINT|INT|INTEGER|BIGINT)(\(\d+\))?( UNSIGNED)?$/.test(tipo)) {
+    throw new Error(`Tipo de chave não suportado em ${tabela}.${coluna}: ${tipo}`);
+  }
+  return tipo;
+}
+
 async function iniciarServidor() {
   try {
     const conexao = await db.getConnection();
 
     console.log('MySQL conectado com sucesso!');
+    const tipoIdUsuario = await tipoChaveEstrangeira('usuario', 'id_usuario');
     await db.execute(`CREATE TABLE IF NOT EXISTS comunidade (
       id_comunidade BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
       nome VARCHAR(60) NOT NULL, descricao VARCHAR(300) NOT NULL DEFAULT '',
-      criador_id BIGINT UNSIGNED NOT NULL, criada_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      criador_id ${tipoIdUsuario} NOT NULL, criada_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (criador_id) REFERENCES usuario(id_usuario) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
     await db.execute(`CREATE TABLE IF NOT EXISTS comunidade_membro (
-      id_comunidade BIGINT UNSIGNED NOT NULL, id_usuario BIGINT UNSIGNED NOT NULL,
+      id_comunidade BIGINT UNSIGNED NOT NULL, id_usuario ${tipoIdUsuario} NOT NULL,
       PRIMARY KEY(id_comunidade,id_usuario),
       FOREIGN KEY (id_comunidade) REFERENCES comunidade(id_comunidade) ON DELETE CASCADE,
       FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
     await db.execute(`CREATE TABLE IF NOT EXISTS comunidade_mensagem (
       id_mensagem BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      id_comunidade BIGINT UNSIGNED NOT NULL, id_usuario BIGINT UNSIGNED NOT NULL,
+      id_comunidade BIGINT UNSIGNED NOT NULL, id_usuario ${tipoIdUsuario} NOT NULL,
       texto VARCHAR(2000) NOT NULL, criada_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       INDEX idx_comunidade_msg(id_comunidade,criada_em),
       FOREIGN KEY (id_comunidade) REFERENCES comunidade(id_comunidade) ON DELETE CASCADE,
@@ -2073,10 +2093,11 @@ async function iniciarServidor() {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
     );
 
+    const tipoIdVideo = await tipoChaveEstrangeira('video_post', 'id_video');
     await db.execute(`CREATE TABLE IF NOT EXISTS video_avaliacao (
       id_avaliacao BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-     id_video BIGINT UNSIGNED NOT NULL,
-     id_usuario INT UNSIGNED NOT NULL,
+     id_video ${tipoIdVideo} NOT NULL,
+     id_usuario ${tipoIdUsuario} NOT NULL,
       nota TINYINT UNSIGNED NOT NULL,
       texto VARCHAR(2000) NOT NULL,
       criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -2143,8 +2164,8 @@ async function iniciarServidor() {
       console.log(`API do LupTok rodando na porta ${porta}`);
     });
   } catch (error) {
-    console.error('Não foi possível conectar ao MySQL.');
-    console.error(error.message);
+    console.error('Falha ao inicializar o backend ou preparar o banco de dados.');
+    console.error(error);
     process.exit(1);
   }
 }
