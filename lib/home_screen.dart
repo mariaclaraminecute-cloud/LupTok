@@ -1,4 +1,6 @@
-﻿import 'dart:async';
+import 'dart:async';
+import 'dart:ui' as ui;
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -9,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 
 import 'api_service.dart';
+import 'saved_video_service.dart';
 import 'video_work_label.dart';
 import 'review_service.dart';
 import 'app_preferences.dart';
@@ -53,12 +56,6 @@ String _searchVideoTitle(Map<String, dynamic> video) {
   if (tituloObra is String && tituloObra.isNotEmpty) return tituloObra;
   if (descricao is String && descricao.isNotEmpty) return _shorten(descricao);
   return 'Recomendação';
-}
-
-String _searchVideoAsset(Map<String, dynamic> video) {
-  final obra = video['obra'];
-  final tipo = obra is Map ? obra['tipo'] : video['tipo_conteudo'];
-  return _tipoAsset(tipo?.toString() ?? '');
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -110,6 +107,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
+    ApiService.videosExcluidos.addListener(_sincronizarExclusoes);
     _carregarPreferencias();
     unawaited(_carregarVideosApi());
 
@@ -182,10 +180,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    ApiService.videosExcluidos.removeListener(_sincronizarExclusoes);
     _avisoPublicadoTimer?.cancel();
     _bemVindoCtrl.dispose();
     _glowCtrl.dispose();
     super.dispose();
+  }
+
+  void _sincronizarExclusoes() {
+    if (mounted) setState(() => _videos.removeWhere((v) => ApiService.videosExcluidos.value.contains(v.videoId)));
   }
 
   Future<void> _carregarPreferencias() async {
@@ -337,7 +340,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       final idsServidor = publicados.map((v) => v.videoId).toSet();
       setState(() {
         _videos.removeWhere((video) => idsServidor.contains(video.videoId));
-        _videos.insertAll(0, publicados);
+        _videos.insertAll(0, publicados.where((v) => !ApiService.videosExcluidos.value.contains(v.videoId)));
       });
     } catch (e) {
       if (!mounted) return;
@@ -636,8 +639,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          child: Row(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 2),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF4F4),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: const Color(0xFFEBCBCD)),
+            ),
+            child: Row(
             children: [
               _navAssetItem(
                 image: AppPalette.isDark(context)
@@ -652,20 +662,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 label: 'Conversas',
                 active: _tabAtual == 1,
                 onTap: () => setState(() => _tabAtual = 1),
-                fallback: Icons.groups_rounded,
+                fallback: LucideIcons.messageCircle,
               ),
               Expanded(
                 child: Center(
                   child: Material(
                     color: AppPalette.button(context),
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(18),
                     child: InkWell(
                       onTap: _abrirGravador,
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(18),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
+                          horizontal: 12,
+                          vertical: 7,
                         ),
                         child: Image.asset(
                           'assets/images/gravar.png',
@@ -691,6 +701,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
               _navProfileItem(),
             ],
+          ),
           ),
         ),
       ),
@@ -756,7 +767,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final active = _tabAtual == 2;
     return Expanded(
       child: InkWell(
-        onTap: () => setState(() => _tabAtual = 2),
+        onTap: () { setState(() => _tabAtual = 2); unawaited(SavedVideoService.load().catchError((Object _) {})); },
         borderRadius: BorderRadius.circular(10),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 3),
@@ -1344,8 +1355,8 @@ class _LikedStarBadge extends StatelessWidget {
       height: 38,
       child: Center(
         child: Icon(
-          Icons.star_rounded,
-          size: 30,
+          LucideIcons.star,
+          size: 25,
           color: Color(0xFFFFD166),
           shadows: [Shadow(color: Colors.black54, blurRadius: 8)],
         ),
@@ -1562,7 +1573,75 @@ class _LoopSearchDelegate extends SearchDelegate<void> {
   String? _lastSearchQuery;
   Future<_SearchBundle>? _searchFuture;
 
-  _LoopSearchDelegate();
+  final SharedPreferences _prefs;
+  final String _historyKey;
+  late List<String> _history = _prefs.getStringList(_historyKey) ?? <String>[];
+
+  final List<_VideoCard> _feedVideos;
+  _LoopSearchDelegate(this._prefs, this._historyKey, this._feedVideos);
+
+  void _remember(String value) {
+    final term = value.trim();
+    if (term.isEmpty || term.length > 120) return;
+    _history.removeWhere((old) => old.toLowerCase() == term.toLowerCase());
+    _history.insert(0, term);
+    if (_history.length > 20) _history = _history.take(20).toList();
+    unawaited(_prefs.setStringList(_historyKey, List<String>.from(_history)));
+  }
+
+  Widget _historyView(BuildContext context) => StatefulBuilder(
+    builder: (context, refresh) => ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        if (_history.isNotEmpty) Row(children: [
+          Expanded(child: Text('Pesquisas recentes', style: TextStyle(
+            fontSize: 17, fontWeight: FontWeight.w700,
+            color: AppPalette.primaryText(context)))),
+          if (_history.isNotEmpty) TextButton(onPressed: () {
+            refresh(() => _history.clear());
+            unawaited(_prefs.remove(_historyKey));
+          }, child: const Text('Limpar tudo')),
+        ]),
+        if (_history.isEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 64, 24, 24),
+            child: Column(
+              children: [
+                Container(
+                  width: 72, height: 72,
+                  decoration: BoxDecoration(
+                    color: AppPalette.accent(context).withValues(alpha: .10),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.search_rounded, size: 32,
+                    color: AppPalette.accent(context)),
+                ),
+                const SizedBox(height: 20),
+                Text('O que você procura?', textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700,
+                    color: AppPalette.primaryText(context))),
+                const SizedBox(height: 8),
+                Text('Use a busca para encontrar o que deseja.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14, height: 1.5,
+                    color: AppPalette.mutedText(context))),
+              ],
+            ),
+          ),
+        for (final term in _history)
+          ListTile(
+            leading: const Icon(Icons.history_rounded),
+            title: Text(term, maxLines: 1, overflow: TextOverflow.ellipsis),
+            onTap: () { query = term; showResults(context); },
+            trailing: IconButton(tooltip: 'Remover pesquisa', icon: const Icon(Icons.close_rounded),
+              onPressed: () {
+                refresh(() => _history.remove(term));
+                unawaited(_prefs.setStringList(_historyKey, List<String>.from(_history)));
+              }),
+          ),
+      ],
+    ),
+  );
 
   Future<_SearchBundle> _search(String term) {
     if (_lastSearchQuery != term || _searchFuture == null) {
@@ -1576,7 +1655,7 @@ class _LoopSearchDelegate extends SearchDelegate<void> {
 
   @override
   String get searchFieldLabel =>
-      'Buscar no Loop (ex: dorama colegial, True Beauty)';
+      'Pesquisar no LupTok';
 
   @override
   ThemeData appBarTheme(BuildContext context) => Theme.of(context).copyWith(
@@ -1613,50 +1692,17 @@ class _LoopSearchDelegate extends SearchDelegate<void> {
   );
 
   @override
-  Widget buildResults(BuildContext context) => _buildMatches(context);
+  Widget buildResults(BuildContext context) {
+    _remember(query);
+    return _buildMatches(context);
+  }
 
   @override
   Widget buildSuggestions(BuildContext context) => _buildMatches(context);
 
   Widget _buildMatches(BuildContext context) {
     final term = query.trim();
-    if (term.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.search_rounded,
-                size: 46,
-                color: AppPalette.mutedText(context).withValues(alpha: 0.5),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Pesquisa inteligente no LupTok',
-                style: TextStyle(
-                  color: AppPalette.primaryText(context),
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  fontFamily: 'IMFellFrenchCanon',
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Busque por características (ex: "dorama colegial", "romance escolar") ou diretamente pelo nome de uma obra (ex: "True Beauty").',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: AppPalette.mutedText(context),
-                  fontSize: 13.5,
-                  height: 1.4,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
+    if (term.isEmpty) return _historyView(context);
 
     return FutureBuilder<_SearchBundle>(
       future: _search(term),
@@ -1673,7 +1719,7 @@ class _LoopSearchDelegate extends SearchDelegate<void> {
             ),
           );
         }
-        if (!snapshot.hasData) {
+        if (snapshot.connectionState != ConnectionState.done || !snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
 
@@ -1705,7 +1751,7 @@ class _LoopSearchDelegate extends SearchDelegate<void> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Tente outros termos como gêneros (romance, ação, suspense) ou características da história.',
+                    'Tente uma nova pesquisa.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: AppPalette.mutedText(context),
@@ -1763,7 +1809,9 @@ class _LoopSearchDelegate extends SearchDelegate<void> {
                     return InkWell(
                       borderRadius: BorderRadius.circular(14),
                       onTap: () {
+                        _remember(term);
                         query = titulo;
+                        showResults(context);
                       },
                       child: Container(
                         width: 200,
@@ -1872,7 +1920,7 @@ class _LoopSearchDelegate extends SearchDelegate<void> {
               _VideoSearchGrid(
                 videos: videos,
                 shrinkWrap: true,
-                onTap: (video) => _openSearchVideo(context, video),
+                onTap: (video) { _remember(term); _openSearchVideo(context, video, _feedVideos); },
               ),
             ],
           ],
@@ -1952,20 +2000,7 @@ class _VideoSearchTile extends StatelessWidget {
                 ),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.all(28),
-              child: Image.asset(
-                _searchVideoAsset(video),
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) => const Center(
-                  child: Icon(
-                    Icons.movie_creation_outlined,
-                    color: Colors.white70,
-                    size: 44,
-                  ),
-                ),
-              ),
-            ),
+            _SearchFrameThumbnail(key: ValueKey(video['id']), video: video),
             const DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -2044,279 +2079,147 @@ class _VideoSearchTile extends StatelessWidget {
   }
 }
 
+class _SearchFrameThumbnail extends StatefulWidget {
+  final Map<String, dynamic> video;
+  const _SearchFrameThumbnail({super.key, required this.video});
+  @override
+  State<_SearchFrameThumbnail> createState() => _SearchFrameThumbnailState();
+}
+class _SearchFrameThumbnailState extends State<_SearchFrameThumbnail> {
+  VideoPlayerController? _controller;
+  bool _ready = false;
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+  Future<void> _load() async {
+    VideoPlayerController? controller;
+    try {
+      final id = widget.video['id'];
+      if (id == null) return;
+      final token = await ApiService.tokenDaSessao();
+      if (token == null || !mounted) return;
+      final uri = Uri.parse(kIsWeb
+          ? await ApiService.urlArquivoVideoWeb(id)
+          : ApiService.urlArquivoVideo(id));
+      if (!mounted) return;
+      controller = VideoPlayerController.networkUrl(uri,
+        httpHeaders: kIsWeb ? const {} : {'Authorization': 'Bearer $token'});
+      _controller = controller;
+      await controller.initialize();
+      if (!mounted) return;
+      await controller.setVolume(0);
+      final duration = controller.value.duration;
+      final position = duration > const Duration(seconds: 1)
+          ? const Duration(seconds: 1)
+          : Duration.zero;
+      if (!mounted) return;
+      await controller.seekTo(position);
+      if (!mounted) return;
+      await controller.pause();
+      if (!mounted) return;
+      setState(() => _ready = true);
+    } catch (_) {
+      // Se a mídia estiver indisponível, mantém a capa padrão.
+    }
+  }
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                AppPalette.button(context),
+                AppPalette.raisedSurface(context),
+                AppPalette.background(context),
+              ],
+            ),
+          ),
+        ),
+        if (_ready && controller != null && controller.value.isInitialized)
+          FittedBox(
+            fit: BoxFit.cover,
+            child: SizedBox(
+              width: controller.value.size.width,
+              height: controller.value.size.height,
+              child: VideoPlayer(controller),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 Future<void> _openSearchVideo(
   BuildContext context,
   Map<String, dynamic> video,
+  List<_VideoCard> feedVideos,
 ) async {
   try {
     final id = video['id'];
     if (id == null) throw Exception('O vídeo não possui um identificador.');
     final token = await ApiService.tokenDaSessao();
     if (token == null) throw Exception('Sua sessão expirou. Entre novamente.');
+    final prefs = await SharedPreferences.getInstance();
+    final obraData = video['obra'];
+    final obra = obraData is Map ? Map<String, dynamic>.from(obraData) : null;
+    final tipo = (obra?['tipo'] ?? video['tipo_conteudo'] ?? '').toString();
+    final generos = _apiStringList(obra?['generos']);
+    final selected = _VideoCard(
+      titulo: _searchVideoTitle(video),
+      autor: (video['autor'] ?? '').toString(),
+      apelido: (video['apelido'] ?? video['nome'])?.toString(),
+      tipo: tipo,
+      genero: generos.join(' · '),
+      descricao: (video['descricao'] ?? '').toString(),
+      spoiler: (video['spoiler'] ?? 'nenhum').toString(),
+      stars: (video['curtidas'] as num?)?.toInt() ?? 0,
+      comentarios: 0,
+      cor: _kVideoBackdrop,
+      likedByMe: video['curtida_usuario'] == true,
+      obraId: obra?['id']?.toString(),
+      obraTitulo: obra?['titulo']?.toString(),
+      obraTipo: obra?['tipo']?.toString(),
+      obraDescricao: obra?['descricao']?.toString(),
+      obraGeneros: generos,
+      obraPalavrasChave: _apiStringList(obra?['palavras_chave']),
+      videoPath: ApiService.urlArquivoVideo(id),
+      videoToken: token,
+      videoId: id.toString(),
+      ownerId: video['id_usuario']?.toString(),
+      fotoUrl: video['foto_url']?.toString(),
+      privacy: (video['privacidade'] ?? 'Público').toString(),
+    );
     if (!context.mounted) return;
     await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) =>
-            _SearchVideoPlayerScreen(video: video, id: id, token: token),
-      ),
+      MaterialPageRoute<void>(builder: (_) => Scaffold(
+        backgroundColor: Colors.black,
+        body: _LoopTab(
+          videos: [selected, ...feedVideos.where((v) => v.videoId != selected.videoId)],
+          ocultarSpoilers: prefs.getBool('settings_hide_spoilers') ?? false,
+          profileInterests: const [],
+          currentUserId: prefs.getString('perfil_id'),
+          singleVideo: true,
+        ),
+      )),
     );
   } catch (error) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Não foi possível abrir o vídeo: '
-          '${error.toString().replaceFirst('Exception: ', '')}',
-        ),
-      ),
-    );
-  }
-}
-
-class _SearchVideoPlayerScreen extends StatefulWidget {
-  final Map<String, dynamic> video;
-  final Object id;
-  final String token;
-
-  const _SearchVideoPlayerScreen({
-    required this.video,
-    required this.id,
-    required this.token,
-  });
-
-  @override
-  State<_SearchVideoPlayerScreen> createState() =>
-      _SearchVideoPlayerScreenState();
-}
-
-class _SearchVideoPlayerScreenState extends State<_SearchVideoPlayerScreen> {
-  bool _paused = false;
-  bool _liked = false;
-  bool _busy = false;
-  bool _showPauseFeedback = false;
-  bool _burstVisible = false;
-  bool _burstRemoving = false;
-  int _burstSequence = 0;
-  int? _likes;
-  String? _myUserId;
-  Timer? _pauseTimer;
-  Timer? _burstTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    _liked = widget.video['curtida_usuario'] == true;
-    final count = widget.video['curtidas'];
-    _likes = count is num ? count.toInt() : null;
-    unawaited(_getCurrentUser());
-  }
-
-  Future<void> _getCurrentUser() async {
-    final p = await SharedPreferences.getInstance();
-    if (!mounted) return;
-    setState(() => _myUserId = p.getString('perfil_id'));
-  }
-
-  @override
-  void dispose() {
-    _pauseTimer?.cancel();
-    _burstTimer?.cancel();
-    super.dispose();
-  }
-
-  void _tapVideo() {
-    setState(() {
-      _paused = !_paused;
-      _showPauseFeedback = true;
-    });
-    _pauseTimer?.cancel();
-    _pauseTimer = Timer(const Duration(milliseconds: 680), () {
-      if (mounted) setState(() => _showPauseFeedback = false);
-    });
-  }
-
-  Future<void> _doubleTapVideo() async {
-    if (_busy) return;
-    final wasLiked = _liked;
-    final oldCount = _likes;
-    final next = !wasLiked;
-    _burstTimer?.cancel();
-    setState(() {
-      _busy = true;
-      _liked = next;
-      _likes = oldCount == null
-          ? null
-          : (oldCount + (next ? 1 : -1)).clamp(0, 0x7fffffff).toInt();
-      _burstVisible = true;
-      _burstRemoving = !next;
-      _burstSequence++;
-    });
-    _burstTimer = Timer(const Duration(milliseconds: 1890), () {
-      if (mounted) setState(() => _burstVisible = false);
-    });
-    try {
-      final response = await ApiService.atualizarCurtidaVideo(
-        id: widget.id,
-        curtido: next,
-      );
-      if (response['curtido'] is! bool ||
-          (response['curtidas'] != null && response['curtidas'] is! num)) {
-        throw Exception('Resposta de curtida inválida.');
-      }
-      if (!mounted) return;
-      setState(() {
-        _liked = response['curtido'] as bool;
-        if (response['curtidas'] is num) {
-          _likes = (response['curtidas'] as num).toInt();
-        }
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _liked = wasLiked;
-        _likes = oldCount;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Não foi possível curtir: $error')),
-      );
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final video = widget.video;
-    final title = _searchVideoTitle(video);
-    final description = video['descricao'] as String? ?? '';
-    final author = video['autor'] as String? ?? '';
-    final isOwner =
-        _myUserId != null && _myUserId == video['id_usuario']?.toString();
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            tooltip: 'Denunciar vídeo',
-            onPressed: () => _promptReportVideo(context, widget.id),
-            icon: const Icon(Icons.flag_outlined),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: _tapVideo,
-              onDoubleTap: _doubleTapVideo,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  _FeedVideo(
-                    path: ApiService.urlArquivoVideo(widget.id),
-                    token: widget.token,
-                    videoId: widget.id.toString(),
-                    userPaused: _paused,
-                    onTapVideo: _tapVideo,
-                    onDoubleTapVideo: _doubleTapVideo,
-                  ),
-                  if (_burstVisible)
-                    Center(
-                      child: IgnorePointer(
-                        child: _LikeBurst(
-                          key: ValueKey('search:$_burstSequence'),
-                          removing: _burstRemoving,
-                        ),
-                      ),
-                    ),
-                  Center(
-                    child: IgnorePointer(
-                      child: AnimatedOpacity(
-                        opacity: (_paused || _showPauseFeedback) ? 1 : 0,
-                        duration: const Duration(milliseconds: 180),
-                        child: Container(
-                          padding: const EdgeInsets.all(18),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.18),
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white24),
-                          ),
-                          child: Icon(
-                            _paused
-                                ? Icons.play_arrow_rounded
-                                : Icons.pause_rounded,
-                            color: Colors.white,
-                            size: 46,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (_liked)
-                    Positioned(
-                      right: 16,
-                      bottom: 18,
-                      child: IgnorePointer(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const _LikedStarBadge(),
-                            if (isOwner && _likes != null)
-                              Text(
-                                '$_likes',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  shadows: [
-                                    Shadow(
-                                      color: Colors.black54,
-                                      blurRadius: 6,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          if (description.isNotEmpty || author.isNotEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(18, 12, 18, 20),
-              color: _kVideoBackdrop,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (author.isNotEmpty)
-                    Text(
-                      author,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  if (description.isNotEmpty) ...[
-                    if (author.isNotEmpty) const SizedBox(height: 5),
-                    Text(
-                      description,
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('Não foi possível abrir o vídeo: ${error.toString().replaceFirst('Exception: ', '')}'),
+    ));
   }
 }
 
@@ -2437,12 +2340,14 @@ class _LoopTab extends StatefulWidget {
   final List<String> profileInterests;
   final String? currentUserId;
   final bool isVisible;
+  final bool singleVideo;
   const _LoopTab({
     required this.videos,
     required this.ocultarSpoilers,
     required this.profileInterests,
     required this.currentUserId,
     this.isVisible = true,
+    this.singleVideo = false,
   });
 
   @override
@@ -2451,7 +2356,7 @@ class _LoopTab extends StatefulWidget {
 
 class _LoopTabState extends State<_LoopTab> {
   final PageController _pageCtrl = PageController();
-  final Set<int> _saved = {};
+  final Set<String> _saved = {};
   final Set<String> _following = {};
   final Map<String, String> _apelidosPorId = {};
   final Set<String> _apelidosConsultados = {};
@@ -2489,9 +2394,9 @@ class _LoopTabState extends State<_LoopTab> {
   void initState() {
     super.initState();
     _following.addAll(followedUsernames.value);
-    _saved.addAll(savedVideoIndices.value);
+    _saved.addAll(SavedVideoService.videos.value.map((v) => v['id'].toString()));
     followedUsernames.addListener(_syncFollowedUsers);
-    savedVideoIndices.addListener(_syncSavedVideos);
+    SavedVideoService.videos.addListener(_syncSavedVideos);
     _carregarInteracoes();
     _carregarApelidos();
   }
@@ -2536,7 +2441,7 @@ class _LoopTabState extends State<_LoopTab> {
   void dispose() {
     _pauseIndicatorTimer?.cancel();
     followedUsernames.removeListener(_syncFollowedUsers);
-    savedVideoIndices.removeListener(_syncSavedVideos);
+    SavedVideoService.videos.removeListener(_syncSavedVideos);
     for (final timer in _likeAnimationTimers.values) {
       timer.cancel();
     }
@@ -2558,7 +2463,7 @@ class _LoopTabState extends State<_LoopTab> {
     setState(() {
       _saved
         ..clear()
-        ..addAll(savedVideoIndices.value);
+        ..addAll(SavedVideoService.videos.value.map((v) => v['id'].toString()));
     });
   }
 
@@ -2622,14 +2527,9 @@ class _LoopTabState extends State<_LoopTab> {
       _following.addAll(
         preferences.getStringList('following_users') ?? const [],
       );
-      _saved.addAll(
-        (preferences.getStringList('saved_videos') ?? const [])
-            .map(int.tryParse)
-            .whereType<int>(),
-      );
     });
     followedUsernames.value = Set<String>.from(_following);
-    savedVideoIndices.value = Set<int>.from(_saved);
+    try { await SavedVideoService.load(); } catch (_) {}
   }
 
   Future<void> _toggleFollow(String user) async {
@@ -2641,16 +2541,13 @@ class _LoopTabState extends State<_LoopTab> {
     await preferences.setStringList('following_users', _following.toList());
   }
 
-  Future<void> _toggleSaved(int videoIndex) async {
-    setState(() {
-      if (!_saved.add(videoIndex)) _saved.remove(videoIndex);
-    });
-    savedVideoIndices.value = Set<int>.from(_saved);
-    final preferences = await SharedPreferences.getInstance();
-    await preferences.setStringList(
-      'saved_videos',
-      _saved.map((index) => '$index').toList(),
-    );
+  Future<void> _toggleSaved(String? id) async {
+    if (id == null) return;
+    try {
+      await SavedVideoService.toggle(id);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
   }
 
   // ── Curtidas (estrela) ──────────────────────────────────────────
@@ -2762,6 +2659,29 @@ class _LoopTabState extends State<_LoopTab> {
 
   // ── Ações ───────────────────────────────────────────────────────
 
+  Future<void> _excluirVideo(_VideoCard video) async {
+    final id = video.videoId;
+    if (id == null || video.ownerId == null || video.ownerId != widget.currentUserId) return;
+    final confirmar = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('Excluir publicação?'),
+      content: const Text('O vídeo e suas interações serão removidos permanentemente.'),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+        TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Excluir', style: TextStyle(color: Colors.red)))],
+    ));
+    if (confirmar != true || !mounted) return;
+    try {
+      await ApiService.excluirVideo(id);
+      unawaited(SavedVideoService.load().catchError((Object _) {}));
+      if (!mounted) return;
+      if (widget.singleVideo) { Navigator.of(context).pop(); return; }
+      setState(() { _pageIndex = 0; });
+      if (_pageCtrl.hasClients) _pageCtrl.jumpToPage(0);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Vídeo excluído.')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
   Future<void> _reportVideo(_VideoCard video) async {
     final id = video.videoId;
     if (id == null) {
@@ -2804,7 +2724,12 @@ class _LoopTabState extends State<_LoopTab> {
 
   Future<void> _pesquisar() async {
     _trocarFeed(false);
-    await showSearch<void>(context: context, delegate: _LoopSearchDelegate());
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    final userId = prefs.getString('perfil_id');
+    if (userId == null) return;
+    await showSearch<void>(context: context,
+      delegate: _LoopSearchDelegate(prefs, 'search_history_$userId', widget.videos));
   }
 
   void _trocarFeed(bool seguindo) {
@@ -2855,7 +2780,7 @@ class _LoopTabState extends State<_LoopTab> {
     final publicVideos = widget.videos
         .where((video) => video.privacy == 'Público')
         .toList();
-    final feed = _mostrandoSeguindo
+    final feed = widget.singleVideo ? widget.videos.take(1).toList() : _mostrandoSeguindo
         ? publicVideos
               .where((video) => _following.contains(video.autor))
               .toList()
@@ -2870,7 +2795,24 @@ class _LoopTabState extends State<_LoopTab> {
           feed.isEmpty ? _buildEmpty() : _buildFeed(feed),
 
           // 2. A barra superior fica FIXA no topo, nunca se move ou duplica com os vídeos
-          Positioned(top: 0, left: 0, right: 0, child: _buildTopBar()),
+          if (widget.singleVideo)
+            Positioned(top: 0, left: 0, child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Material(
+                  color: Colors.black.withValues(alpha: .35),
+                  shape: const CircleBorder(),
+                  child: IconButton(
+                    tooltip: 'Voltar',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                  ),
+                ),
+              ),
+            ))
+          else
+            Positioned(top: 0, left: 0, right: 0, child: _buildTopBar()),
         ],
       ),
     );
@@ -3057,8 +2999,9 @@ class _LoopTabState extends State<_LoopTab> {
     final liked = _isLiked(v, videoIndex);
     final likes = _likeCount(v, videoIndex);
     final isOwner = v.ownerId != null && v.ownerId == widget.currentUserId;
-    final saved = _saved.contains(videoIndex);
-    final active = widget.isVisible && i == _pageIndex;
+    final saved = _saved.contains(v.videoId);
+    final active = widget.isVisible && i == _pageIndex &&
+        (ModalRoute.of(context)?.isCurrent ?? true);
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -3083,7 +3026,7 @@ class _LoopTabState extends State<_LoopTab> {
               videoId: v.videoId,
               isActive: active,
               userPaused: _userPaused,
-              muteTop: 112,
+              muteTop: widget.singleVideo ? MediaQuery.paddingOf(context).top + 12 : 112,
               onTapVideo: _aoTocarSimples,
               onDoubleTapVideo: () => _aoDarDoisToques(v, videoIndex),
             ),
@@ -3114,7 +3057,7 @@ class _LoopTabState extends State<_LoopTab> {
 
           // Etiqueta de spoiler no topo, fora da área de descrição.
           Positioned(
-            top: MediaQuery.paddingOf(context).top + 77,
+            top: MediaQuery.paddingOf(context).top + (widget.singleVideo ? 68 : 77),
             left: 16,
             right: 74,
             child: Align(
@@ -3145,7 +3088,7 @@ class _LoopTabState extends State<_LoopTab> {
                   duration: const Duration(milliseconds: 200),
                   curve: Curves.easeOutBack,
                   child: Container(
-                    padding: const EdgeInsets.all(19),
+                    padding: const EdgeInsets.all(13),
                     decoration: BoxDecoration(
                       color: Colors.black.withValues(alpha: 0.18),
                       shape: BoxShape.circle,
@@ -3155,8 +3098,8 @@ class _LoopTabState extends State<_LoopTab> {
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.18),
-                          blurRadius: 24,
-                          spreadRadius: 3,
+                          blurRadius: 12,
+                          spreadRadius: 0,
                         ),
                       ],
                     ),
@@ -3165,7 +3108,7 @@ class _LoopTabState extends State<_LoopTab> {
                           ? Icons.play_arrow_rounded
                           : Icons.pause_rounded,
                       color: Colors.white,
-                      size: 46,
+                      size: 30,
                     ),
                   ),
                 ),
@@ -3176,8 +3119,20 @@ class _LoopTabState extends State<_LoopTab> {
           // 6. Coluna vertical de interação lateral (lado direito)
           Positioned(
             right: 10,
-            bottom: 60,
-            child: Column(
+            bottom: 112,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(32),
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                child: Container(
+                  width: 56,
+                  padding: const EdgeInsets.symmetric(vertical: 7),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF21171C).withValues(alpha: .33),
+                    borderRadius: BorderRadius.circular(32),
+                    border: Border.all(color: const Color(0xFFFFE9E9).withValues(alpha: .27)),
+                  ),
+                  child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 // A estrela NÃO existe no layout até a pessoa curtir.
@@ -3188,7 +3143,7 @@ class _LoopTabState extends State<_LoopTab> {
                   alignment: Alignment.bottomCenter,
                   child: liked
                       ? Padding(
-                          padding: const EdgeInsets.only(bottom: 17),
+                          padding: const EdgeInsets.only(bottom: 4),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -3218,40 +3173,41 @@ class _LoopTabState extends State<_LoopTab> {
 
                 // Comentários
                 _acao(
-                  icon: Icons.chat_bubble_outline_rounded,
+                  icon: LucideIcons.messageCircle,
                   label: _fmt(
                     _reviewCounts[v.videoId] ?? v.comentarios,
                   ),
                   onTap: () => _abrirComentarios(videoIndex),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 2),
 
                 // Compartilhar
                 _acao(
-                  icon: Icons.share_outlined,
+                  icon: LucideIcons.send,
                   onTap: () => _compartilhar(v),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 2),
 
                 // Salvar publicação
                 _acao(
-                  icon: saved
-                      ? Icons.bookmark_rounded
-                      : Icons.bookmark_border_rounded,
-                  iconColor: saved ? _kStarGold : Colors.white,
-                  onTap: () => _toggleSaved(videoIndex),
+                  icon: LucideIcons.bookmark,
+                  iconColor: saved ? const Color(0xFFF4B8BF) : const Color(0xFFFFE9E9),
+                  onTap: () => _toggleSaved(v.videoId),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 2),
 
+                Container(width: 22, height: 1, color: const Color(0xFFFFE9E9).withValues(alpha: .24)),
                 // Mais opções / Denunciar
                 PopupMenuButton<String>(
                   tooltip: 'Mais ações',
                   color: AppPalette.raisedSurface(context),
                   onSelected: (action) {
                     if (action == 'report') _reportVideo(v);
+                    if (action == 'delete') _excluirVideo(v);
                   },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(
+                  itemBuilder: (context) => [
+                    if (isOwner) const PopupMenuItem(value: 'delete', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.delete_outline, color: Colors.red), title: Text('Excluir vídeo'))),
+                    if (!isOwner) const PopupMenuItem(
                       value: 'report',
                       child: ListTile(
                         contentPadding: EdgeInsets.zero,
@@ -3262,21 +3218,24 @@ class _LoopTabState extends State<_LoopTab> {
                   ],
                   child: _botaoRedondo(
                     const Icon(
-                      Icons.more_horiz_rounded,
+                      LucideIcons.moreHorizontal,
                       color: Colors.white,
                       size: 24,
                     ),
                   ),
                 ),
               ],
+                  ),
+                ),
+              ),
             ),
           ),
 
           // Autor e legenda próximos da base; a obra fica separada à direita.
           Positioned(
             left: 16,
-            right: 76,
-            bottom: 18,
+            right: 80,
+            bottom: 86,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -3293,9 +3252,9 @@ class _LoopTabState extends State<_LoopTab> {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 14,
+                      fontSize: 13,
                       fontWeight: FontWeight.w400,
-                      height: 1.35,
+                      height: 1.5,
                       shadows: [Shadow(color: Colors.black87, blurRadius: 6)],
                     ),
                   ),
@@ -3309,7 +3268,7 @@ class _LoopTabState extends State<_LoopTab> {
           // É uma sobreposição: não muda a altura nem a proporção do vídeo.
           Positioned(
             right: 8,
-            bottom: 8,
+            bottom: 24,
             child: _obraBadge(v),
           ),
         ],
@@ -3335,100 +3294,60 @@ class _LoopTabState extends State<_LoopTab> {
     final following = _following.contains(v.autor);
 
     return Row(
-      mainAxisSize: MainAxisSize.min,
       children: [
-        // O botão de seguir é um pequeno selo sobreposto ao avatar,
-        // sem competir visualmente com o apelido ou com a legenda.
-        SizedBox(
-          width: 48,
-          height: 46,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Positioned(
-                left: 0,
-                top: 0,
-                child: GestureDetector(
-                  onTap: () => _abrirPerfilAutor(v),
-                  child: _luptokAvatar(v.fotoUrl, inicial, 19),
-                ),
-              ),
-              if (!isOwner)
-                Positioned(
-                  right: 0,
-                  bottom: 0,
-                  child: Semantics(
-                    button: true,
-                    label: following ? 'Deixar de seguir' : 'Seguir ${apelido}',
-                    child: Tooltip(
-                      message: following ? 'Seguindo' : 'Seguir',
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: () => _toggleFollow(v.autor),
-                          customBorder: const CircleBorder(),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 220),
-                            curve: Curves.easeOutCubic,
-                            width: 24,
-                            height: 24,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: following
-                                  ? const Color(0xFF33232B)
-                                  : const Color(0xFFFFE9E9),
-                              border: Border.all(
-                                color: following
-                                    ? const Color(0xFFFFD1D9)
-                                    : const Color(0xFFB8787C),
-                                width: 1.5,
-                              ),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Color(0x77000000),
-                                  blurRadius: 7,
-                                  offset: Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 180),
-                              child: Icon(
-                                following ? Icons.check_rounded : Icons.add_rounded,
-                                key: ValueKey(following),
-                                size: 16,
-                                color: following
-                                    ? const Color(0xFFFFE9E9)
-                                    : const Color(0xFF8D4555),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
+        GestureDetector(
+          onTap: () => _abrirPerfilAutor(v),
+          child: Container(
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: const Color(0xFFF4B8BF).withValues(alpha: .85)),
+            ),
+            child: _luptokAvatar(v.fotoUrl, inicial, 18),
           ),
         ),
         const SizedBox(width: 9),
-        Flexible(
+        Expanded(
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () => _abrirPerfilAutor(v),
-            child: Text(
-              apelido,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                shadows: [Shadow(color: Colors.black87, blurRadius: 6)],
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(apelido, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Color(0xFFFFE9E9), fontSize: 16,
+                    fontWeight: FontWeight.w700, letterSpacing: .2)),
+                if (v.autor.trim().isNotEmpty)
+                  Text('@${v.autor.replaceFirst('@', '')}', maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Color(0xFFEBD8DB), fontSize: 12)),
+              ],
             ),
           ),
         ),
+        if (!isOwner) ...[
+          const SizedBox(width: 6),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: () => _toggleFollow(v.autor),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 220),
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFE9E9).withValues(alpha: following ? .19 : .08),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFFF4B8BF).withValues(alpha: .65)),
+                ),
+                child: Text(following ? 'Seguindo' : '+ Seguir',
+                  style: const TextStyle(color: Color(0xFFFFE9E9), fontSize: 11,
+                    fontWeight: FontWeight.w600)),
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -3479,16 +3398,7 @@ class _LoopTabState extends State<_LoopTab> {
   }
 
   Widget _botaoRedondo(Widget child) {
-    // Ações flutuantes: área de toque confortável, sem bolhas pretas rígidas.
-    return Container(
-      width: 46, height: 46,
-      decoration: BoxDecoration(
-        color: const Color(0xFF21171C).withValues(alpha: .36),
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withValues(alpha: .16)),
-      ),
-      child: Center(child: child),
-    );
+    return SizedBox(width: 48, height: 44, child: Center(child: child));
   }
 
   Widget _acao({
@@ -3508,10 +3418,10 @@ class _LoopTabState extends State<_LoopTab> {
             imageAsset == null
                 ? Icon(
                     icon,
-                    color: iconColor ?? Colors.white,
-                    size: 23,
+                    color: iconColor ?? const Color(0xFFFFE9E9),
+                    size: 24,
                     shadows: const [
-                      Shadow(color: Colors.black87, blurRadius: 11),
+                      Shadow(color: Colors.black87, blurRadius: 4),
                       Shadow(color: Colors.black45, blurRadius: 3),
                     ],
                   )
@@ -3521,7 +3431,7 @@ class _LoopTabState extends State<_LoopTab> {
                     height: 24,
                     fit: BoxFit.contain,
                     errorBuilder: (_, _, _) =>
-                        Icon(icon, color: iconColor ?? Colors.white, size: 24),
+                        Icon(icon, color: iconColor ?? const Color(0xFFFFE9E9), size: 24),
                   ),
           ),
           if (label != null) ...[
@@ -3530,7 +3440,7 @@ class _LoopTabState extends State<_LoopTab> {
               label,
               style: const TextStyle(
                 color: Colors.white,
-                fontSize: 12,
+                fontSize: 10,
                 fontWeight: FontWeight.w600,
                 shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
               ),
@@ -3619,7 +3529,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
               final nota = (review['nota'] as num).toInt();
               final own = _myId != null && review['id_usuario'].toString() == _myId;
               return ListTile(contentPadding: EdgeInsets.zero,
-                leading: CircleAvatar(child: Text((review['nome_usuario']?.toString() ?? 'U').substring(0, 1).toUpperCase())),
+                leading: _luptokAvatar(review['foto_url']?.toString(), (review['nome_usuario']?.toString().trim().isNotEmpty == true ? review['nome_usuario'].toString().trim()[0] : 'U').toUpperCase(), 20),
                 title: Row(children: [Expanded(child: Text('@${review['nome_usuario']}', style: TextStyle(color: foreground, fontWeight: FontWeight.w600))), if (own) IconButton(icon: const Icon(Icons.delete_outline), tooltip: 'Excluir avaliação', onPressed: () => _delete(review['id']))]),
                 subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Row(children: List.generate(5, (s) => Icon(s < nota ? Icons.star_rounded : Icons.star_border_rounded, size: 18, color: _kStarGold))),

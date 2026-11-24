@@ -686,6 +686,7 @@ function termosBusca(valor) {
     normalizado
       .split(/\s+/)
       .filter((termo) => termo.length > 1 && !termosIgnoradosBusca.has(termo))
+      .map((termo) => ({doramas:'dorama', filmes:'filme', series:'serie', livros:'livro', animes:'anime', colegiais:'colegial', escolares:'escolar', romanticos:'romance', romanticas:'romance', dramas:'drama'}[termo] || termo))
   )];
 }
 
@@ -1169,6 +1170,44 @@ app.put('/api/works/:id/rating', autenticar, async (req, res) => {
   }
 });
 
+// Seguidores: vínculos persistentes por conta.
+app.get('/api/social/:id', autenticar, async (req, res) => {
+  const id = req.params.id === 'me' ? req.usuario.id_usuario : req.params.id;
+  if (req.usuario.escopo || !req.usuario.id_usuario) return res.sendStatus(403);
+  if (!/^\d{1,20}$/.test(String(id))) return res.status(400).json({erro:'Usuário inválido.'});
+  try {
+    const [[alvo]] = await db.execute('SELECT id_usuario FROM usuario WHERE id_usuario = ? AND ativo = 1', [id]);
+    if (!alvo) return res.status(404).json({erro:'Usuário não encontrado.'});
+    const [seguidores] = await db.execute(`SELECT u.id_usuario AS id, u.nome, u.nome_usuario, u.foto_url
+      FROM luptok_seguidor s JOIN usuario u ON u.id_usuario = s.seguidor_id
+      WHERE s.seguido_id = ? AND u.ativo = 1 ORDER BY u.nome`, [id]);
+    const [seguindo] = await db.execute(`SELECT u.id_usuario AS id, u.nome, u.nome_usuario, u.foto_url
+      FROM luptok_seguidor s JOIN usuario u ON u.id_usuario = s.seguido_id
+      WHERE s.seguidor_id = ? AND u.ativo = 1 ORDER BY u.nome`, [id]);
+    return res.json({seguidores, seguindo, segue: seguidores.some(u => String(u.id) === String(req.usuario.id_usuario))});
+  } catch (error) {
+    console.error('Seguidores:', error.message);
+    return res.status(500).json({erro:'Não foi possível carregar seguidores.'});
+  }
+});
+app.put('/api/social/:id/follow', autenticar, async (req, res) => {
+  const id = req.params.id;
+  const eu = req.usuario.id_usuario;
+  const seguir = req.body?.seguir;
+  if (req.usuario.escopo || !eu) return res.sendStatus(403);
+  if (!/^\d{1,20}$/.test(id) || String(eu) === id || typeof seguir !== 'boolean') return res.status(400).json({erro:'Dados inválidos.'});
+  try {
+    const [[alvo]] = await db.execute('SELECT id_usuario FROM usuario WHERE id_usuario = ? AND ativo = 1', [id]);
+    if (!alvo || String(alvo.id_usuario) === String(eu)) return res.status(404).json({erro:'Usuário indisponível.'});
+    if (seguir) await db.execute('INSERT INTO luptok_seguidor (seguidor_id, seguido_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE seguido_id = VALUES(seguido_id)', [eu,id]);
+    else await db.execute('DELETE FROM luptok_seguidor WHERE seguidor_id = ? AND seguido_id = ?', [eu,id]);
+    return res.json({segue:seguir});
+  } catch (error) {
+    console.error('Seguir:', error.message);
+    return res.status(500).json({erro:'Não foi possível atualizar o vínculo.'});
+  }
+});
+
 app.get('/api/users', autenticar, async (req, res) => {
   try {
     const [linhas] = await db.execute(
@@ -1260,6 +1299,77 @@ app.get('/api/users/:id', autenticar, async (req, res) => {
     console.error('Erro ao carregar perfil:', error.message);
     return res.status(500).json({ erro: 'Não foi possível carregar o perfil.' });
   }
+});
+
+app.get('/api/saved-videos', autenticar, async (req, res) => {
+  try {
+    const [videos] = await db.execute(`SELECT v.id_video AS id,
+      COALESCE(NULLIF(o.titulo,''), NULLIF(v.descricao,''), 'Recomendação') AS titulo,
+      v.privacidade, v.tipo_conteudo
+      FROM luptok_video_salvo s JOIN video_post v ON v.id_video = s.id_video
+      LEFT JOIN obra o ON o.id_obra = v.id_obra
+      WHERE s.id_usuario = ? AND (v.privacidade = 'Público' OR v.id_usuario = ?)
+      ORDER BY s.criado_em DESC, s.id_video DESC`, [req.usuario.id_usuario, req.usuario.id_usuario]);
+    return res.json({videos});
+  } catch (e) { console.error('Salvos:', e.message); return res.status(500).json({erro:'Não foi possível carregar os salvos.'}); }
+});
+app.put('/api/saved-videos/:id', autenticar, async (req, res) => {
+  const id = req.params.id;
+  const salvo = req.body?.salvo;
+  if (!/^\d{1,20}$/.test(id) || typeof salvo !== 'boolean') return res.status(400).json({erro:'Dados inválidos.'});
+  try {
+    if (salvo) {
+      const [rows] = await db.execute("SELECT id_video FROM video_post WHERE id_video = ? AND (privacidade = 'Público' OR id_usuario = ?)", [id, req.usuario.id_usuario]);
+      if (!rows.length) return res.status(404).json({erro:'Vídeo indisponível.'});
+      await db.execute('INSERT INTO luptok_video_salvo (id_usuario,id_video) VALUES (?,?) ON DUPLICATE KEY UPDATE id_video = id_video', [req.usuario.id_usuario,id]);
+    } else {
+      await db.execute('DELETE FROM luptok_video_salvo WHERE id_usuario = ? AND id_video = ?', [req.usuario.id_usuario,id]);
+    }
+    return res.json({salvo});
+  } catch (e) { console.error('Salvar vídeo:', e.message); return res.status(500).json({erro:'Não foi possível atualizar os salvos.'}); }
+});
+
+// Exclusão de publicação: somente o autor, com transação no banco.
+app.delete('/api/videos/:id', autenticar, async (req, res) => {
+  const id = req.params.id;
+  if (req.usuario.escopo || !req.usuario.id_usuario) return res.status(403).json({ erro: 'Sessão inválida.' });
+  if (!/^\d{1,20}$/.test(id)) return res.status(400).json({ erro: 'Vídeo inválido.' });
+  let conn;
+  let video;
+  try {
+    conn = await db.getConnection();
+    await conn.beginTransaction();
+    const [[row]] = await conn.execute('SELECT id_usuario, nome_arquivo FROM video_post WHERE id_video = ? FOR UPDATE', [id]);
+    if (!row || String(row.id_usuario) !== String(req.usuario.id_usuario)) {
+      await conn.rollback();
+      return res.status(404).json({ erro: 'Vídeo não encontrado ou sem permissão.' });
+    }
+    video = row;
+    for (const table of ['video_avaliacao', 'video_post_curtida', 'luptok_video_salvo']) {
+      await conn.execute(`DELETE FROM ${table} WHERE id_video = ?`, [id]);
+    }
+    // Preserva denúncias para moderação quando não impedem a exclusão.
+    // Se houver FK restritiva, a transação falha sem apagar parcialmente.
+    await conn.execute('DELETE FROM video_post WHERE id_video = ? AND id_usuario = ?', [id, req.usuario.id_usuario]);
+    await conn.commit();
+  } catch (error) {
+    if (conn) await conn.rollback().catch(() => {});
+    console.error('Erro ao excluir vídeo:', error.message);
+    return res.status(500).json({ erro: 'Não foi possível excluir o vídeo.' });
+  } finally {
+    if (conn) conn.release();
+  }
+  let arquivoRemovido = false;
+  if (/^[a-f0-9-]{36}\.(mp4|mov|m4v|webm)$/i.test(video.nome_arquivo)) {
+    try {
+      await fs.promises.unlink(path.join(uploadsDirectory, video.nome_arquivo));
+      arquivoRemovido = true;
+    } catch (error) {
+      arquivoRemovido = error.code === 'ENOENT';
+      if (!arquivoRemovido) console.error('Limpeza de vídeo pendente:', video.nome_arquivo, error.message);
+    }
+  }
+  return res.json({ mensagem: 'Vídeo excluído.', arquivo_removido: arquivoRemovido });
 });
 
 app.get('/api/videos', autenticar, async (req, res) => {
@@ -1897,7 +2007,7 @@ app.get('/api/videos/:id/reviews', autenticar, async (req, res) => {
   try {
     const [videos] = await db.execute('SELECT id_video FROM video_post WHERE id_video = ? AND (privacidade = ? OR id_usuario = ?) LIMIT 1', [req.params.id, 'Público', req.usuario.id_usuario]);
     if (!videos.length) return res.status(404).json({ erro: 'Vídeo não encontrado.' });
-    const [avaliacoes] = await db.execute(`SELECT a.id_avaliacao AS id, a.id_usuario, u.nome_usuario, a.nota, a.texto, a.criado_em
+    const [avaliacoes] = await db.execute(`SELECT a.id_avaliacao AS id, a.id_usuario, u.nome_usuario, u.foto_url, a.nota, a.texto, a.criado_em
       FROM video_avaliacao a JOIN usuario u ON u.id_usuario = a.id_usuario
       WHERE a.id_video = ? ORDER BY a.criado_em DESC, a.id_avaliacao DESC LIMIT 200`, [req.params.id]);
     return res.json({ avaliacoes });
@@ -1929,28 +2039,91 @@ app.delete('/api/videos/:id/reviews/:reviewId', autenticar, async (req, res) => 
 // Comunidades: acesso autenticado, participantes e mensagens persistidas no MySQL.
 app.get('/api/comunidades', autenticar, async (req, res) => {
   try {
-    const [rows] = await db.execute(`SELECT c.id_comunidade AS id, c.nome, c.descricao, c.criador_id,
+    const [rows] = await db.execute(`SELECT c.id_comunidade AS id, c.nome, c.descricao, c.criador_id, c.foto_url,
       COUNT(m.id_usuario) AS membros,
-      MAX(CASE WHEN m.id_usuario = ? THEN 1 ELSE 0 END) AS participando
+      MAX(CASE WHEN m.id_usuario = ? THEN 1 ELSE 0 END) AS participando, (c.criador_id = ?) AS proprietario
       FROM comunidade c LEFT JOIN comunidade_membro m ON m.id_comunidade = c.id_comunidade
-      GROUP BY c.id_comunidade ORDER BY c.criada_em DESC`, [req.usuario.id_usuario]);
+      GROUP BY c.id_comunidade ORDER BY c.criada_em DESC`, [req.usuario.id_usuario, req.usuario.id_usuario]);
     res.json({ comunidades: rows });
   } catch (e) { console.error('Comunidades:', e); res.status(500).json({erro:'Não foi possível carregar as comunidades.'}); }
 });
-app.post('/api/comunidades', autenticar, async (req, res) => {
-  const nome = typeof req.body?.nome === 'string' ? req.body.nome.trim() : '';
-  const descricao = typeof req.body?.descricao === 'string' ? req.body.descricao.trim() : '';
-  if (nome.length < 3 || nome.length > 60 || descricao.length > 300) return res.status(400).json({erro:'Nome deve ter de 3 a 60 caracteres e descrição até 300.'});
-  const cx = await db.getConnection();
+app.post('/api/comunidades', autenticar, (req, res, next) => {
+  if (req.usuario.escopo || !req.usuario.id_usuario) return res.status(403).json({erro:'Sessão inválida.'});
+  if (!req.is('multipart/form-data')) return next();
+  profileImageUpload.single('imagem')(req, res, error => {
+    if (error) return res.status(error.code === 'LIMIT_FILE_SIZE' ? 413 : 400).json({erro:'Imagem inválida ou maior que 5 MB.'});
+    if (!req.file) return res.status(400).json({erro:'Escolha uma imagem JPG, PNG ou WebP.'});
+    next();
+  });
+}, async (req, res) => {
+  let cx, committed = false;
   try {
+    const nome = typeof req.body?.nome === 'string' ? req.body.nome.trim() : '';
+    const descricao = typeof req.body?.descricao === 'string' ? req.body.descricao.trim() : '';
+    if (nome.length < 3 || nome.length > 60 || descricao.length > 300) return res.status(400).json({erro:'Nome deve ter de 3 a 60 caracteres e descrição até 300.'});
+    if (req.file && !validarAssinaturaImagem(await fs.promises.readFile(req.file.path))) return res.status(400).json({erro:'O arquivo não é uma imagem válida.'});
+    const foto_url = req.file ? `/api/profile/images/${req.file.filename}` : null;
+    cx = await db.getConnection();
     await cx.beginTransaction();
-    const [r] = await cx.execute('INSERT INTO comunidade (nome, descricao, criador_id) VALUES (?, ?, ?)', [nome, descricao, req.usuario.id_usuario]);
+    const [r] = await cx.execute('INSERT INTO comunidade (nome, descricao, criador_id, foto_url) VALUES (?, ?, ?, ?)', [nome, descricao, req.usuario.id_usuario, foto_url]);
     await cx.execute('INSERT INTO comunidade_membro (id_comunidade,id_usuario) VALUES (?,?)', [r.insertId, req.usuario.id_usuario]);
     await cx.commit();
-    res.status(201).json({comunidade:{id:r.insertId,nome,descricao,membros:1,participando:1}});
-  } catch(e) { await cx.rollback(); console.error('Criar comunidade:',e); res.status(500).json({erro:'Não foi possível criar a comunidade.'}); }
-  finally { cx.release(); }
+    committed = true;
+    return res.status(201).json({comunidade:{id:r.insertId,nome,descricao,foto_url,membros:1,participando:1}});
+  } catch(e) {
+    if (cx && !committed) await cx.rollback().catch(() => {});
+    console.error('Criar comunidade:',e);
+    return res.status(500).json({erro:'Não foi possível criar a comunidade.'});
+  } finally {
+    if (cx) cx.release();
+    if (!committed && req.file) await fs.promises.unlink(req.file.path).catch(() => {});
+  }
 });
+
+// Gerenciamento: somente o criador pode modificar ou excluir.
+function sessaoComunidade(req,res,next) {
+  if (req.usuario.escopo || !req.usuario.id_usuario) return res.status(403).json({erro:'Sessão inválida.'});
+  if (!/^\d{1,20}$/.test(req.params.id)) return res.status(400).json({erro:'Comunidade inválida.'});
+  next();
+}
+app.put('/api/comunidades/:id', autenticar, sessaoComunidade, (req,res,next) => {
+  if (!req.is('multipart/form-data')) return next();
+  profileImageUpload.single('imagem')(req,res,error => {
+    if (error || !req.file) return res.status(400).json({erro:'Imagem inválida ou maior que 5 MB.'});
+    next();
+  });
+}, async (req,res) => {
+  let cx, committed = false;
+  try {
+    const nome = typeof req.body?.nome === 'string' ? req.body.nome.trim() : '';
+    const descricao = typeof req.body?.descricao === 'string' ? req.body.descricao.trim() : '';
+    const remover = req.body?.remover_foto === true || req.body?.remover_foto === 'true';
+    if (nome.length < 3 || nome.length > 60 || descricao.length > 300) return res.status(400).json({erro:'Confira o nome e a descrição.'});
+    if (req.file && !validarAssinaturaImagem(await fs.promises.readFile(req.file.path))) return res.status(400).json({erro:'Imagem inválida.'});
+    cx = await db.getConnection(); await cx.beginTransaction();
+    const [[c]] = await cx.execute('SELECT criador_id,foto_url FROM comunidade WHERE id_comunidade=? FOR UPDATE',[req.params.id]);
+    if (!c || String(c.criador_id) !== String(req.usuario.id_usuario)) return res.status(403).json({erro:'Somente o criador pode editar.'});
+    const foto_url = req.file ? `/api/profile/images/${req.file.filename}` : remover ? null : c.foto_url;
+    await cx.execute('UPDATE comunidade SET nome=?,descricao=?,foto_url=? WHERE id_comunidade=?',[nome,descricao,foto_url,req.params.id]);
+    await cx.commit(); committed = true;
+    return res.json({comunidade:{id:req.params.id,nome,descricao,foto_url,proprietario:1}});
+  } catch(e) { console.error('Editar comunidade:',e.message); return res.status(500).json({erro:'Não foi possível editar a comunidade.'}); }
+  finally { if(cx){if(!committed) await cx.rollback().catch(()=>{});cx.release();} if(!committed && req.file) await fs.promises.unlink(req.file.path).catch(()=>{}); }
+});
+app.delete('/api/comunidades/:id', autenticar, sessaoComunidade, async(req,res)=>{
+  let cx, committed=false;
+  try {
+    cx=await db.getConnection(); await cx.beginTransaction();
+    const [[c]]=await cx.execute('SELECT criador_id FROM comunidade WHERE id_comunidade=? FOR UPDATE',[req.params.id]);
+    if(!c || String(c.criador_id)!==String(req.usuario.id_usuario)) return res.status(403).json({erro:'Somente o criador pode excluir.'});
+    await cx.execute('DELETE FROM comunidade_mensagem WHERE id_comunidade=?',[req.params.id]);
+    await cx.execute('DELETE FROM comunidade_membro WHERE id_comunidade=?',[req.params.id]);
+    await cx.execute('DELETE FROM comunidade WHERE id_comunidade=?',[req.params.id]);
+    await cx.commit(); committed=true; return res.json({mensagem:'Comunidade excluída.'});
+  } catch(e){console.error('Excluir comunidade:',e.message);return res.status(500).json({erro:'Não foi possível excluir a comunidade.'});}
+  finally{if(cx){if(!committed)await cx.rollback().catch(()=>{});cx.release();}}
+});
+
 app.post('/api/comunidades/:id/entrar', autenticar, async (req,res) => {
   if (!/^\d+$/.test(req.params.id)) return res.status(400).json({erro:'Comunidade inválida.'});
   try {
@@ -1999,18 +2172,1121 @@ async function tipoChaveEstrangeira(tabela, coluna) {
   return tipo;
 }
 
+// Catálogo inicial: acrescenta metadados sem substituir descrições ou vínculos existentes.
+const catalogoInicialBusca = [
+  [
+    "True Beauty",
+    "Dorama",
+    [
+      "Beleza Verdadeira",
+      "여신강림"
+    ],
+    [
+      "Romance",
+      "Comédia",
+      "Drama"
+    ],
+    [
+      "colegial",
+      "escolar",
+      "escola",
+      "maquiagem",
+      "autoestima",
+      "bullying",
+      "triângulo amoroso",
+      "k-drama",
+      "coreano"
+    ],
+    "Uma estudante aprende a lidar com a aparência, a amizade e o amor."
+  ],
+  [
+    "Lovely Runner",
+    "Dorama",
+    [
+      "Adorável Corredora"
+    ],
+    [
+      "Romance",
+      "Fantasia",
+      "Drama"
+    ],
+    [
+      "colegial",
+      "escolar",
+      "viagem no tempo",
+      "ídolo",
+      "k-drama",
+      "coreano"
+    ],
+    "Uma fã viaja no tempo para tentar mudar o destino de seu ídolo."
+  ],
+  [
+    "Twinkling Watermelon",
+    "Dorama",
+    [
+      "Melancia Cintilante"
+    ],
+    [
+      "Romance",
+      "Fantasia",
+      "Drama"
+    ],
+    [
+      "colegial",
+      "escolar",
+      "música",
+      "viagem no tempo",
+      "família",
+      "amizade",
+      "k-drama"
+    ],
+    "Um jovem músico viaja ao passado e conhece seus pais adolescentes."
+  ],
+  [
+    "Boys Over Flowers",
+    "Dorama",
+    [
+      "Meninos Antes de Flores",
+      "Boys Before Flowers"
+    ],
+    [
+      "Romance",
+      "Drama",
+      "Comédia"
+    ],
+    [
+      "colegial",
+      "escolar",
+      "escola",
+      "ricos",
+      "triângulo amoroso",
+      "k-drama"
+    ],
+    "Uma estudante de origem humilde entra em uma escola de elite."
+  ],
+  [
+    "The Heirs",
+    "Dorama",
+    [
+      "Os Herdeiros",
+      "Inheritors"
+    ],
+    [
+      "Romance",
+      "Drama"
+    ],
+    [
+      "colegial",
+      "escolar",
+      "escola",
+      "ricos",
+      "família",
+      "k-drama"
+    ],
+    "Jovens herdeiros enfrentam conflitos familiares e amorosos."
+  ],
+  [
+    "Extraordinary You",
+    "Dorama",
+    [
+      "Extraordinária Você"
+    ],
+    [
+      "Romance",
+      "Fantasia",
+      "Comédia"
+    ],
+    [
+      "colegial",
+      "escolar",
+      "quadrinhos",
+      "destino",
+      "k-drama"
+    ],
+    "Uma estudante descobre que vive dentro de uma história em quadrinhos."
+  ],
+  [
+    "All of Us Are Dead",
+    "Dorama",
+    [
+      "Estamos Todos Mortos"
+    ],
+    [
+      "Terror",
+      "Suspense",
+      "Drama"
+    ],
+    [
+      "colegial",
+      "escolar",
+      "zumbis",
+      "sobrevivência",
+      "apocalipse",
+      "k-drama"
+    ],
+    "Estudantes tentam sobreviver a um surto de zumbis na escola."
+  ],
+  [
+    "Business Proposal",
+    "Dorama",
+    [
+      "Pretendente Surpresa"
+    ],
+    [
+      "Romance",
+      "Comédia"
+    ],
+    [
+      "trabalho",
+      "encontro às cegas",
+      "identidade secreta",
+      "k-drama"
+    ],
+    "Uma funcionária acaba em um encontro com seu próprio chefe."
+  ],
+  [
+    "Crash Landing on You",
+    "Dorama",
+    [
+      "Pousando no Amor"
+    ],
+    [
+      "Romance",
+      "Drama"
+    ],
+    [
+      "coreia",
+      "amor proibido",
+      "militar",
+      "k-drama"
+    ],
+    "Uma empresária sul-coreana conhece um oficial norte-coreano após um acidente."
+  ],
+  [
+    "Goblin",
+    "Dorama",
+    [
+      "Guardian: The Lonely and Great God",
+      "O Guardião"
+    ],
+    [
+      "Romance",
+      "Fantasia",
+      "Drama"
+    ],
+    [
+      "imortalidade",
+      "destino",
+      "sobrenatural",
+      "k-drama"
+    ],
+    "Um ser imortal busca alguém capaz de encerrar sua maldição."
+  ],
+  [
+    "Twenty-Five Twenty-One",
+    "Dorama",
+    [
+      "Vinte e Cinco Vinte e Um",
+      "2521"
+    ],
+    [
+      "Romance",
+      "Drama"
+    ],
+    [
+      "colegial",
+      "escolar",
+      "esgrima",
+      "esporte",
+      "amadurecimento",
+      "k-drama"
+    ],
+    "Uma jovem atleta busca seus sonhos em tempos de crise."
+  ],
+  [
+    "A Cinco Passos de Você",
+    "Filme",
+    [
+      "Five Feet Apart"
+    ],
+    [
+      "Romance",
+      "Drama"
+    ],
+    [
+      "hospital",
+      "doença",
+      "fibrose cística",
+      "amor impossível",
+      "emocionante"
+    ],
+    "Dois adolescentes com fibrose cística se aproximam apesar das restrições médicas."
+  ],
+  [
+    "Titanic",
+    "Filme",
+    [],
+    [
+      "Romance",
+      "Drama"
+    ],
+    [
+      "navio",
+      "tragédia",
+      "amor proibido",
+      "histórico",
+      "clássico"
+    ],
+    "Dois passageiros de classes sociais diferentes se apaixonam a bordo do Titanic."
+  ],
+  [
+    "Interestelar",
+    "Filme",
+    [
+      "Interstellar"
+    ],
+    [
+      "Ficção científica",
+      "Drama",
+      "Aventura"
+    ],
+    [
+      "espaço",
+      "astronomia",
+      "universo",
+      "viagem no tempo",
+      "família",
+      "clássico"
+    ],
+    "Exploradores procuram um novo lar para a humanidade."
+  ],
+  [
+    "Jogos Vorazes",
+    "Filme",
+    [
+      "The Hunger Games"
+    ],
+    [
+      "Ação",
+      "Ficção científica",
+      "Aventura"
+    ],
+    [
+      "distopia",
+      "sobrevivência",
+      "rebelião",
+      "adaptação literária",
+      "romance"
+    ],
+    "Uma jovem participa de uma competição mortal imposta pelo governo."
+  ],
+  [
+    "Harry Potter e a Pedra Filosofal",
+    "Filme",
+    [
+      "Harry Potter and the Philosopher's Stone",
+      "Harry Potter and the Sorcerer's Stone"
+    ],
+    [
+      "Fantasia",
+      "Aventura"
+    ],
+    [
+      "magia",
+      "escola",
+      "amizade",
+      "bruxos",
+      "clássico",
+      "adaptação literária"
+    ],
+    "Um garoto descobre que é bruxo e entra em uma escola de magia."
+  ],
+  [
+    "Crepúsculo",
+    "Filme",
+    [
+      "Twilight"
+    ],
+    [
+      "Romance",
+      "Fantasia",
+      "Drama"
+    ],
+    [
+      "vampiros",
+      "colegial",
+      "escolar",
+      "amor proibido",
+      "sobrenatural",
+      "adaptação literária"
+    ],
+    "Uma adolescente se apaixona por um vampiro."
+  ],
+  [
+    "O Diário de uma Paixão",
+    "Filme",
+    [
+      "The Notebook",
+      "Diário de uma Paixão"
+    ],
+    [
+      "Romance",
+      "Drama"
+    ],
+    [
+      "amor",
+      "memória",
+      "reencontro",
+      "clássico",
+      "adaptação literária"
+    ],
+    "Uma história de amor atravessa diferentes momentos da vida de um casal."
+  ],
+  [
+    "Orgulho e Preconceito",
+    "Filme",
+    [
+      "Pride and Prejudice"
+    ],
+    [
+      "Romance",
+      "Drama"
+    ],
+    [
+      "época",
+      "romance histórico",
+      "enemies to lovers",
+      "adaptação literária",
+      "clássico"
+    ],
+    "Elizabeth Bennet e Darcy enfrentam seus próprios preconceitos."
+  ],
+  [
+    "Meninas Malvadas",
+    "Filme",
+    [
+      "Mean Girls"
+    ],
+    [
+      "Comédia"
+    ],
+    [
+      "colegial",
+      "escolar",
+      "escola",
+      "popularidade",
+      "amizade",
+      "clássico"
+    ],
+    "Uma nova estudante conhece as regras sociais de uma escola americana."
+  ],
+  [
+    "As Branquelas",
+    "Filme",
+    [
+      "White Chicks"
+    ],
+    [
+      "Comédia"
+    ],
+    [
+      "disfarce",
+      "policial",
+      "amizade",
+      "clássico"
+    ],
+    "Dois agentes assumem identidades falsas em uma missão."
+  ],
+  [
+    "Shrek",
+    "Filme",
+    [],
+    [
+      "Animação",
+      "Comédia",
+      "Fantasia"
+    ],
+    [
+      "conto de fadas",
+      "amizade",
+      "romance",
+      "família",
+      "clássico"
+    ],
+    "Um ogro embarca em uma aventura para resgatar uma princesa."
+  ],
+  [
+    "O Rei Leão",
+    "Filme",
+    [
+      "The Lion King"
+    ],
+    [
+      "Animação",
+      "Aventura",
+      "Drama"
+    ],
+    [
+      "família",
+      "animais",
+      "amadurecimento",
+      "clássico",
+      "disney"
+    ],
+    "Um jovem leão precisa assumir seu lugar no reino."
+  ],
+  [
+    "Procurando Nemo",
+    "Filme",
+    [
+      "Finding Nemo"
+    ],
+    [
+      "Animação",
+      "Aventura",
+      "Comédia"
+    ],
+    [
+      "oceano",
+      "família",
+      "amizade",
+      "clássico",
+      "pixar"
+    ],
+    "Um peixe atravessa o oceano procurando seu filho."
+  ],
+  [
+    "O Auto da Compadecida",
+    "Filme",
+    [],
+    [
+      "Comédia",
+      "Drama"
+    ],
+    [
+      "brasileiro",
+      "nordeste",
+      "amizade",
+      "religião",
+      "clássico"
+    ],
+    "João Grilo e Chicó vivem aventuras no sertão nordestino."
+  ],
+  [
+    "Cidade de Deus",
+    "Filme",
+    [
+      "City of God"
+    ],
+    [
+      "Drama",
+      "Crime"
+    ],
+    [
+      "brasileiro",
+      "violência",
+      "sociedade",
+      "rio de janeiro",
+      "clássico"
+    ],
+    "A trajetória de jovens em uma comunidade do Rio de Janeiro."
+  ],
+  [
+    "O Senhor dos Anéis: A Sociedade do Anel",
+    "Filme",
+    [
+      "The Lord of the Rings: The Fellowship of the Ring"
+    ],
+    [
+      "Fantasia",
+      "Aventura"
+    ],
+    [
+      "magia",
+      "jornada",
+      "amizade",
+      "clássico",
+      "adaptação literária"
+    ],
+    "Um hobbit parte em missão para destruir um anel poderoso."
+  ],
+  [
+    "De Volta para o Futuro",
+    "Filme",
+    [
+      "Back to the Future"
+    ],
+    [
+      "Ficção científica",
+      "Comédia",
+      "Aventura"
+    ],
+    [
+      "viagem no tempo",
+      "família",
+      "clássico"
+    ],
+    "Um adolescente viaja ao passado e precisa preservar sua própria existência."
+  ],
+  [
+    "Matrix",
+    "Filme",
+    [
+      "The Matrix"
+    ],
+    [
+      "Ficção científica",
+      "Ação"
+    ],
+    [
+      "realidade virtual",
+      "tecnologia",
+      "inteligência artificial",
+      "distopia",
+      "clássico"
+    ],
+    "Um hacker descobre a verdadeira natureza do mundo em que vive."
+  ],
+  [
+    "Coraline e o Mundo Secreto",
+    "Filme",
+    [
+      "Coraline"
+    ],
+    [
+      "Animação",
+      "Fantasia",
+      "Terror"
+    ],
+    [
+      "mundo paralelo",
+      "mistério",
+      "família",
+      "adaptação literária"
+    ],
+    "Uma garota encontra uma porta para um mundo aparentemente perfeito."
+  ],
+  [
+    "Olhos da Justiça",
+    "Filme",
+    [
+      "Secret in Their Eyes"
+    ],
+    [
+      "Suspense",
+      "Drama",
+      "Crime"
+    ],
+    [
+      "investigação",
+      "mistério",
+      "vingança",
+      "policial"
+    ],
+    "Investigadores revisitam um crime que marcou suas vidas."
+  ],
+  [
+    "Stranger Things",
+    "Série",
+    [],
+    [
+      "Ficção científica",
+      "Terror",
+      "Suspense"
+    ],
+    [
+      "adolescentes",
+      "escolar",
+      "amizade",
+      "sobrenatural",
+      "anos 80",
+      "mistério"
+    ],
+    "Amigos investigam acontecimentos sobrenaturais em uma pequena cidade."
+  ],
+  [
+    "Friends",
+    "Série",
+    [],
+    [
+      "Comédia",
+      "Romance"
+    ],
+    [
+      "amizade",
+      "vida adulta",
+      "cotidiano",
+      "sitcom",
+      "clássico"
+    ],
+    "Seis amigos compartilham desafios cotidianos em Nova York."
+  ],
+  [
+    "The Office",
+    "Série",
+    [],
+    [
+      "Comédia"
+    ],
+    [
+      "trabalho",
+      "escritório",
+      "sitcom",
+      "falso documentário"
+    ],
+    "Funcionários de um escritório vivem situações cômicas no trabalho."
+  ],
+  [
+    "Breaking Bad",
+    "Série",
+    [],
+    [
+      "Drama",
+      "Crime",
+      "Suspense"
+    ],
+    [
+      "química",
+      "crime",
+      "anti-herói",
+      "família",
+      "clássico"
+    ],
+    "Um professor de química entra no mundo do crime."
+  ],
+  [
+    "Anne with an E",
+    "Série",
+    [
+      "Anne com E"
+    ],
+    [
+      "Drama"
+    ],
+    [
+      "época",
+      "escolar",
+      "colegial",
+      "amizade",
+      "família",
+      "amadurecimento"
+    ],
+    "Uma órfã imaginativa encontra um novo lar."
+  ],
+  [
+    "Gilmore Girls",
+    "Série",
+    [
+      "Tal Mãe, Tal Filha"
+    ],
+    [
+      "Comédia",
+      "Drama",
+      "Romance"
+    ],
+    [
+      "família",
+      "escolar",
+      "colegial",
+      "cidade pequena",
+      "amizade"
+    ],
+    "Mãe e filha compartilham a vida em uma pequena cidade."
+  ],
+  [
+    "Wandinha",
+    "Série",
+    [
+      "Wednesday"
+    ],
+    [
+      "Fantasia",
+      "Mistério",
+      "Comédia"
+    ],
+    [
+      "colegial",
+      "escolar",
+      "escola",
+      "sobrenatural",
+      "investigação"
+    ],
+    "Wandinha Addams investiga mistérios em sua nova escola."
+  ],
+  [
+    "Naruto",
+    "Anime",
+    [],
+    [
+      "Ação",
+      "Aventura",
+      "Fantasia"
+    ],
+    [
+      "ninja",
+      "amizade",
+      "superação",
+      "shonen",
+      "clássico"
+    ],
+    "Um jovem ninja sonha em liderar sua aldeia."
+  ],
+  [
+    "Death Note",
+    "Anime",
+    [],
+    [
+      "Suspense",
+      "Mistério",
+      "Fantasia"
+    ],
+    [
+      "investigação",
+      "psicológico",
+      "sobrenatural",
+      "crime",
+      "clássico"
+    ],
+    "Um estudante encontra um caderno com poderes letais."
+  ],
+  [
+    "Attack on Titan",
+    "Anime",
+    [
+      "Shingeki no Kyojin",
+      "Ataque dos Titãs"
+    ],
+    [
+      "Ação",
+      "Fantasia",
+      "Drama"
+    ],
+    [
+      "sobrevivência",
+      "guerra",
+      "distopia",
+      "mistério"
+    ],
+    "A humanidade luta para sobreviver diante de titãs."
+  ],
+  [
+    "One Piece",
+    "Anime",
+    [],
+    [
+      "Aventura",
+      "Ação",
+      "Fantasia"
+    ],
+    [
+      "piratas",
+      "amizade",
+      "tesouro",
+      "shonen",
+      "clássico"
+    ],
+    "Um jovem pirata reúne uma tripulação em busca de um tesouro lendário."
+  ],
+  [
+    "A Viagem de Chihiro",
+    "Anime",
+    [
+      "Spirited Away",
+      "Sen to Chihiro no Kamikakushi"
+    ],
+    [
+      "Fantasia",
+      "Aventura",
+      "Animação"
+    ],
+    [
+      "mundo espiritual",
+      "amadurecimento",
+      "studio ghibli",
+      "clássico"
+    ],
+    "Uma menina precisa salvar seus pais em um mundo de espíritos."
+  ],
+  [
+    "Your Name",
+    "Anime",
+    [
+      "Kimi no Na wa"
+    ],
+    [
+      "Romance",
+      "Fantasia",
+      "Drama"
+    ],
+    [
+      "colegial",
+      "escolar",
+      "troca de corpos",
+      "destino",
+      "viagem no tempo"
+    ],
+    "Dois jovens descobrem uma ligação inexplicável entre suas vidas."
+  ],
+  [
+    "O Pequeno Príncipe",
+    "Livro",
+    [
+      "The Little Prince",
+      "Le Petit Prince"
+    ],
+    [
+      "Fantasia",
+      "Fábula"
+    ],
+    [
+      "amizade",
+      "filosofia",
+      "infância",
+      "clássico"
+    ],
+    "Um pequeno viajante reflete sobre o amor e a natureza humana."
+  ],
+  [
+    "Dom Casmurro",
+    "Livro",
+    [],
+    [
+      "Romance",
+      "Drama"
+    ],
+    [
+      "brasileiro",
+      "ciúme",
+      "literatura brasileira",
+      "clássico"
+    ],
+    "Bentinho revisita sua vida e seu relacionamento com Capitu."
+  ],
+  [
+    "Capitães da Areia",
+    "Livro",
+    [],
+    [
+      "Drama",
+      "Ficção"
+    ],
+    [
+      "brasileiro",
+      "sociedade",
+      "amizade",
+      "salvador",
+      "clássico"
+    ],
+    "Um grupo de meninos vive nas ruas de Salvador."
+  ],
+  [
+    "1984",
+    "Livro",
+    [
+      "Nineteen Eighty-Four"
+    ],
+    [
+      "Ficção científica",
+      "Distopia"
+    ],
+    [
+      "vigilância",
+      "totalitarismo",
+      "política",
+      "clássico"
+    ],
+    "Um homem vive sob um regime que controla a informação e o pensamento."
+  ],
+  [
+    "A Revolução dos Bichos",
+    "Livro",
+    [
+      "Animal Farm"
+    ],
+    [
+      "Sátira",
+      "Fábula"
+    ],
+    [
+      "política",
+      "revolução",
+      "sociedade",
+      "clássico"
+    ],
+    "Animais de uma fazenda se rebelam contra seus donos."
+  ],
+  [
+    "Orgulho e Preconceito",
+    "Livro",
+    [
+      "Pride and Prejudice"
+    ],
+    [
+      "Romance"
+    ],
+    [
+      "época",
+      "romance histórico",
+      "enemies to lovers",
+      "clássico"
+    ],
+    "Elizabeth Bennet e Darcy confrontam expectativas sociais e preconceitos."
+  ],
+  [
+    "A Culpa é das Estrelas",
+    "Livro",
+    [
+      "The Fault in Our Stars"
+    ],
+    [
+      "Romance",
+      "Drama"
+    ],
+    [
+      "doença",
+      "adolescentes",
+      "emocionante",
+      "amor"
+    ],
+    "Dois adolescentes se conhecem em um grupo de apoio a pacientes com câncer."
+  ],
+  [
+    "A Hipótese do Amor",
+    "Livro",
+    [
+      "The Love Hypothesis"
+    ],
+    [
+      "Romance",
+      "Comédia"
+    ],
+    [
+      "universidade",
+      "ciência",
+      "namoro falso",
+      "romance contemporâneo"
+    ],
+    "Uma pesquisadora entra em um relacionamento de mentira."
+  ],
+  [
+    "Percy Jackson e o Ladrão de Raios",
+    "Livro",
+    [
+      "The Lightning Thief",
+      "Percy Jackson"
+    ],
+    [
+      "Fantasia",
+      "Aventura"
+    ],
+    [
+      "mitologia grega",
+      "amizade",
+      "semideuses",
+      "juvenil"
+    ],
+    "Um garoto descobre sua ligação com os deuses gregos."
+  ],
+  [
+    "Harry Potter e a Pedra Filosofal",
+    "Livro",
+    [
+      "Harry Potter and the Philosopher's Stone",
+      "Harry Potter and the Sorcerer's Stone"
+    ],
+    [
+      "Fantasia",
+      "Aventura"
+    ],
+    [
+      "magia",
+      "escola",
+      "amizade",
+      "bruxos",
+      "clássico"
+    ],
+    "Um garoto descobre seus poderes e começa a estudar magia."
+  ],
+  [
+    "Jogos Vorazes",
+    "Livro",
+    [
+      "The Hunger Games"
+    ],
+    [
+      "Distopia",
+      "Aventura",
+      "Ficção científica"
+    ],
+    [
+      "sobrevivência",
+      "rebelião",
+      "romance",
+      "juvenil"
+    ],
+    "Katniss enfrenta uma competição mortal em uma sociedade distópica."
+  ]
+];
+
+async function prepararCatalogoBusca(conexao) {
+  await conexao.execute(`CREATE TABLE IF NOT EXISTS luptok_migracao_catalogo (
+    versao VARCHAR(80) PRIMARY KEY, aplicada_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+  const versao = 'catalogo_busca_v1';
+  const [feito] = await conexao.execute('SELECT versao FROM luptok_migracao_catalogo WHERE versao = ?', [versao]);
+  if (feito.length) return;
+  const [usuarios] = await conexao.execute('SELECT id_usuario FROM usuario WHERE ativo = 1 ORDER BY id_usuario LIMIT 1');
+  if (!usuarios.length) { console.warn('Catálogo inicial: nenhum usuário ativo para registrar autoria.'); return; }
+  const normalizar = t => t.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
+  await conexao.beginTransaction();
+  try {
+    for (const [titulo, tipo, aliases, generos, tags, descricao] of catalogoInicialBusca) {
+      const nomes = [...new Set([titulo, ...aliases].map(normalizar))];
+      const tipos = tipo === 'Dorama' ? ['Dorama', 'Série'] : tipo === 'Anime' ? ['Anime', 'Série'] : [tipo];
+      const [existentes] = await conexao.execute(
+        `SELECT id_obra FROM obra WHERE tipo IN (${tipos.map(() => '?').join(',')}) AND titulo_normalizado IN (${nomes.map(() => '?').join(',')})`,
+        [...tipos, ...nomes]);
+      let ids = existentes.map(o => o.id_obra);
+      if (!ids.length) {
+        await conexao.execute(`INSERT INTO obra (titulo, titulo_normalizado, tipo, criado_por) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE id_obra = LAST_INSERT_ID(id_obra)`, [titulo, normalizar(titulo), tipo, usuarios[0].id_usuario]);
+        const [[obra]] = await conexao.execute('SELECT id_obra FROM obra WHERE titulo_normalizado = ? AND tipo = ?', [normalizar(titulo), tipo]);
+        ids = [obra.id_obra];
+      }
+      for (const id of ids) await adicionarMetadadosObra(conexao, id, descricao, generos, [...new Set([titulo, tipo, ...aliases, ...tags])]);
+    }
+    await conexao.execute('INSERT INTO luptok_migracao_catalogo (versao) VALUES (?)', [versao]);
+    await conexao.commit();
+    console.log('Catálogo inicial de busca preparado:', catalogoInicialBusca.length, 'obras.');
+  } catch (error) {
+    await conexao.rollback();
+    throw error;
+  }
+}
+
 async function iniciarServidor() {
   try {
     const conexao = await db.getConnection();
 
     console.log('MySQL conectado com sucesso!');
     const tipoIdUsuario = await tipoChaveEstrangeira('usuario', 'id_usuario');
+    await db.execute(`CREATE TABLE IF NOT EXISTS luptok_seguidor (
+      seguidor_id ${tipoIdUsuario} NOT NULL,
+      seguido_id ${tipoIdUsuario} NOT NULL,
+      PRIMARY KEY (seguidor_id, seguido_id),
+      INDEX idx_luptok_seguido (seguido_id),
+      FOREIGN KEY (seguidor_id) REFERENCES usuario(id_usuario) ON DELETE CASCADE,
+      FOREIGN KEY (seguido_id) REFERENCES usuario(id_usuario) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
     await db.execute(`CREATE TABLE IF NOT EXISTS comunidade (
       id_comunidade BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
       nome VARCHAR(60) NOT NULL, descricao VARCHAR(300) NOT NULL DEFAULT '',
       criador_id ${tipoIdUsuario} NOT NULL, criada_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (criador_id) REFERENCES usuario(id_usuario) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    const [fotoComunidade] = await db.execute(
+      "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'comunidade' AND COLUMN_NAME = 'foto_url'"
+    );
+    if (!fotoComunidade.length) await db.execute('ALTER TABLE comunidade ADD COLUMN foto_url VARCHAR(500) NULL');
     await db.execute(`CREATE TABLE IF NOT EXISTS comunidade_membro (
       id_comunidade BIGINT UNSIGNED NOT NULL, id_usuario ${tipoIdUsuario} NOT NULL,
       PRIMARY KEY(id_comunidade,id_usuario),
@@ -2041,6 +3317,12 @@ async function iniciarServidor() {
          INDEX idx_video_post_obra (id_obra)
        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
     );
+    await db.execute(`CREATE TABLE IF NOT EXISTS luptok_video_salvo (
+      id_usuario BIGINT UNSIGNED NOT NULL,
+      id_video BIGINT UNSIGNED NOT NULL,
+      criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id_usuario, id_video)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
     await db.execute(
       `CREATE TABLE IF NOT EXISTS video_post_curtida (
          id_usuario BIGINT UNSIGNED NOT NULL,
@@ -2168,6 +3450,8 @@ async function iniciarServidor() {
       );
       if (colunas.length === 0) await db.query(`ALTER TABLE usuario ADD COLUMN ${coluna} ${definicao}`);
     }
+    try { await prepararCatalogoBusca(conexao); }
+    catch (error) { console.error('Não foi possível preparar o catálogo inicial:', error.message); }
     conexao.release();
 
     app.use((req, res) => {

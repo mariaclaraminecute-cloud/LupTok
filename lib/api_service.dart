@@ -4,6 +4,29 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 class ApiService {
+  static Future<Map<String, dynamic>> obterSeguidores(Object id) =>
+      _authenticatedGet('/api/social/$id');
+
+  static Future<void> atualizarSeguidor(Object id, bool seguir) async {
+    final token = await tokenDaSessao();
+    if (token == null) throw Exception('Faça login para continuar.');
+    final response = await http.put(Uri.parse('$baseUrl/api/social/$id/follow'),
+      headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+      body: jsonEncode({'seguir': seguir})).timeout(const Duration(seconds: 20));
+    _decodeResponse(response);
+  }
+
+  static final videosExcluidos = ValueNotifier<Set<String>>(<String>{});
+  static Future<void> excluirVideo(Object id) async {
+    final token = await tokenDaSessao();
+    if (token == null) throw Exception('Faça login para continuar.');
+    final response = await http.delete(
+      Uri.parse('$baseUrl/api/videos/$id'),
+      headers: {'Authorization': 'Bearer $token'},
+    ).timeout(const Duration(seconds: 25));
+    _decodeResponse(response);
+    videosExcluidos.value = {...videosExcluidos.value, id.toString()};
+  }
   static const String _configuredBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
   );
@@ -22,9 +45,7 @@ class ApiService {
     if (url.startsWith('https://') || url.startsWith('http://')) return url;
     return '$baseUrl${url.startsWith('/') ? '' : '/'}$url';
   }
-
   static Future<Map<String, dynamic>> meuPerfil() => _authenticatedGet('/api/profile/me');
-
   static Future<Map<String, dynamic>> salvarAtividadePerfil({
     required String atividade, required String obraAtual,
   }) async {
@@ -37,7 +58,6 @@ class ApiService {
     ).timeout(const Duration(seconds: 20));
     return _decodeResponse(response);
   }
-
   static Future<Map<String, dynamic>> enviarImagemPerfil({
     required XFile arquivo, required String tipo,
   }) async {
@@ -49,7 +69,6 @@ class ApiService {
     final streamed = await request.send().timeout(const Duration(seconds: 45));
     return _decodeResponse(await http.Response.fromStream(streamed));
   }
-
   static Future<Map<String, dynamic>> salvarPerfil({
     required String nome, required String nomeUsuario, required String bio,
     required String atividade, required String obraAtual,
@@ -63,7 +82,6 @@ class ApiService {
     ).timeout(const Duration(seconds: 20));
     return _decodeResponse(response);
   }
-
   static Future<void> removerImagemPerfil(String tipo) async {
     final token = await tokenDaSessao();
     if (token == null) throw Exception('Faça login para continuar.');
@@ -71,7 +89,6 @@ class ApiService {
       headers: {'Authorization': 'Bearer $token'}).timeout(const Duration(seconds: 20));
     _decodeResponse(response);
   }
-
   static Future<void> removerInteresse(Object id) async {
     final token = await tokenDaSessao();
     if (token == null) throw Exception('Faça login para continuar.');
@@ -79,7 +96,6 @@ class ApiService {
       headers: {'Authorization': 'Bearer $token'}).timeout(const Duration(seconds: 20));
     _decodeResponse(response);
   }
-
   static Future<Map<String, dynamic>> cadastrar({
     required String nome,
     required String nomeUsuario,
@@ -173,8 +189,40 @@ class ApiService {
     final data = await _authenticatedGet('/api/comunidades');
     return (data['comunidades'] as List).map(_mapResponseItem).toList();
   }
-  static Future<Map<String, dynamic>> criarComunidade(String nome, String descricao) =>
-      _authenticatedPost('/api/comunidades', {'nome': nome, 'descricao': descricao});
+  static Future<Map<String, dynamic>> criarComunidade(String nome, String descricao, {XFile? foto}) async {
+    if (foto == null) return _authenticatedPost('/api/comunidades', {'nome': nome, 'descricao': descricao});
+    final token = await tokenDaSessao();
+    if (token == null) throw Exception('Faça login para continuar.');
+    if (await foto.length() > 5 * 1024 * 1024) throw Exception('Escolha uma imagem de até 5 MB.');
+    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/api/comunidades'));
+    request.headers['Authorization'] = 'Bearer $token';
+    request.fields.addAll({'nome': nome, 'descricao': descricao});
+    request.files.add(http.MultipartFile('imagem', foto.openRead(), await foto.length(), filename: foto.name));
+    final streamed = await request.send().timeout(const Duration(seconds: 45));
+    return _decodeResponse(await http.Response.fromStream(streamed).timeout(const Duration(seconds: 45)));
+  }
+  static Future<Map<String,dynamic>> editarComunidade(Object id, String nome, String descricao, {XFile? foto, bool removerFoto = false}) async {
+    final token = await tokenDaSessao();
+    if (token == null) throw Exception('Faça login para continuar.');
+    final uri = Uri.parse('$baseUrl/api/comunidades/$id');
+    if (foto == null) {
+      final response = await http.put(uri, headers: {'Authorization':'Bearer $token','Content-Type':'application/json'}, body: jsonEncode({'nome':nome,'descricao':descricao,'remover_foto':removerFoto})).timeout(const Duration(seconds:25));
+      return _decodeResponse(response);
+    }
+    if (await foto.length() > 5 * 1024 * 1024) throw Exception('Escolha uma imagem de até 5 MB.');
+    final request = http.MultipartRequest('PUT',uri);
+    request.headers['Authorization']='Bearer $token';
+    request.fields.addAll({'nome':nome,'descricao':descricao});
+    request.files.add(http.MultipartFile('imagem',foto.openRead(),await foto.length(),filename:foto.name));
+    final streamed=await request.send().timeout(const Duration(seconds:45));
+    return _decodeResponse(await http.Response.fromStream(streamed).timeout(const Duration(seconds:45)));
+  }
+  static Future<void> excluirComunidade(Object id) async {
+    final token=await tokenDaSessao();
+    if(token==null) throw Exception('Faça login para continuar.');
+    final response=await http.delete(Uri.parse('$baseUrl/api/comunidades/$id'),headers:{'Authorization':'Bearer $token'}).timeout(const Duration(seconds:25));
+    _decodeResponse(response);
+  }
   static Future<Map<String, dynamic>> entrarComunidade(Object id) =>
       _authenticatedPost('/api/comunidades/$id/entrar', {});
   static Future<List<Map<String, dynamic>>> listarMensagensComunidade(Object id) async {
@@ -183,7 +231,6 @@ class ApiService {
   }
   static Future<Map<String, dynamic>> enviarMensagemComunidade(Object id, String texto) =>
       _authenticatedPost('/api/comunidades/$id/mensagens', {'texto': texto});
-
   static Future<List<Map<String, dynamic>>> listarConversas() async {
     final data = await _authenticatedGet('/api/conversas');
     final conversas = data['conversas'];
@@ -430,7 +477,7 @@ class ApiService {
       '.webm',
     };
     String extensaoDe(String caminho) {
-      final nome = caminho.split(RegExp(r'[/\\\\\\\\]')).last;
+      final nome = caminho.split(RegExp(r'[/\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\]')).last;
       final ponto = nome.lastIndexOf('.');
       return ponto < 0 ? '' : nome.substring(ponto).toLowerCase();
     }

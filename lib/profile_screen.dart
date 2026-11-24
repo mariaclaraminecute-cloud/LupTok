@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -6,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 import 'api_service.dart';
+import 'saved_video_service.dart';
 import 'video_work_label.dart';
 import 'review_service.dart';
 import 'app_preferences.dart';
@@ -66,8 +69,13 @@ class _ProfileScreenState extends State<ProfileScreen>
   bool _uploadingPhoto = false;
   List<Map<String, dynamic>> _works = [];
   String? _worksError;
-  Set<String> _following = {};
-  Set<int> _savedIndices = {};
+  List<Map<String, dynamic>>? _followers;
+  List<Map<String, dynamic>>? _followingPeople;
+  bool _isFollowing = false;
+  bool _savingFollow = false;
+  Object? get _socialId => _isOwner ? 'me' : widget.publicUserId;
+
+
   bool _loading = true;
   bool get _isOwner => widget.isOwner;
   String get _shownUsername =>
@@ -81,17 +89,15 @@ class _ProfileScreenState extends State<ProfileScreen>
   void initState() {
     super.initState();
     _tabs = TabController(length: 3, vsync: this);
-    followedUsernames.addListener(_syncFollowing);
-    savedVideoIndices.addListener(_syncSaved);
+    ApiService.videosExcluidos.addListener(_syncSaved);
+    SavedVideoService.videos.addListener(_syncSaved);
     _loadProfile();
+    _loadSocial();
   }
-  void _syncFollowing() {
-    if (!mounted) return;
-    setState(() => _following = Set<String>.from(followedUsernames.value));
-  }
+
   void _syncSaved() {
     if (!mounted) return;
-    setState(() => _savedIndices = Set<int>.from(savedVideoIndices.value));
+    setState(() {});
   }
   String _nameFromUsername(String username) => username
       .replaceFirst('@', '')
@@ -130,8 +136,8 @@ class _ProfileScreenState extends State<ProfileScreen>
       _watching = remote?['obra_atual'] is String ? remote!['obra_atual'] as String : (_isOwner ? _watching : '');
       _works = works;
       _worksError = worksError;
-      _following = Set<String>.from(followedUsernames.value);
-      _savedIndices = Set<int>.from(savedVideoIndices.value);
+
+
       _loading = false;
     });
   }
@@ -494,15 +500,65 @@ class _ProfileScreenState extends State<ProfileScreen>
     } finally { if (mounted) setState(() => _uploadingPhoto = false); }
   }
 
-  Future<void> _toggleFollow() async {
-    final username = _shownUsername;
-    setState(() {
-      if (!_following.add(username)) _following.remove(username);
-    });
-    followedUsernames.value = Set<String>.from(_following);
-    final preferences = await SharedPreferences.getInstance();
-    await preferences.setStringList('following_users', _following.toList());
+  Future<void> _loadSocial() async {
+    final id = _socialId;
+    if (id == null) return;
+    try {
+      final data = await ApiService.obterSeguidores(id);
+      if (!mounted) return;
+      setState(() {
+        _followers = (data['seguidores'] as List).map((u) => Map<String, dynamic>.from(u as Map)).toList();
+        _followingPeople = (data['seguindo'] as List).map((u) => Map<String, dynamic>.from(u as Map)).toList();
+        _isFollowing = data['segue'] == true;
+      });
+      if (_isOwner) {
+        followedUsernames.value = _followingPeople!.map((u) => '@${u['nome_usuario']}').toSet();
+      }
+    } catch (_) {
+      if (mounted) setState(() { _followers = null; _followingPeople = null; });
+    }
   }
+
+  Future<void> _toggleFollow() async {
+    final id = widget.publicUserId;
+    if (id == null || _savingFollow || _followers == null) return;
+    setState(() { _savingFollow = true; });
+    try {
+      final next = !_isFollowing;
+      await ApiService.atualizarSeguidor(id, next);
+      if (!mounted) return;
+      setState(() { _isFollowing = next; });
+      final names = Set<String>.from(followedUsernames.value);
+      if (next) { names.add(_shownUsername); } else { names.remove(_shownUsername); }
+      followedUsernames.value = names;
+      await _loadSocial();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))));
+    } finally {
+      if (mounted) setState(() { _savingFollow = false; });
+    }
+  }
+
+  Future<void> _showSocial(bool followers) async {
+    await _loadSocial();
+    if (!mounted) return;
+    final people = followers ? _followers : _followingPeople;
+    await showModalBottomSheet<void>(context: context, backgroundColor: AppPalette.background(context),
+      builder: (ctx) => SafeArea(child: Column(children: [
+        const SizedBox(height: 16),
+        Text(followers ? 'Seguidores' : 'Seguindo', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 12),
+        Expanded(child: people == null ? const Center(child: Text('Não foi possível carregar. Tente novamente.')) : people.isEmpty
+          ? Center(child: Text(followers ? 'Nenhum seguidor ainda.' : 'Ainda não segue ninguém.'))
+          : ListView.builder(itemCount: people.length, itemBuilder: (ctx, index) {
+              final user = people[index];
+              final photo = ApiService.urlImagemPerfil(user['foto_url']);
+              return ListTile(leading: CircleAvatar(backgroundImage: photo == null ? null : NetworkImage(photo), child: photo == null ? const Icon(Icons.person_outline) : null),
+                title: Text('${user['nome'] ?? ''}'), subtitle: Text('@${user['nome_usuario'] ?? ''}'));
+            })),
+      ])));
+  }
+
   Future<void> _abrirChat() async {
     final recipientId = widget.publicUserId;
     if (recipientId == null) {
@@ -540,8 +596,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
   @override
   void dispose() {
-    followedUsernames.removeListener(_syncFollowing);
-    savedVideoIndices.removeListener(_syncSaved);
+    ApiService.videosExcluidos.removeListener(_syncSaved);
+    SavedVideoService.videos.removeListener(_syncSaved);
     _tabs.dispose();
     super.dispose();
   }
@@ -743,19 +799,11 @@ class _ProfileScreenState extends State<ProfileScreen>
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              if (_isOwner) ...[
-                _stat(_following.length.toString(), 'seguindo'),
-                _dividerDot(),
-              ],
-              _stat(
-                _shownWorks
-                    .where((work) => work['sou_fa'] == true)
-                    .length
-                    .toString(),
-                'favoritas',
-              ),
+              InkWell(onTap: () => _showSocial(false), child: _stat(_followingPeople?.length.toString() ?? '—', 'seguindo')),
               _dividerDot(),
-              _stat(widget.profileVideos.length.toString(), 'vídeos'),
+              InkWell(onTap: () => _showSocial(true), child: _stat(_followers?.length.toString() ?? '—', 'seguidores')),
+              _dividerDot(),
+              _stat(widget.profileVideos.where((v) => !ApiService.videosExcluidos.value.contains(v.videoId)).length.toString(), 'vídeos'),
             ],
           ),
           const SizedBox(height: 18),
@@ -805,24 +853,24 @@ class _ProfileScreenState extends State<ProfileScreen>
               children: [
                 Expanded(
                   child: FilledButton.icon(
-                    onPressed: _toggleFollow,
+                    onPressed: _savingFollow || _followers == null ? null : _toggleFollow,
                     icon: Icon(
-                      _following.contains(username)
+                      _isFollowing
                           ? Icons.check_rounded
                           : Icons.person_add_rounded,
                       size: 17,
                     ),
                     label: Text(
-                      _following.contains(username) ? 'Seguindo' : 'Seguir',
+                      _isFollowing ? 'Seguindo' : 'Seguir',
                     ),
                     style: FilledButton.styleFrom(
-                      backgroundColor: _following.contains(username)
+                      backgroundColor: _isFollowing
                           ? AppPalette.raisedSurface(context)
                           : AppPalette.button(context),
-                      foregroundColor: _following.contains(username)
+                      foregroundColor: _isFollowing
                           ? primary
                           : Colors.white,
-                      side: _following.contains(username)
+                      side: _isFollowing
                           ? BorderSide(color: AppPalette.border(context))
                           : null,
                       shape: RoundedRectangleBorder(
@@ -1106,7 +1154,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           child: TabBarView(
             controller: _tabs,
             children: [
-              _buildVideosGrid(widget.profileVideos),
+              _buildVideosGrid(widget.profileVideos.where((v) => !ApiService.videosExcluidos.value.contains(v.videoId)).toList()),
               _buildSavedList(),
               _buildPrivateList(),
             ],
@@ -1140,11 +1188,11 @@ class _ProfileScreenState extends State<ProfileScreen>
           borderRadius: BorderRadius.circular(12),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
-            onTap: () => _openProfileVideo(video),
+            onTap: () => _openProfileVideo(videos, index),
             child: Stack(
               fit: StackFit.expand,
               children: [
-                _ProfileVideoThumbnail(video: video),
+                _ProfileVideoThumbnail(key: ValueKey(video.videoId ?? video.videoPath), video: video),
                 Center(
                   child: Container(
                     width: 38,
@@ -1185,57 +1233,44 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
   Widget _buildSavedList() {
     if (!_isOwner) return _empty('Os vídeos salvos são privados.');
-    if (_savedIndices.isEmpty) {
-      return _empty('Seus vídeos salvos aparecem aqui.');
-    }
-    final items = _savedIndices
-        .where((index) => index >= 0 && index < widget.availableVideos.length)
-        .map((index) => widget.availableVideos[index])
-        .toList();
-    if (items.isEmpty) return _empty('Seus vídeos salvos aparecem aqui.');
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      itemCount: items.length,
-      physics: const ClampingScrollPhysics(),
-      itemBuilder: (context, index) {
-        return Card(
-          color: AppPalette.raisedSurface(context),
-          elevation: 0,
-          margin: const EdgeInsets.only(bottom: 8),
-          child: ListTile(
-            leading: Icon(
-              Icons.bookmark_rounded,
-              color: AppPalette.button(context),
-            ),
-            title: Text(
-              items[index],
-              style: TextStyle(
-                color: AppPalette.primaryText(context),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        );
-      },
-    );
+    final items = SavedVideoService.videos.value.where((v) => !ApiService.videosExcluidos.value.contains(v['id'].toString())).map((v) => ProfileVideo(
+      title: (v['titulo'] ?? 'Recomendação').toString(),
+      videoPath: ApiService.urlArquivoVideo(v['id']),
+      videoToken: SavedVideoService.token,
+      videoId: v['id'].toString(),
+      privacy: (v['privacidade'] ?? 'Público').toString(),
+      contentType: (v['tipo_conteudo'] ?? '').toString(),
+    )).toList();
+    return Column(children: [
+      Align(alignment: Alignment.centerRight, child: IconButton(
+        tooltip: 'Atualizar salvos', icon: const Icon(Icons.refresh_rounded),
+        onPressed: () async {
+          try { await SavedVideoService.load(); } catch (e) {
+            if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+          }
+        },
+      )),
+      Expanded(child: items.isEmpty ? _empty('Seus vídeos salvos aparecem aqui.') : _buildVideosGrid(items)),
+    ]);
   }
   Widget _buildPrivateList() {
     if (!_isOwner) return _empty('Este espaço é privado.');
-    if (widget.privateVideos.isEmpty) {
+    final videos = widget.privateVideos.where((v) => !ApiService.videosExcluidos.value.contains(v.videoId)).toList();
+    if (videos.isEmpty) {
       return _empty('Seus vídeos privados aparecem aqui.');
     }
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      itemCount: widget.privateVideos.length,
+      itemCount: videos.length,
       physics: const ClampingScrollPhysics(),
       itemBuilder: (context, index) {
-        final video = widget.privateVideos[index];
+        final video = videos[index];
         return Card(
           color: AppPalette.raisedSurface(context),
           elevation: 0,
           margin: const EdgeInsets.only(bottom: 8),
           child: ListTile(
-            onTap: () => _openProfileVideo(video),
+            onTap: () => _openProfileVideo(videos, index),
             leading: Icon(
               Icons.lock_rounded,
               color: AppPalette.mutedText(context),
@@ -1279,24 +1314,90 @@ class _ProfileScreenState extends State<ProfileScreen>
       ),
     ),
   );
-  Future<void> _openProfileVideo(ProfileVideo video) async {
-    final path = video.videoPath;
-    if (path == null) {
+  Future<void> _openProfileVideo(List<ProfileVideo> videos, int index) async {
+    final selected = videos[index];
+    if (selected.videoPath == null || selected.videoPath!.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Este vídeo não está disponível.')),
       );
       return;
     }
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => _ProfileVideoScreen(video: video),
+    final playable = videos.where((v) =>
+      v.videoPath != null && v.videoPath!.isNotEmpty &&
+      !ApiService.videosExcluidos.value.contains(v.videoId)).toList();
+    final initial = playable.indexOf(selected);
+    if (initial < 0) return;
+    await Navigator.of(context).push<void>(MaterialPageRoute<void>(
+      builder: (_) => _ProfileVideoPager(videos: playable, initialIndex: initial),
+    ));
+  }
+}
+
+// Cada página ativa usa o mesmo player e controles já existentes no perfil.
+class _ProfileVideoPager extends StatefulWidget {
+  final List<ProfileVideo> videos;
+  final int initialIndex;
+  const _ProfileVideoPager({required this.videos, required this.initialIndex});
+
+  @override
+  State<_ProfileVideoPager> createState() => _ProfileVideoPagerState();
+}
+
+class _ProfileVideoPagerState extends State<_ProfileVideoPager> {
+  late final PageController _pages;
+  late int _active;
+
+  @override
+  void initState() {
+    super.initState();
+    _active = widget.initialIndex;
+    _pages = PageController(initialPage: _active);
+  }
+
+  @override
+  void dispose() {
+    _pages.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(
+          dragDevices: {...ScrollConfiguration.of(context).dragDevices,
+            ui.PointerDeviceKind.mouse},
+        ),
+        child: PageView.builder(
+          controller: _pages,
+          scrollDirection: Axis.vertical,
+          itemCount: widget.videos.length,
+          onPageChanged: (index) {
+            if (index != _active) setState(() { _active = index; });
+          },
+          itemBuilder: (context, index) {
+            final video = widget.videos[index];
+            // Desmontar o player anterior impede reprodução simultânea.
+            // As páginas vizinhas mostram somente a miniatura, sem áudio.
+            if (index != _active) {
+              return _ProfileVideoThumbnail(
+                key: ValueKey('preview-$index'), video: video,
+              );
+            }
+            return _ProfileVideoScreen(
+              key: ValueKey('player-$index'), video: video,
+            );
+          },
+        ),
       ),
     );
   }
 }
+
 class _ProfileVideoScreen extends StatefulWidget {
   final ProfileVideo video;
-  const _ProfileVideoScreen({required this.video});
+  const _ProfileVideoScreen({super.key, required this.video});
   @override
   State<_ProfileVideoScreen> createState() => _ProfileVideoScreenState();
 }
@@ -1311,6 +1412,9 @@ class _ProfileVideoScreenState extends State<_ProfileVideoScreen> {
   bool _hideSpoilers = false;
   int? _feedIndex;
   String _author = '';
+  String _displayName = '';
+  String? _authorPhoto;
+  bool _canSeeLikes = false;
   String _description = '';
   String _workTitle = '';
   String _workType = '';
@@ -1331,7 +1435,7 @@ class _ProfileVideoScreenState extends State<_ProfileVideoScreen> {
     if (!mounted) return;
     setState(() {
       _hideSpoilers = prefs.getBool('settings_hide_spoilers') ?? false;
-      _saved = prefs.getStringList('saved_profile_video_ids')?.contains(widget.video.videoId) ?? false;
+      _saved = SavedVideoService.contains(widget.video.videoId);
     });
   }
 
@@ -1342,12 +1446,17 @@ class _ProfileVideoScreenState extends State<_ProfileVideoScreen> {
       final videos = await ApiService.listarVideos();
       final entry = videos.where((v) => v['id'].toString() == id).firstOrNull;
       final reviews = await ReviewService.listar(id);
+      final prefs = await SharedPreferences.getInstance();
       if (!mounted) return;
       setState(() {
         _liked = entry?['curtida_usuario'] == true;
         _likeCount = (entry?['curtidas'] as num?)?.toInt() ?? 0;
         _reviewCount = reviews.length;
         _author = (entry?['autor'] ?? '').toString();
+        _displayName = (entry?['apelido'] ?? entry?['nome'] ?? entry?['nome_exibicao'] ?? _author.replaceFirst('@', '')).toString();
+        _authorPhoto = ApiService.urlImagemPerfil(entry?['foto_url']);
+        final currentId = prefs.getString('perfil_id');
+        _canSeeLikes = currentId != null && entry?['id_usuario']?.toString() == currentId;
         _description = (entry?['descricao'] ?? '').toString();
         _workTitle = (entry?['obra_titulo'] ?? entry?['titulo_obra'] ?? entry?['obraTitulo'] ?? '').toString();
         _workType = (entry?['obra_tipo'] ?? entry?['tipo_obra'] ?? entry?['tipo'] ?? '').toString();
@@ -1393,13 +1502,14 @@ class _ProfileVideoScreenState extends State<_ProfileVideoScreen> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Vídeo indisponível para salvar.')));
       return;
     }
-    final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getStringList('saved_profile_video_ids') ?? <String>[];
-    if (saved.contains(id)) { saved.remove(id); } else { saved.add(id); }
-    await prefs.setStringList('saved_profile_video_ids', saved);
-    if (!mounted) return;
-    setState(() => _saved = saved.contains(id));
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_saved ? 'Vídeo salvo!' : 'Vídeo removido dos salvos.')));
+    try {
+      await SavedVideoService.toggle(id);
+      if (!mounted) return;
+      setState(() => _saved = SavedVideoService.contains(id));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_saved ? 'Vídeo salvo!' : 'Vídeo removido dos salvos.')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
   }
 
   Future<void> _shareVideo() async {
@@ -1408,6 +1518,25 @@ class _ProfileVideoScreenState extends State<_ProfileVideoScreen> {
       subject: 'LupTok: $title',
       text: '$title. Recomendado por ${_author.isEmpty ? 'um usuário' : _author} no LupTok.',
     ));
+  }
+
+  Future<void> _excluirVideo() async {
+    final id = widget.video.videoId;
+    if (id == null || !_canSeeLikes) return;
+    final confirmar = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('Excluir publicação?'),
+      content: const Text('O vídeo e suas interações serão removidos permanentemente.'),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+        TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Excluir', style: TextStyle(color: Colors.red)))],
+    ));
+    if (confirmar != true || !mounted) return;
+    try {
+      await ApiService.excluirVideo(id);
+      try { await SavedVideoService.load(); } catch (_) {}
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
   }
 
   Future<void> _reportVideo() async {
@@ -1433,7 +1562,9 @@ class _ProfileVideoScreenState extends State<_ProfileVideoScreen> {
     );
     _controller = controller;
     await controller.initialize();
+    if (!mounted) return;
     await controller.setLooping(true);
+    if (!mounted) return;
     await controller.play();
     if (mounted) setState(() {});
   }
@@ -1459,27 +1590,14 @@ class _ProfileVideoScreenState extends State<_ProfileVideoScreen> {
     super.dispose();
   }
 
-  Widget _sideAction(IconData icon, VoidCallback action, {String? count, Color color = Colors.white}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 17),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Material(
-          color: const Color(0xFF21171C).withValues(alpha: .36),
-          shape: CircleBorder(side: BorderSide(color: Colors.white.withValues(alpha: .16))),
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: action,
-            child: SizedBox(width: 48, height: 48,
-              child: Icon(icon, color: color, size: 25)),
-          ),
-        ),
-        if (count != null) ...[
-          const SizedBox(height: 4),
-          Text(count, style: const TextStyle(color: Colors.white, fontSize: 12,
-              fontWeight: FontWeight.w700, shadows: [Shadow(color: Colors.black87, blurRadius: 5)])),
-        ],
-      ]),
-    );
+  Widget _sideAction(IconData icon, VoidCallback action, {String? count, Color color = const Color(0xFFFFE9E9)}) {
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      Material(color: Colors.transparent, child: InkWell(
+        borderRadius: BorderRadius.circular(22), onTap: action,
+        child: SizedBox(width: 48, height: 43, child: Icon(icon, color: color, size: 25)),
+      )),
+      if (count != null) Text(count, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+    ]);
   }
 
   String _profileSpoilerLabel(String spoiler) {
@@ -1635,47 +1753,54 @@ class _ProfileVideoScreenState extends State<_ProfileVideoScreen> {
           child: Icon(Icons.play_arrow_rounded, color: Colors.white, size: 74,
             shadows: [Shadow(color: Colors.black54, blurRadius: 15)]),
         )),
-        Positioned(right: 10, bottom: 60,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            if (_liked) _sideAction(Icons.star_rounded, _toggleLike,
-              color: const Color(0xFFFFD166)),
-            _sideAction(Icons.chat_bubble_outline_rounded, _showReviews,
-              count: '$_reviewCount'),
-            _sideAction(Icons.share_outlined, _shareVideo),
-            _sideAction(_saved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
-              _toggleSave, color: _saved ? const Color(0xFFFFD166) : Colors.white),
-            Padding(padding: const EdgeInsets.only(bottom: 17),
-              child: PopupMenuButton<String>(
-                tooltip: 'Mais ações',
-                color: AppPalette.raisedSurface(context),
-                onSelected: (value) { if (value == 'report') _reportVideo(); },
-                itemBuilder: (_) => const [PopupMenuItem(value: 'report',
-                  child: ListTile(contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.flag_outlined), title: Text('Denunciar vídeo')))],
-                child: Container(width: 48, height: 48,
-                  decoration: BoxDecoration(color: const Color(0xFF21171C).withValues(alpha: .36),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white.withValues(alpha: .16))),
-                  child: const Icon(Icons.more_horiz_rounded, color: Colors.white, size: 24)),
+        Positioned(right: 10, bottom: MediaQuery.paddingOf(context).bottom + 112,
+          child: ClipRRect(borderRadius: BorderRadius.circular(32),
+            child: BackdropFilter(filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              child: Container(width: 56, padding: const EdgeInsets.symmetric(vertical: 7),
+                decoration: BoxDecoration(color: const Color(0xFF21171C).withValues(alpha: .33),
+                  borderRadius: BorderRadius.circular(32),
+                  border: Border.all(color: const Color(0xFFFFE9E9).withValues(alpha: .27))),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  if (_liked) _sideAction(LucideIcons.star, _toggleLike,
+                    color: const Color(0xFFFFD166), count: _canSeeLikes ? '$_likeCount' : null),
+                  _sideAction(LucideIcons.messageCircle, _showReviews, count: '$_reviewCount'),
+                  _sideAction(LucideIcons.send, _shareVideo),
+                  _sideAction(LucideIcons.bookmark, _toggleSave,
+                    color: _saved ? const Color(0xFFF4B8BF) : const Color(0xFFFFE9E9)),
+                  Container(width: 22, height: 1, color: Colors.white24),
+                  PopupMenuButton<String>(tooltip: 'Mais ações',
+                    color: AppPalette.raisedSurface(context),
+                    onSelected: (value) { if (value == 'report') _reportVideo(); if (value == 'delete') _excluirVideo(); },
+                    itemBuilder: (_) => [if (_canSeeLikes) const PopupMenuItem(value: 'delete', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.delete_outline, color: Colors.red), title: Text('Excluir vídeo'))), if (!_canSeeLikes) const PopupMenuItem(value: 'report',
+                      child: ListTile(contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.flag_outlined), title: Text('Denunciar vídeo')))],
+                    child: const SizedBox(width: 48, height: 43,
+                      child: Icon(LucideIcons.moreHorizontal, color: Color(0xFFFFE9E9), size: 24))),
+                ]),
               ),
             ),
-          ]),
+          ),
         ),
-        Positioned(left: 16, right: 78, bottom: 60,
+        Positioned(left: 16, right: 80, bottom: MediaQuery.paddingOf(context).bottom + 86,
           child: Column(crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min, children: [
               if (_author.isNotEmpty) ...[
                 const SizedBox(height: 10),
                 Row(children: [
-                  CircleAvatar(radius: 14, backgroundColor: const Color(0xFFB8787C),
-                    child: Text(_author.replaceFirst('@', '').isEmpty ? '?' :
-                      _author.replaceFirst('@', '')[0].toUpperCase(),
-                      style: const TextStyle(color: Colors.white, fontSize: 12))),
-                  const SizedBox(width: 8),
-                  Flexible(child: Text(_author.startsWith('@') ? _author : '@$_author',
-                    maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white, fontSize: 13,
-                      fontWeight: FontWeight.w700))),
+                  Container(padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(shape: BoxShape.circle,
+                      border: Border.all(color: const Color(0xFFF4B8BF))),
+                    child: CircleAvatar(radius: 18, backgroundColor: const Color(0xFFB8787C),
+                      foregroundImage: _authorPhoto == null ? null : NetworkImage(_authorPhoto!),
+                      child: Text(_displayName.isEmpty ? '?' : _displayName[0].toUpperCase(),
+                        style: const TextStyle(color: Colors.white, fontSize: 14)))),
+                  const SizedBox(width: 9),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(_displayName, maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Color(0xFFFFE9E9), fontSize: 16, fontWeight: FontWeight.w700)),
+                    Text(_author.startsWith('@') ? _author : '@$_author', maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Color(0xFFEBD8DB), fontSize: 12)),
+                  ])),
                 ]),
               ],
               if (_description.trim().isNotEmpty) ...[
@@ -1687,7 +1812,7 @@ class _ProfileVideoScreenState extends State<_ProfileVideoScreen> {
             ]),
         ),
         // Etiqueta pequena no canto inferior direito, sem alterar o vídeo.
-        Positioned(right: 8, bottom: 8,
+        Positioned(right: 8, bottom: MediaQuery.paddingOf(context).bottom + 24,
           child: VideoWorkLabel(
             title: _workTitle.isNotEmpty ? _workTitle : widget.video.title,
             type: _workType.isNotEmpty ? _workType : widget.video.contentType,
@@ -1732,7 +1857,17 @@ class _ProfileReviewsSheetState extends State<_ProfileReviewsSheet> {
           const SizedBox(height: 14),
           Expanded(child: ListView.builder(itemCount: _reviews.length, itemBuilder: (ctx, i) {
             final review = _reviews[i];
-            return ListTile(title: Text('${review['nome_usuario'] ?? review['nome'] ?? 'Usuário'}', style: const TextStyle(color: Colors.white)),
+            final foto = ApiService.urlImagemPerfil(review['foto_url']);
+            final nome = (review['nome_usuario'] ?? review['nome'] ?? 'Usuário').toString().trim();
+            return ListTile(
+              leading: CircleAvatar(
+                radius: 20,
+                backgroundColor: const Color(0xFFB8787C),
+                foregroundImage: foto == null ? null : NetworkImage(foto),
+                child: Text(nome.isEmpty ? 'U' : nome[0].toUpperCase(),
+                  style: const TextStyle(color: Colors.white)),
+              ),
+              title: Text(nome, style: const TextStyle(color: Colors.white)),
               subtitle: Text('${review['comentario'] ?? review['texto'] ?? ''}', style: const TextStyle(color: Colors.white70)),
               trailing: Text('★ ${review['nota'] ?? ''}', style: const TextStyle(color: Color(0xFFFFD166))));
           })),
@@ -1752,7 +1887,7 @@ class _ProfileReviewsSheetState extends State<_ProfileReviewsSheet> {
 // Miniatura real do vídeo, sem alterar upload, banco ou feed.
 class _ProfileVideoThumbnail extends StatefulWidget {
   final ProfileVideo video;
-  const _ProfileVideoThumbnail({required this.video});
+  const _ProfileVideoThumbnail({super.key, required this.video});
   @override
   State<_ProfileVideoThumbnail> createState() => _ProfileVideoThumbnailState();
 }
