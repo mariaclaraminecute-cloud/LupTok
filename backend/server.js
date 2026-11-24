@@ -897,7 +897,7 @@ async function adicionarMetadadosObra(conexao, idObra, descricao, generos, palav
 
 async function detalhesObra(idObra, idUsuario, conexao = db) {
   const [rows] = await conexao.execute(
-    `SELECT o.id_obra, o.titulo, o.tipo, o.descricao, uo.sou_fa
+    `SELECT o.id_obra, o.titulo, o.tipo, o.descricao, o.capa_url, uo.sou_fa
      FROM obra o
      LEFT JOIN usuario_obra uo
        ON uo.id_obra = o.id_obra AND uo.id_usuario = ?
@@ -913,6 +913,7 @@ async function detalhesObra(idObra, idUsuario, conexao = db) {
     titulo: rows[0].titulo,
     tipo: rows[0].tipo,
     descricao: rows[0].descricao ?? '',
+    capa_url: rows[0].capa_url,
     generos: tags.generos,
     palavras_chave: tags.palavras_chave,
     sou_fa: rows[0].sou_fa === null ? null : Boolean(rows[0].sou_fa),
@@ -947,6 +948,14 @@ app.get('/api/keywords', autenticar, async (req, res) => {
   }
 });
 
+// Catálogo público: somente dados das obras, sem interesses ou dados de usuários.
+app.get('/api/catalogo/obras', async (_req, res) => {
+  try {
+    const [obras] = await db.execute("SELECT id_obra, titulo, tipo, descricao, capa_url FROM obra WHERE tipo IN ('Filme','Série','Anime','Dorama','Livro') ORDER BY titulo");
+    const metadata = await obterMetadadosObras(obras.map(o => o.id_obra));
+    return res.json({obras: obras.map(o => ({id:o.id_obra,titulo:o.titulo,tipo:o.tipo,descricao:o.descricao || '',capa_url:o.capa_url,...metadata.get(String(o.id_obra))}))});
+  } catch(e) { console.error('Catálogo público:', e.message); return res.status(500).json({erro:'Não foi possível carregar o catálogo.'}); }
+});
 app.get('/api/works', autenticar, async (req, res) => {
   const busca = req.query.q ?? '';
   if (typeof busca !== 'string' || busca.length > 120) {
@@ -958,7 +967,7 @@ app.get('/api/works', autenticar, async (req, res) => {
   try {
     const buscaSql = clausulaBuscaObras(termos);
     const [obras] = await db.execute(
-      `SELECT o.id_obra, o.titulo, o.tipo, o.descricao, uo.sou_fa
+      `SELECT o.id_obra, o.titulo, o.tipo, o.descricao, o.capa_url, uo.sou_fa
        FROM obra o
        LEFT JOIN usuario_obra uo
          ON uo.id_obra = o.id_obra AND uo.id_usuario = ?
@@ -967,8 +976,7 @@ app.get('/api/works', autenticar, async (req, res) => {
          WHEN o.titulo_normalizado = ? THEN 0
          WHEN o.titulo_normalizado LIKE ? THEN 1
          ELSE 2
-       END, o.titulo
-       LIMIT 100`,
+       END, o.titulo`,
       [
         req.usuario.id_usuario,
         ...buscaSql.params,
@@ -986,6 +994,7 @@ app.get('/api/works', autenticar, async (req, res) => {
         titulo: obra.titulo,
         tipo: obra.tipo,
         descricao: obra.descricao ?? '',
+        capa_url: obra.capa_url,
         generos: metadata.get(String(obra.id_obra)).generos,
         palavras_chave: metadata.get(String(obra.id_obra)).palavras_chave,
         sou_fa: obra.sou_fa === null
@@ -3263,6 +3272,85 @@ async function prepararCatalogoBusca(conexao) {
   }
 }
 
+
+// Catálogo externo: token somente no servidor. Importação limitada por execução.
+const normalizarCatalogo = v => String(v || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
+const grupoCatalogo = t => ['Anime','Dorama','Série'].includes(t) ? 'Série' : t;
+async function consultarCatalogo(url, tmdb = false) {
+  const headers = tmdb ? { Authorization: `Bearer ${process.env.TMDB_ACCESS_TOKEN}`, Accept: 'application/json' } : { Accept: 'application/json', 'User-Agent': 'LupTok educational catalog' };
+  const response = await fetch(url, {headers, signal: AbortSignal.timeout(12000)});
+  if (!response.ok) throw new Error(`Catálogo HTTP ${response.status}`);
+  return response.json();
+}
+async function tmdbCatalogo(endpoint, params = {}) {
+  const url = new URL('https://api.themoviedb.org/3/' + endpoint);
+  for (const [k,v] of Object.entries({language:'pt-BR', include_adult:'false', ...params})) url.searchParams.set(k,v);
+  return consultarCatalogo(url, true);
+}
+async function gravarObraExterna(obra, usuario) {
+  const conexao = await db.getConnection();
+  try {
+    await conexao.beginTransaction();
+    const nomes = [...new Set([obra.titulo, ...(obra.aliases || [])].map(normalizarCatalogo).filter(Boolean))];
+    const tipos = grupoCatalogo(obra.tipo) === 'Série' ? ['Série','Anime','Dorama'] : [obra.tipo];
+    const [existentes] = await conexao.execute(`SELECT id_obra FROM obra WHERE tipo IN (${tipos.map(()=>'?').join(',')}) AND titulo_normalizado IN (${nomes.map(()=>'?').join(',')}) ORDER BY id_obra`, [...tipos,...nomes]);
+    let id = existentes[0]?.id_obra;
+    if (!id) {
+      const [r] = await conexao.execute('INSERT INTO obra (titulo,titulo_normalizado,tipo,criado_por) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE id_obra=LAST_INSERT_ID(id_obra)', [obra.titulo,normalizarCatalogo(obra.titulo),obra.tipo,usuario]);
+      id = r.insertId;
+    }
+    if (obra.capa) await conexao.execute("UPDATE obra SET capa_url = COALESCE(NULLIF(capa_url,''), ?) WHERE id_obra = ?", [obra.capa,id]);
+    await adicionarMetadadosObra(conexao,id,(obra.descricao || '').slice(0,2000),[...new Set(obra.generos || [])].filter(x=>x && x.length<=80),[...new Set([...(obra.aliases || []), ...(obra.tags || [])])].filter(x=>x && x.length<=80));
+    await conexao.commit();
+  } catch(e) { await conexao.rollback(); throw e; } finally { conexao.release(); }
+}
+async function importarCatalogoExterno() {
+  const [[usuario]] = await db.execute('SELECT id_usuario FROM usuario WHERE ativo=1 ORDER BY id_usuario LIMIT 1');
+  if (!usuario) return;
+  await db.execute('CREATE TABLE IF NOT EXISTS luptok_migracao_catalogo (versao VARCHAR(80) PRIMARY KEY, aplicada_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
+  const versao = 'catalogo_externo_v1';
+  const [feito] = await db.execute('SELECT versao FROM luptok_migracao_catalogo WHERE versao=?',[versao]);
+  if (feito.length) return;
+  let falhas = 0, total = 0;
+  const seguro = async fn => { try { await fn(); } catch(e) { falhas++; console.warn('Catálogo externo:',e.message); } };
+  if (process.env.TMDB_ACCESS_TOKEN) {
+    for (const [apiTipo,tipo] of [['movie','Filme'],['tv','Série']]) {
+      let generos = {};
+      await seguro(async()=>{const g=await tmdbCatalogo(`genre/${apiTipo}/list`);generos=Object.fromEntries(g.genres.map(x=>[x.id,x.name]));});
+      const converter = x => ({titulo:x.title || x.name, tipo, aliases:[x.original_title || x.original_name].filter(Boolean), descricao:x.overview, generos:(x.genre_ids || []).map(id=>generos[id]).filter(Boolean), capa:x.poster_path ? 'https://image.tmdb.org/t/p/w342'+x.poster_path : null});
+      for (const rota of ['popular','top_rated']) for (let page=1;page<=2;page++) await seguro(async()=>{
+        const dados=await tmdbCatalogo(`${apiTipo}/${rota}`,{page});
+        for (const x of dados.results || []) { const o=converter(x); if (!x.adult && o.titulo && o.titulo.length<=150 && o.capa) {await gravarObraExterna(o,usuario.id_usuario);total++;} }
+      });
+      const [obras] = await db.execute("SELECT titulo,tipo FROM obra WHERE (capa_url IS NULL OR capa_url='') AND tipo IN ("+(apiTipo==='movie'?"'Filme'":"'Série','Anime','Dorama'")+")");
+      for (const obra of obras) await seguro(async()=>{
+        const seed=catalogoInicialBusca.find(a=>normalizarCatalogo(a[0])===normalizarCatalogo(obra.titulo));
+        const nomes=[obra.titulo,...(seed?.[2] || [])];
+        for (const nome of nomes) {
+          const d=await tmdbCatalogo(`search/${apiTipo}`,{query:nome});
+          const x=(d.results || []).find(x=>!x.adult && x.poster_path && [x.title,x.name,x.original_title,x.original_name].some(t=>t && nomes.some(n=>normalizarCatalogo(n)===normalizarCatalogo(t))));
+          if(x){const o=converter(x);await gravarObraExterna({...o,titulo:obra.titulo,tipo:obra.tipo},usuario.id_usuario);total++;break;}
+        }
+      });
+    }
+  } else { falhas++; console.warn('TMDB_ACCESS_TOKEN não configurado.'); }
+  const livrosNovos=['Pride and Prejudice','1984','The Hobbit','The Lord of the Rings','The Book Thief','The Fault in Our Stars','The Hunger Games','Percy Jackson and the Lightning Thief','The Alchemist','Jane Eyre','Little Women','The Great Gatsby','Frankenstein','Dracula','The Picture of Dorian Gray','The Seven Husbands of Evelyn Hugo','The Cruel Prince','A Court of Thorns and Roses','The Song of Achilles','The Midnight Library','Dom Casmurro','Memórias Póstumas de Brás Cubas','Capitães da Areia','A Hora da Estrela'];
+  const [livros] = await db.execute("SELECT titulo FROM obra WHERE tipo='Livro' AND (capa_url IS NULL OR capa_url='')");
+  for(const titulo of [...new Set([...livros.map(x=>x.titulo),...livrosNovos])]) await seguro(async()=>{
+    const seed=catalogoInicialBusca.find(a=>normalizarCatalogo(a[0])===normalizarCatalogo(titulo));
+    const nomes=[titulo,...(seed?.[2] || [])];
+    for(const nome of nomes){
+      const u=new URL('https://openlibrary.org/search.json');u.searchParams.set('title',nome);u.searchParams.set('limit','10');u.searchParams.set('fields','title,cover_i,author_name');
+      const d=await consultarCatalogo(u);const x=(d.docs || []).find(x=>x.cover_i && nomes.some(n=>normalizarCatalogo(n)===normalizarCatalogo(x.title)));
+      if(x){await gravarObraExterna({titulo,tipo:'Livro',aliases:[x.title,...(seed?.[2] || [])],tags:x.author_name || [],capa:`https://covers.openlibrary.org/b/id/${x.cover_i}-M.jpg?default=false`},usuario.id_usuario);total++;break;}
+      await new Promise(r=>setTimeout(r,1100));
+    }
+    await new Promise(r=>setTimeout(r,1100));
+  });
+  if (!falhas) await db.execute('INSERT IGNORE INTO luptok_migracao_catalogo (versao) VALUES (?)',[versao]);
+  console.log(`Catálogo externo: ${total} obras processadas, ${falhas} falhas.`);
+}
+
 async function iniciarServidor() {
   try {
     const conexao = await db.getConnection();
@@ -3450,6 +3538,8 @@ async function iniciarServidor() {
       );
       if (colunas.length === 0) await db.query(`ALTER TABLE usuario ADD COLUMN ${coluna} ${definicao}`);
     }
+    const [colunasCapa] = await db.execute("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'obra' AND COLUMN_NAME = 'capa_url'");
+    if (!colunasCapa.length) await db.query('ALTER TABLE obra ADD COLUMN capa_url VARCHAR(500) NULL');
     try { await prepararCatalogoBusca(conexao); }
     catch (error) { console.error('Não foi possível preparar o catálogo inicial:', error.message); }
     conexao.release();
@@ -3465,6 +3555,7 @@ async function iniciarServidor() {
 
     app.listen(porta, '0.0.0.0', () => {
       console.log(`API do LupTok rodando na porta ${porta}`);
+      importarCatalogoExterno().catch(e => console.error("Importação de catálogo:", e.message));
     });
   } catch (error) {
     console.error('Falha ao inicializar o backend ou preparar o banco de dados.');

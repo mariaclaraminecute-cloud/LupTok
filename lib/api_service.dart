@@ -4,9 +4,16 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 class ApiService {
+  static Future<List<Map<String, dynamic>>> listarCatalogoOnboarding() async {
+    final response = await http.get(Uri.parse('$baseUrl/api/catalogo/obras')).timeout(const Duration(seconds: 20));
+    final data = _decodeResponse(response);
+    final obras = data['obras'];
+    if (obras is! List) throw Exception('Catálogo inválido.');
+    return obras.map(_mapResponseItem).toList();
+  }
+
   static Future<Map<String, dynamic>> obterSeguidores(Object id) =>
       _authenticatedGet('/api/social/$id');
-
   static Future<void> atualizarSeguidor(Object id, bool seguir) async {
     final token = await tokenDaSessao();
     if (token == null) throw Exception('Faça login para continuar.');
@@ -15,7 +22,6 @@ class ApiService {
       body: jsonEncode({'seguir': seguir})).timeout(const Duration(seconds: 20));
     _decodeResponse(response);
   }
-
   static final videosExcluidos = ValueNotifier<Set<String>>(<String>{});
   static Future<void> excluirVideo(Object id) async {
     final token = await tokenDaSessao();
@@ -477,7 +483,7 @@ class ApiService {
       '.webm',
     };
     String extensaoDe(String caminho) {
-      final nome = caminho.split(RegExp(r'[/\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\]')).last;
+      final nome = caminho.split(RegExp(r'[/\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\]')).last;
       final ponto = nome.lastIndexOf('.');
       return ponto < 0 ? '' : nome.substring(ponto).toLowerCase();
     }

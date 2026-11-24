@@ -1,52 +1,46 @@
 import 'package:flutter/material.dart';
-
 import 'app_preferences.dart';
 import 'universe_preparing_screen.dart';
 import 'work_search.dart';
-
+import 'api_service.dart';
 class _ObraCatalogo {
   final String titulo;
   final String tipo;
   final String imagem;
-
+  final SearchableWork? dados;
+  String get categoria => ['Anime', 'Dorama'].contains(tipo) ? 'Série' : tipo;
+  String get chave => '$categoria:${normalizeInterest(titulo)}';
   const _ObraCatalogo({
     required this.titulo,
     required this.tipo,
     required this.imagem,
+    this.dados,
   });
-
   SearchableWork get metadata =>
-      searchableWorks.firstWhere((work) => work.title == titulo);
+      dados ?? searchableWorks.firstWhere((work) => work.title == titulo, orElse: () => SearchableWork(title: titulo,type: tipo,description: '',genres: const [],keywords: const []));
 }
-
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
-
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
 }
-
 class _OnboardingScreenState extends State<OnboardingScreen>
     with TickerProviderStateMixin {
   late AnimationController _slideController;
   late AnimationController _bgPulse;
   late Animation<Offset> _slideIn;
   late Animation<double> _pulseAnim;
-
   // Seleções
   final Set<String> _tiposSelecionados = {};
   final Set<String> _generosEntretenimento = {};
   final Set<String> _obrasSelecionadas = {};
   final TextEditingController _buscaObrasController = TextEditingController();
-
   int _etapa = 0;
   String? _filtroTipoObra;
   bool _salvando = false;
-
   // Etapas do onboarding
   List<String> get _fluxo => ['tipos', 'generos', 'obras'];
-
-  static const List<_ObraCatalogo> _catalogoObras = [
+  static const List<_ObraCatalogo> _catalogoLocal = [
     _ObraCatalogo(
       titulo: '20th Century Girl',
       tipo: 'Filme',
@@ -193,13 +187,37 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       imagem: 'assets/images/capa33.jpg',
     ),
   ];
-
+  List<_ObraCatalogo> _catalogoObras = List.of(_catalogoLocal);
+  bool _carregandoCatalogo = true;
+  String? _erroCatalogo;
+  Future<void> _carregarCatalogo() async {
+    try {
+      final obras = await ApiService.listarCatalogoOnboarding();
+      final mapa = <String, _ObraCatalogo>{};
+      String chave(String t, String tipo) => '$tipo:${normalizeInterest(t)}';
+      List<String> lista(Object? v) => v is List ? v.whereType<String>().toList() : const [];
+      for (final local in _catalogoLocal) { mapa[chave(local.titulo, local.categoria)] = local; }
+      for (final item in obras) {
+        final titulo = (item['titulo'] ?? '').toString();
+        final tipo = (item['tipo'] ?? '').toString();
+        final categoria = ['Anime','Dorama'].contains(tipo) ? 'Série' : tipo;
+        if (titulo.isEmpty || !['Série','Filme','Livro'].contains(categoria)) continue;
+        final k = chave(titulo,categoria);
+        final local = mapa[k];
+        final imagem = local?.imagem ?? ApiService.urlImagemPerfil(item['capa_url']) ?? '';
+        final dados = SearchableWork(title: titulo,type: tipo,description: (item['descricao'] ?? '').toString(),genres: lista(item['generos']),keywords: lista(item['palavras_chave']),cover: imagem);
+        mapa[k] = _ObraCatalogo(titulo: titulo,tipo: tipo,imagem: imagem,dados: dados);
+      }
+      if (!mounted) return;
+      setState(() { _catalogoObras = mapa.values.toList(); _obrasSelecionadas.retainAll(_catalogoObras.map((o) => o.chave).toSet()); _carregandoCatalogo = false; _erroCatalogo = null; });
+    } catch (_) {
+      if (mounted) setState(() { _carregandoCatalogo = false; _erroCatalogo = 'Não foi possível carregar o catálogo completo.'; });
+    }
+  }
   String get _etapaAtual => _etapa < _fluxo.length ? _fluxo[_etapa] : 'fim';
-
   @override
   void initState() {
     super.initState();
-
     _slideController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 450),
@@ -208,7 +226,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         .animate(
           CurvedAnimation(parent: _slideController, curve: Curves.easeOutCubic),
         );
-
     _bgPulse = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 4),
@@ -217,10 +234,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       begin: 0.0,
       end: 1.0,
     ).animate(CurvedAnimation(parent: _bgPulse, curve: Curves.easeInOut));
-
     _slideController.forward();
+    _carregarCatalogo();
   }
-
   @override
   void dispose() {
     _slideController.dispose();
@@ -228,7 +244,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     _buscaObrasController.dispose();
     super.dispose();
   }
-
   bool get _podeProsseguir {
     switch (_etapaAtual) {
       case 'tipos':
@@ -241,27 +256,24 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         return false;
     }
   }
-
   bool get _ehUltimaEtapa => _etapa == _fluxo.length - 1;
-
   void _avancar() async {
     if (!_podeProsseguir) return;
-
     if (_ehUltimaEtapa) {
       await _finalizarOnboarding();
       return;
     }
-
     await _slideController.reverse();
+    if (!mounted) return;
     setState(() => _etapa++);
+    if (_etapaAtual == 'obras' && !_carregandoCatalogo) _carregarCatalogo();
     _slideController.forward();
   }
-
   Future<void> _finalizarOnboarding() async {
     if (_salvando) return;
     setState(() => _salvando = true);
     final selecionadas = _catalogoObras
-        .where((obra) => _obrasSelecionadas.contains(obra.titulo))
+        .where((obra) => _obrasSelecionadas.contains(obra.chave))
         .map((obra) {
           final metadata = obra.metadata;
           return {
@@ -285,7 +297,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       ),
     );
   }
-
   void _voltar() async {
     if (_salvando) return;
     if (_etapa == 0) {
@@ -296,11 +307,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     setState(() => _etapa--);
     _slideController.forward();
   }
-
   @override
   Widget build(BuildContext context) {
     final totalEtapas = _fluxo.length;
-
     return Scaffold(
       backgroundColor: AppPalette.background(context),
       body: Stack(
@@ -326,7 +335,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               ),
             ),
           ),
-
           // Ornamento circular decorativo
           Positioned(
             top: -80,
@@ -350,7 +358,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               ),
             ),
           ),
-
           // Ornamento circular inferior
           Positioned(
             bottom: -60,
@@ -374,7 +381,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               ),
             ),
           ),
-
           // Conteúdo
           SafeArea(
             child: Column(
@@ -411,9 +417,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           ),
                         ),
                       ),
-
                       const Spacer(),
-
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
@@ -445,15 +449,12 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           ),
                         ],
                       ),
-
                       const Spacer(),
                       const SizedBox(width: 40),
                     ],
                   ),
                 ),
-
                 const SizedBox(height: 28),
-
                 Expanded(
                   child: AnimatedBuilder(
                     animation: _slideController,
@@ -467,7 +468,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     child: _buildConteudo(),
                   ),
                 ),
-
                 Padding(
                   padding: const EdgeInsets.fromLTRB(24, 12, 24, 36),
                   child: AnimatedOpacity(
@@ -515,7 +515,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       ),
     );
   }
-
   Widget _buildConteudo() {
     switch (_etapaAtual) {
       case 'tipos':
@@ -528,7 +527,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         return const SizedBox();
     }
   }
-
   // ── Etapa: Tipos de mídia ──────────────────────────────────────────
   Widget _buildTipos() {
     final tipos = [
@@ -536,7 +534,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       ("assets/images/serie.png", "Séries", "series"),
       ("assets/images/livro.png", "Livros", "livros"),
     ];
-
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
@@ -551,7 +548,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             ),
           ),
           const SizedBox(height: 22),
-
           ...tipos.map((t) {
             final (imagem, nome, valor) = t;
             final sel = _tiposSelecionados.contains(valor);
@@ -614,7 +610,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       ),
     );
   }
-
   // ── Etapa: Gêneros de entretenimento ──────────────────────────────
   Widget _buildGeneros() {
     final generos = [
@@ -634,14 +629,12 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       ("assets/images/dorama.png", "Dorama"),
       ("assets/images/esporte.png", "Esporte"),
     ];
-
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildTitulo("Quais gêneros\nvocê curte?"),
-
           Text(
             "Selecione quantos quiser.",
             style: TextStyle(
@@ -649,9 +642,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               fontSize: 14,
             ),
           ),
-
           const SizedBox(height: 28),
-
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -665,7 +656,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             itemBuilder: (context, index) {
               final (imagem, nome) = generos[index];
               final sel = _generosEntretenimento.contains(nome);
-
               return GestureDetector(
                 onTap: () {
                   setState(() {
@@ -702,9 +692,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           color: AppPalette.primaryText(context),
                         ),
                       ),
-
                       const SizedBox(height: 5),
-
                       Text(
                         nome,
                         textAlign: TextAlign.center,
@@ -722,35 +710,33 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               );
             },
           ),
-
           const SizedBox(height: 16),
         ],
       ),
     );
   }
-
+  Widget _capaObra(_ObraCatalogo obra) {
+    Widget fallback() => Center(child: Icon(obra.categoria == 'Livro' ? Icons.auto_stories_outlined : Icons.movie_outlined, color: AppPalette.mutedText(context), size: 42));
+    if (obra.imagem.isEmpty) return fallback();
+    if (obra.imagem.startsWith('https://') || obra.imagem.startsWith('http://')) {
+      return Image.network(obra.imagem, fit: BoxFit.cover, webHtmlElementStrategy: WebHtmlElementStrategy.fallback, errorBuilder: (_, _, _) => fallback());
+    }
+    return Image.asset(obra.imagem, fit: BoxFit.cover, errorBuilder: (_, _, _) => fallback());
+  }
   Widget _buildObras() {
-    final tiposAtivos = _tiposSelecionados.map((tipo) {
-      return switch (tipo) {
-        'filmes' => 'Filme',
-        'series' => 'Série',
-        'livros' => 'Livro',
-        _ => tipo,
-      };
-    }).toSet();
+    const tiposAtivos = ['Série', 'Filme', 'Livro'];
     final consulta = normalizeInterest(_buscaObrasController.text);
     final obrasVisiveis = _catalogoObras.where((obra) {
-      return tiposAtivos.contains(obra.tipo) &&
-          (_filtroTipoObra == null || obra.tipo == _filtroTipoObra) &&
+      return tiposAtivos.contains(obra.categoria) &&
+          (_filtroTipoObra == null || obra.categoria == _filtroTipoObra) &&
           (consulta.isEmpty ||
-              normalizeInterest(obra.titulo).contains(consulta));
+              (normalizeInterest(obra.titulo).contains(consulta) || searchRelevance(consulta, [obra.titulo, obra.metadata.searchableText]) > 0));
     }).toList();
     final nomesTipos = {
       'Filme': 'Filmes',
       'Série': 'Séries',
       'Livro': 'Livros',
     };
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
@@ -829,8 +815,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             ),
           ),
           const SizedBox(height: 8),
+          if (_erroCatalogo == null) Align(alignment: Alignment.centerRight, child: TextButton.icon(onPressed: _carregandoCatalogo ? null : () { setState(() => _carregandoCatalogo = true); _carregarCatalogo(); }, icon: const Icon(Icons.refresh_rounded, size: 16), label: const Text('Atualizar catálogo'))),
+          if (_erroCatalogo != null) TextButton(onPressed: () { setState(() => _carregandoCatalogo = true); _carregarCatalogo(); }, child: Text('$_erroCatalogo Tentar novamente')),
           Expanded(
-            child: obrasVisiveis.isEmpty
+            child: _carregandoCatalogo ? const Center(child: CircularProgressIndicator()) : obrasVisiveis.isEmpty
                 ? Center(
                     child: Text(
                       'Nenhuma obra encontrada.',
@@ -850,14 +838,14 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     itemBuilder: (context, index) {
                       final obra = obrasVisiveis[index];
                       final selecionada = _obrasSelecionadas.contains(
-                        obra.titulo,
+                        obra.chave,
                       );
                       return GestureDetector(
                         onTap: () => setState(() {
                           if (selecionada) {
-                            _obrasSelecionadas.remove(obra.titulo);
+                            _obrasSelecionadas.remove(obra.chave);
                           } else {
-                            _obrasSelecionadas.add(obra.titulo);
+                            _obrasSelecionadas.add(obra.chave);
                           }
                         }),
                         child: AnimatedContainer(
@@ -882,15 +870,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                                 child: Stack(
                                   fit: StackFit.expand,
                                   children: [
-                                    Image.asset(
-                                      obra.imagem,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (_, _, _) => Icon(
-                                        Icons.auto_stories_outlined,
-                                        color: AppPalette.mutedText(context),
-                                        size: 42,
-                                      ),
-                                    ),
+                                    _capaObra(obra),
                                     Positioned(
                                       top: 8,
                                       right: 8,
@@ -932,7 +912,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                                     ),
                                     const SizedBox(height: 3),
                                     Text(
-                                      obra.tipo,
+                                      obra.categoria,
                                       style: TextStyle(
                                         color: AppPalette.mutedText(context),
                                         fontSize: 11,
@@ -952,9 +932,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       ),
     );
   }
-
   // ── Helper: chips de seleção múltipla ─────────────────────────────
-
   Widget _buildTitulo(String titulo) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

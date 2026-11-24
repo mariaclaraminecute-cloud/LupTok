@@ -18,6 +18,7 @@ import 'works_screen.dart';
 class ProfileScreen extends StatefulWidget {
   final bool isOwner;
   final VoidCallback? onOpenSettings;
+  final void Function(String? photo, String name)? onProfileChanged;
   final int? publicUserId;
   final String? publicUsername;
   final String? publicName;
@@ -29,6 +30,7 @@ class ProfileScreen extends StatefulWidget {
     super.key,
     this.isOwner = true,
     this.onOpenSettings,
+    this.onProfileChanged,
     this.publicUserId,
     this.publicUsername,
     this.publicName,
@@ -108,6 +110,10 @@ class _ProfileScreenState extends State<ProfileScreen>
             : '${part[0].toUpperCase()}${part.substring(1)}',
       )
       .join(' ');
+  void _notifyNavProfile() {
+    if (_isOwner && mounted) widget.onProfileChanged?.call(_avatarUrl, _name);
+  }
+
   Future<void> _loadProfile() async {
     final preferences = await SharedPreferences.getInstance();
     List<Map<String, dynamic>> works = _works;
@@ -140,6 +146,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       _loading = false;
     });
+    _notifyNavProfile();
   }
   int _compatibility() {
     return workCompatibility(_works, widget.publicWorks);
@@ -439,6 +446,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                           _avatarUrl = removeAvatar ? null : avatar;
                           _coverUrl = removeCover ? null : cover;
                         });
+                        _notifyNavProfile();
                         // Confirma que os dados estão disponíveis no servidor.
                         final confirmado = await ApiService.meuPerfil();
                         final fotoConfirmada = ApiService.urlImagemPerfil(confirmado['foto_url']);
@@ -453,6 +461,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                           _avatarUrl = fotoConfirmada;
                           _coverUrl = capaConfirmada;
                         });
+                        _notifyNavProfile();
                         if (sheetContext.mounted) Navigator.pop(sheetContext);
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Seu perfil foi atualizado!')),
@@ -493,6 +502,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       final url = ApiService.urlImagemPerfil(result[type == 'foto' ? 'foto_url' : 'capa_url']);
       if (!mounted) return null;
       setState(() { if (type == 'foto') { _avatarUrl = url; } else { _coverUrl = url; } });
+      _notifyNavProfile();
       return url;
     } catch (error) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Não foi possível enviar a imagem: $error')));

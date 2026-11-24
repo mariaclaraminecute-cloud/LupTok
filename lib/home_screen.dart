@@ -71,6 +71,21 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   int _tabAtual = 0;
+  String? _navAvatarUrl;
+  String _navName = '';
+
+  void _updateNavProfile(String? photo, String name) {
+    if (!mounted) return;
+    if (_navAvatarUrl == photo && _navName == name) return;
+    setState(() {
+      _navAvatarUrl = photo;
+      _navName = name;
+    });
+  }
+
+  Color _navColor(bool active) => AppPalette.isDark(context)
+      ? (active ? const Color(0xFFFFE9E9) : const Color(0xFFE1B7BB))
+      : (active ? const Color(0xFF7D171D) : const Color(0xFF805459));
 
   bool _mostrarBemVindo = true;
   bool _ocultarSpoilers = false;
@@ -388,6 +403,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     GroupsScreen(),
                     ProfileScreen(
                       onOpenSettings: _abrirConfiguracoes,
+                      onProfileChanged: _updateNavProfile,
                       availableVideos: _videos
                           .map((video) => video.titulo)
                           .toList(),
@@ -629,7 +645,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget _buildBottomNav() {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFFFE9E9),
+        color: AppPalette.background(context),
         border: Border(
           top: BorderSide(
             color: AppPalette.border(context).withValues(alpha: 0.35),
@@ -643,9 +659,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 2),
             decoration: BoxDecoration(
-              color: const Color(0xFFFFF4F4),
+              color: AppPalette.surface(context),
               borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: const Color(0xFFEBCBCD)),
+              border: Border.all(color: AppPalette.isDark(context) ? const Color(0xFF805054) : const Color(0xFFEBCBCD)),
             ),
             child: Row(
             children: [
@@ -730,17 +746,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 child: image == null
                     ? Icon(
                         fallback ?? Icons.chat_bubble_outline_rounded,
-                        color: active ? AppPalette.primaryText(context) : AppPalette.accent(context),
+                        color: _navColor(active),
                         size: 22,
                       )
                     : Image.asset(
                   image,
+                  color: _navColor(active),
+                  colorBlendMode: BlendMode.srcIn,
                   fit: BoxFit.contain,
                   errorBuilder: (_, _, _) => Icon(
                     fallback ?? Icons.circle_outlined,
-                    color: active
-                        ? AppPalette.primaryText(context)
-                        : AppPalette.accent(context),
+                    color: _navColor(active),
                     size: 22,
                   ),
                 ),
@@ -749,10 +765,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               Text(
                 label,
                 style: TextStyle(
-                  color: active
-                      ? AppPalette.primaryText(context)
-                      : AppPalette.mutedText(context),
-                  fontSize: 9,
+                  color: _navColor(active),
+                  fontSize: 11,
                   fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                 ),
               ),
@@ -774,24 +788,28 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              CircleAvatar(
-                radius: 10,
-                backgroundColor: active
-                    ? AppPalette.button(context)
-                    : AppPalette.accent(context),
-                child: const Text(
-                  'A',
-                  style: TextStyle(color: Colors.white, fontSize: 12),
+              Container(
+                padding: const EdgeInsets.all(1.5),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: active ? _navColor(true) : Colors.transparent),
+                ),
+                child: CircleAvatar(
+                  radius: 11,
+                  backgroundColor: const Color(0xFF7D171D),
+                  foregroundImage: _navAvatarUrl == null ? null : NetworkImage(_navAvatarUrl!),
+                  child: Text(
+                    _navName.trim().isEmpty ? '?' : _navName.trim()[0].toUpperCase(),
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                  ),
                 ),
               ),
               const SizedBox(height: 2),
               Text(
                 'Perfil',
                 style: TextStyle(
-                  color: active
-                      ? AppPalette.primaryText(context)
-                      : AppPalette.mutedText(context),
-                  fontSize: 9,
+                  color: _navColor(active),
+                  fontSize: 11,
                   fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                 ),
               ),
@@ -2822,7 +2840,7 @@ class _LoopTabState extends State<_LoopTab> {
   Widget _buildTopBar() {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFFFE9E9),
+        color: AppPalette.background(context),
         border: Border(
           bottom: BorderSide(color: Colors.white.withValues(alpha: 0.22)),
         ),
@@ -2877,9 +2895,9 @@ class _LoopTabState extends State<_LoopTab> {
             IconButton(
               tooltip: 'Pesquisar obras e vídeos',
               onPressed: _pesquisar,
-              icon: const Icon(
+              icon: Icon(
                 Icons.search_rounded,
-                color: const Color(0xFF713C47),
+                color: AppPalette.primaryText(context),
                 size: 25,
               ),
             ),
@@ -2910,7 +2928,7 @@ class _LoopTabState extends State<_LoopTab> {
           child: Text(
             label,
             style: TextStyle(
-              color: const Color(0xFF713C47),
+              color: AppPalette.primaryText(context),
               fontSize: 13.5,
               letterSpacing: 0.2,
               fontWeight: active ? FontWeight.w800 : FontWeight.w500,
