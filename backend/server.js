@@ -19,10 +19,10 @@ app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
 app.use((req, res, next) => {
-  console.log(`📩 [REQUISIÇÃO] ${req.method} ${req.originalUrl}`);
+  console.log(`📩 [REQUISIÇÃO] ${req.method} ${req.path}`);
 
   res.on('finish', () => {
-    console.log(`📤 [RESPOSTA] ${req.method} ${req.originalUrl} - Status: ${res.statusCode}`);
+    console.log(`📤 [RESPOSTA] ${req.method} ${req.path} - Status: ${res.statusCode}`);
   });
 
   next();
@@ -539,6 +539,57 @@ async function consultarGemini({ apiKey, model, mensagem, historico }) {
 }
 
 
+async function consultarGroq({ apiKey, model, mensagem, historico }) {
+  const inicio = Date.now();
+  const chavePausa = 'groq:' + model;
+  if ((lupezPausas.get(chavePausa) || 0) > inicio) {
+    const erro = new Error('Groq em pausa temporária.');
+    erro.status = 503;
+    throw erro;
+  }
+  try {
+    const corpo = {
+      model,
+      messages: [
+        { role: 'system', content: lupezInstrucoes },
+        ...historico.slice(-6).map(({ role, content }) => ({ role, content })),
+        { role: 'user', content: mensagem },
+      ],
+      max_completion_tokens: 1500,
+      temperature: 0.6,
+    };
+    if (/^openai\/gpt-oss-/.test(model)) {
+      corpo.reasoning_effort = 'low';
+      corpo.reasoning_format = 'hidden';
+    }
+    const resposta = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(corpo),
+      signal: AbortSignal.timeout(8000),
+    });
+    const dados = await resposta.json();
+    if (!resposta.ok) {
+      const erro = new Error('Groq HTTP ' + resposta.status);
+      erro.status = resposta.status;
+      const retry = resposta.headers.get('retry-after');
+      erro.pausa = retry && Number.isFinite(Number(retry)) ? Number(retry) * 1000 : 0;
+      throw erro;
+    }
+    const texto = dados?.choices?.[0]?.message?.content;
+    if (typeof texto !== 'string' || !texto.trim()) throw new Error('Groq sem texto.');
+    console.info(`[Lupez] Groq ${model}: sucesso em ${Date.now() - inicio} ms`);
+    return texto.trim();
+  } catch (erro) {
+    const status = ['TimeoutError', 'AbortError'].includes(erro.name) ? 504 : (erro.status || 502);
+    console.warn(`[Lupez] Groq ${model}: falha ${status} em ${Date.now() - inicio} ms`);
+    lupezPausas.set(chavePausa, Date.now() + Math.max(status === 429 ? 60000 : 15000, erro.pausa || 0));
+    const falha = new Error('Groq indisponível.');
+    falha.status = status;
+    throw falha;
+  }
+}
+
 app.post('/api/lupez/chat', autenticar, async (req, res) => {
   console.info('Requisição recebida: POST /api/lupez/chat');
   if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
@@ -575,24 +626,28 @@ app.post('/api/lupez/chat', autenticar, async (req, res) => {
 
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   const model = process.env.GEMINI_MODEL?.trim() || 'gemini-3.5-flash-lite';
-  if (!apiKey) {
-    return res.status(503).json({
-      erro: 'A Lupez precisa da variável GEMINI_API_KEY no backend/.env.',
-    });
+  const groqKey = process.env.GROQ_API_KEY?.trim();
+  const groqModel = process.env.GROQ_MODEL?.trim() || 'openai/gpt-oss-20b';
+  if (!apiKey && !groqKey) {
+    return res.status(503).json({ erro: 'A Lupez ainda não está configurada.' });
   }
 
   try {
-    const resposta = await consultarGemini({
-      apiKey,
-      model,
-      mensagem: mensagem.trim(),
-      historico,
-    });
+    if (groqKey) {
+      try {
+        const resposta = await consultarGroq({ apiKey: groqKey, model: groqModel, mensagem: mensagem.trim(), historico });
+        return res.json({ resposta });
+      } catch (erro) {
+        console.warn('[Lupez] Groq indisponível; tentando Gemini se configurado.');
+        if (!apiKey) throw erro;
+      }
+    }
+    const resposta = await consultarGemini({ apiKey, model, mensagem: mensagem.trim(), historico });
     return res.json({ resposta });
   } catch (error) {
-    console.error('Falha ao consultar a API Gemini:', error);
+    console.error('[Lupez] Falha final:', error.status || 502);
     return res.status(error.status || 502).json({
-      erro: error.message || 'Não foi possível obter uma resposta da Lupez agora.',
+      erro: error.status === 422 ? error.message : 'A Lupez está temporariamente indisponível. Tente novamente em instantes.',
     });
   }
 });
@@ -2118,7 +2173,7 @@ async function iniciarServidor() {
     app.use((req, res) => {
       console.error('Rota não encontrada:', req.method, req.originalUrl);
       return res.status(404).json({
-        erro: `Rota ${req.method} ${req.originalUrl} não encontrada.`,
+        erro: `Rota ${req.method} ${req.path} não encontrada.`,
       });
     });
 
