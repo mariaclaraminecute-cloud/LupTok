@@ -450,128 +450,92 @@ function extrairTextoGemini(dados) {
 }
 
 
-async function consultarGemini({ apiKey, model, mensagem, historico }) {
-  const historicoRecente = historico.slice(-8);
+// Modelos alternativos e pausa temporária para evitar chamadas repetidas em falha.
+const lupezPausas = new Map();
 
+async function consultarGemini({ apiKey, model, mensagem, historico }) {
+  const modelos = [...new Set([
+    model,
+    ...(process.env.GEMINI_FALLBACK_MODELS || 'gemini-3.1-flash-lite')
+      .split(',').map(item => item.trim()).filter(Boolean),
+  ])].map(item => item.replace(/^models\//, '')).slice(0, 2);
   const contents = [
-    ...historicoRecente.map(({ role, content }) => ({
+    ...historico.slice(-8).map(({ role, content }) => ({
       role: role === 'assistant' ? 'model' : 'user',
       parts: [{ text: content }],
     })),
-    {
-      role: 'user',
-      parts: [{ text: mensagem }],
-    },
+    { role: 'user', parts: [{ text: mensagem }] },
   ];
+  const prazo = Date.now() + 22000;
+  let ultimoStatus = 503;
 
-  const endpoint =
-    'https://generativelanguage.googleapis.com/v1beta/models/' +
-    encodeURIComponent(model) +
-    ':generateContent';
-
-  const corpo = {
-    systemInstruction: {
-      parts: [{ text: lupezInstrucoes }],
-    },
-    contents,
-  };
-
-  let ultimoErro;
-
-  // Faz até duas tentativas quando o serviço estiver instável.
-  for (let tentativa = 1; tentativa <= 2; tentativa++) {
+  for (const modelo of modelos) {
+    if ((lupezPausas.get(modelo) || 0) > Date.now()) continue;
+    const restante = prazo - Date.now();
+    if (restante < 1000) break;
+    const inicio = Date.now();
     try {
-      const respostaApi = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'x-goog-api-key': apiKey,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(corpo),
-        signal: AbortSignal.timeout(25000),
-      });
-
-      const bruto = await respostaApi.text();
-
-      let dados;
-
-      try {
-        dados = bruto ? JSON.parse(bruto) : {};
-      } catch {
-        throw new Error('A API Gemini retornou uma resposta inválida.');
+      const generationConfig = { maxOutputTokens: 1200 };
+      if (/^gemini-3\..*flash-lite$/.test(modelo)) {
+        generationConfig.thinkingConfig = { thinkingLevel: 'MINIMAL' };
+      } else if (/^gemini-2\.5-flash(?:-lite)?$/.test(modelo)) {
+        generationConfig.thinkingConfig = { thinkingBudget: 0 };
       }
-
+      const respostaApi = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models/' +
+          encodeURIComponent(modelo) + ':generateContent',
+        {
+          method: 'POST',
+          headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: lupezInstrucoes }] },
+            contents,
+            generationConfig,
+          }),
+          signal: AbortSignal.timeout(Math.min(10000, restante)),
+        }
+      );
+      const dados = await respostaApi.json().catch(error => {
+        if (error.name === 'TimeoutError' || error.name === 'AbortError') throw error;
+        return {};
+      });
       if (!respostaApi.ok) {
-        const status = respostaApi.status;
-
-        const erro = new Error(
-          dados?.error?.message ||
-          `A Lupez retornou HTTP ${status}.`
-        );
-
-        erro.status = status;
+        const erro = new Error('Gemini HTTP ' + respostaApi.status);
+        erro.status = respostaApi.status;
+        const retry = respostaApi.headers.get('retry-after');
+        const segundos = retry === null ? NaN : Number(retry);
+        erro.pausa = Number.isFinite(segundos) ? segundos * 1000 :
+          (retry ? Date.parse(retry) - Date.now() : 0);
+        console.warn(`[Lupez] ${modelo}: HTTP ${erro.status}; ${dados?.error?.status || ''}`);
         throw erro;
       }
-
       const texto = extrairTextoGemini(dados);
-
-      if (texto) {
-        return texto;
+      if (!texto) {
+        const erro = new Error('A Lupez não retornou texto. Tente reformular a mensagem.');
+        erro.status = 422;
+        throw erro;
       }
-
-      const motivo =
-        dados?.promptFeedback?.blockReason ||
-        dados?.candidates?.[0]?.finishReason;
-
-      throw new Error(
-        motivo
-          ? `A Lupez não retornou texto (${motivo}).`
-          : 'A Lupez não retornou texto.'
-      );
-
+      console.info(`[Lupez] ${modelo}: sucesso em ${Date.now() - inicio} ms`);
+      return texto;
     } catch (error) {
-      ultimoErro = error;
-
-      const status = error.status;
-      const timeout = error.name === 'TimeoutError';
-
-      const erroTemporario =
-        timeout ||
-        status === 429 ||
-        status === 500 ||
-        status === 502 ||
-        status === 503 ||
-        status === 504;
-
-      console.error(
-        `Falha na tentativa ${tentativa}/2 da Lupez:`,
-        error.message
-      );
-
-      if (!erroTemporario || tentativa === 2) {
-        const erroFinal = new Error(
-          timeout
-            ? 'A Lupez demorou demais para responder. Tente novamente.'
-            : status === 503
-              ? 'A Lupez está temporariamente sobrecarregada. Tente novamente em instantes.'
-              : error.message
-        );
-
-        erroFinal.status = timeout
-          ? 504
-          : status === 503 || status === 429
-            ? 503
-            : status || 502;
-
-        throw erroFinal;
+      const timeout = ['TimeoutError', 'AbortError'].includes(error.name);
+      const status = timeout ? 504 : (error.status || 502);
+      ultimoStatus = status;
+      console.warn(`[Lupez] ${modelo}: falha ${status} em ${Date.now() - inicio} ms`);
+      if (![404, 408, 429, 500, 502, 503, 504].includes(status)) {
+        const erro = new Error(status === 422 ? error.message : 'Não foi possível consultar a Lupez. Verifique a configuração no servidor.');
+        erro.status = status === 422 ? 422 : 502;
+        throw erro;
       }
-
-      // Espera um pouco antes de tentar novamente.
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const pausa = status === 429 ? 60000 : status === 404 ? 300000 : 15000;
+      lupezPausas.set(modelo, Date.now() + Math.max(pausa, error.pausa || 0));
     }
   }
-
-  throw ultimoErro;
+  const erro = new Error(ultimoStatus === 429
+    ? 'A Lupez atingiu o limite de consultas. Tente novamente mais tarde.'
+    : 'A Lupez está temporariamente indisponível. Tente novamente em instantes.');
+  erro.status = ultimoStatus === 429 ? 429 : ultimoStatus === 504 ? 504 : 503;
+  throw erro;
 }
 
 
@@ -610,7 +574,7 @@ app.post('/api/lupez/chat', autenticar, async (req, res) => {
   }
 
   const apiKey = process.env.GEMINI_API_KEY?.trim();
-  const model = process.env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash';
+  const model = process.env.GEMINI_MODEL?.trim() || 'gemini-3.5-flash-lite';
   if (!apiKey) {
     return res.status(503).json({
       erro: 'A Lupez precisa da variável GEMINI_API_KEY no backend/.env.',
