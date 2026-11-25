@@ -867,7 +867,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     icon: Icon(
                       _isFollowing
                           ? Icons.check_rounded
-                          : Icons.person_add_rounded,
+                          : Icons.add_rounded,
                       size: 17,
                     ),
                     label: Text(
@@ -880,6 +880,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                       foregroundColor: _isFollowing
                           ? primary
                           : Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                       side: _isFollowing
                           ? BorderSide(color: AppPalette.border(context))
                           : null,
@@ -1763,17 +1764,17 @@ class _ProfileVideoScreenState extends State<_ProfileVideoScreen> {
           child: Icon(Icons.play_arrow_rounded, color: Colors.white, size: 74,
             shadows: [Shadow(color: Colors.black54, blurRadius: 15)]),
         )),
-        Positioned(right: 10, bottom: MediaQuery.paddingOf(context).bottom + 112,
+        Positioned(right: 10, bottom: MediaQuery.paddingOf(context).bottom + MediaQuery.sizeOf(context).height * .25,
           child: ClipRRect(borderRadius: BorderRadius.circular(32),
             child: BackdropFilter(filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
               child: Container(width: 56, padding: const EdgeInsets.symmetric(vertical: 7),
-                decoration: BoxDecoration(color: const Color(0xFF21171C).withValues(alpha: .33),
+                decoration: BoxDecoration(color: const Color(0xFF70434C).withValues(alpha: .38),
                   borderRadius: BorderRadius.circular(32),
                   border: Border.all(color: const Color(0xFFFFE9E9).withValues(alpha: .27))),
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
                   if (_liked) _sideAction(LucideIcons.star, _toggleLike,
                     color: const Color(0xFFFFD166), count: _canSeeLikes ? '$_likeCount' : null),
-                  _sideAction(LucideIcons.messageCircle, _showReviews, count: '$_reviewCount'),
+                  _sideAction(LucideIcons.messageCircle, _showReviews, count: _reviewCount > 0 ? '$_reviewCount' : null),
                   _sideAction(LucideIcons.send, _shareVideo),
                   _sideAction(LucideIcons.bookmark, _toggleSave,
                     color: _saved ? const Color(0xFFF4B8BF) : const Color(0xFFFFE9E9)),
@@ -1791,7 +1792,7 @@ class _ProfileVideoScreenState extends State<_ProfileVideoScreen> {
             ),
           ),
         ),
-        Positioned(left: 16, right: 80, bottom: MediaQuery.paddingOf(context).bottom + 86,
+        Positioned(left: 16, right: 80, bottom: MediaQuery.paddingOf(context).bottom + 56,
           child: Column(crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min, children: [
               if (_author.isNotEmpty) ...[
@@ -1814,7 +1815,7 @@ class _ProfileVideoScreenState extends State<_ProfileVideoScreen> {
                 ]),
               ],
               if (_description.trim().isNotEmpty) ...[
-                const SizedBox(height: 9),
+                const SizedBox(height: 5),
                 Text(_description.trim(), maxLines: 3, overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.white, fontSize: 13.5,
                     height: 1.35, shadows: [Shadow(color: Colors.black87, blurRadius: 5)])),

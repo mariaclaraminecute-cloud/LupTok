@@ -3137,7 +3137,7 @@ class _LoopTabState extends State<_LoopTab> {
           // 6. Coluna vertical de interação lateral (lado direito)
           Positioned(
             right: 10,
-            bottom: 112,
+            bottom: math.max(150.0, MediaQuery.sizeOf(context).height * .25),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(32),
               child: BackdropFilter(
@@ -3146,7 +3146,7 @@ class _LoopTabState extends State<_LoopTab> {
                   width: 56,
                   padding: const EdgeInsets.symmetric(vertical: 7),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF21171C).withValues(alpha: .33),
+                    color: const Color(0xFF70434C).withValues(alpha: .38),
                     borderRadius: BorderRadius.circular(32),
                     border: Border.all(color: const Color(0xFFFFE9E9).withValues(alpha: .27)),
                   ),
@@ -3192,9 +3192,9 @@ class _LoopTabState extends State<_LoopTab> {
                 // Comentários
                 _acao(
                   icon: LucideIcons.messageCircle,
-                  label: _fmt(
-                    _reviewCounts[v.videoId] ?? v.comentarios,
-                  ),
+                  label: (_reviewCounts[v.videoId] ?? v.comentarios) > 0
+                      ? _fmt(_reviewCounts[v.videoId] ?? v.comentarios)
+                      : null,
                   onTap: () => _abrirComentarios(videoIndex),
                 ),
                 const SizedBox(height: 2),
@@ -3253,7 +3253,7 @@ class _LoopTabState extends State<_LoopTab> {
           Positioned(
             left: 16,
             right: 80,
-            bottom: 86,
+            bottom: 56,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -3263,7 +3263,7 @@ class _LoopTabState extends State<_LoopTab> {
 
                 // Descrição da publicação
                 if (v.descricao.trim().isNotEmpty) ...[
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 5),
                   Text(
                     v.descricao.trim(),
                     maxLines: 2,
@@ -3333,9 +3333,27 @@ class _LoopTabState extends State<_LoopTab> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(apelido, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Color(0xFFFFE9E9), fontSize: 16,
-                    fontWeight: FontWeight.w700, letterSpacing: .2)),
+                Row(
+                  children: [
+                    Flexible(child: Text(apelido, maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Color(0xFFFFE9E9), fontSize: 16,
+                        fontWeight: FontWeight.w700, letterSpacing: .2))),
+                    if (!isOwner) ...[
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => _toggleFollow(v.autor),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 3),
+                          child: Text(following ? 'Seguindo' : '+ Seguir',
+                            style: TextStyle(color: following ? Colors.white70 : const Color(0xFFFFC9D0),
+                              fontSize: 12, fontWeight: FontWeight.w700,
+                              shadows: const [Shadow(color: Colors.black87, blurRadius: 5)])),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
                 if (v.autor.trim().isNotEmpty)
                   Text('@${v.autor.replaceFirst('@', '')}', maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -3344,28 +3362,6 @@ class _LoopTabState extends State<_LoopTab> {
             ),
           ),
         ),
-        if (!isOwner) ...[
-          const SizedBox(width: 6),
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(20),
-              onTap: () => _toggleFollow(v.autor),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 220),
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFE9E9).withValues(alpha: following ? .19 : .08),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFFF4B8BF).withValues(alpha: .65)),
-                ),
-                child: Text(following ? 'Seguindo' : '+ Seguir',
-                  style: const TextStyle(color: Color(0xFFFFE9E9), fontSize: 11,
-                    fontWeight: FontWeight.w600)),
-              ),
-            ),
-          ),
-        ],
       ],
     );
   }

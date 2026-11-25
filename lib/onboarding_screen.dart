@@ -565,7 +565,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: sel
-                        ? AppPalette.accent(context)
+                        ? AppPalette.accent(context).withValues(alpha: 0.80)
                         : AppPalette.surface(context),
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(
@@ -668,7 +668,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   duration: const Duration(milliseconds: 200),
                   decoration: BoxDecoration(
                     color: sel
-                        ? AppPalette.accent(context)
+                        ? AppPalette.accent(context).withValues(alpha: 0.80)
                         : AppPalette.surface(context),
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(
